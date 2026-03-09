@@ -32,6 +32,12 @@ async fn main() -> anyhow::Result<()> {
 
     let rate_limiter = RateLimiter::new();
 
+    tracing::info!(
+        "Providers — Gemini: yes, Groq: {}, OpenRouter: {}",
+        if config.groq_api_key.is_some() { "yes" } else { "no (set GROQ_API_KEY)" },
+        if config.openrouter_api_key.is_some() { "yes" } else { "no (set OPENROUTER_API_KEY)" },
+    );
+
     let state = AppState {
         system_prompt: Arc::new(RwLock::new(String::new())),
         transcript: Arc::new(RwLock::new(Vec::new())),
@@ -40,16 +46,19 @@ async fn main() -> anyhow::Result<()> {
         question_tx,
         event_tx: event_tx.clone(),
         gemini_key: config.gemini_api_key.clone(),
+        groq_key: config.groq_api_key.clone(),
+        openrouter_key: config.openrouter_api_key.clone(),
         rate_limiter: rate_limiter.clone(),
     };
 
-    // Spawn agent tasks (all share the same rate limiter)
+    // Spawn agent tasks (all share the same Gemini rate limiter)
     tokio::spawn(transcription::run_agent(
         audio_rx,
         state.question_tx.clone(),
         state.event_tx.clone(),
         state.transcript.clone(),
         config.gemini_api_key.clone(),
+        config.groq_api_key.clone(),
         rate_limiter.clone(),
     ));
 
@@ -66,6 +75,8 @@ async fn main() -> anyhow::Result<()> {
         state.system_prompt.clone(),
         state.transcript.clone(),
         config.gemini_api_key.clone(),
+        config.groq_api_key.clone(),
+        config.openrouter_api_key.clone(),
         rate_limiter.clone(),
     ));
 

@@ -60,16 +60,19 @@ export class MediaCapture {
     if (videoTracks.length === 0) return;
 
     const canvas = document.createElement('canvas');
-    canvas.width = 1280;
-    canvas.height = 720;
+    canvas.width = 640;
+    canvas.height = 360;
     const ctx = canvas.getContext('2d')!;
 
     const video = document.createElement('video');
+    video.muted = true;
+    video.autoplay = true;
+    video.playsInline = true;
     video.srcObject = new MediaStream([videoTracks[0]]);
-    video.play().catch(() => {});
+    video.play().catch((e) => console.warn('Video play failed:', e));
 
-    this.videoInterval = setInterval(async () => {
-      if (video.readyState >= 2) {
+    const captureFrame = async () => {
+      if (video.readyState >= 2 && video.videoWidth > 0) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const blob = await new Promise<Blob | null>((resolve) =>
           canvas.toBlob(resolve, 'image/jpeg', 0.7)
@@ -79,7 +82,11 @@ export class MediaCapture {
           this.videoWs.send(buf);
         }
       }
-    }, 30000); // every 30 seconds
+    };
+
+    // Capture first frame as soon as video is ready, then every 30s
+    video.addEventListener('loadeddata', () => captureFrame(), { once: true });
+    this.videoInterval = setInterval(captureFrame, 30000);
   }
 
   stop() {

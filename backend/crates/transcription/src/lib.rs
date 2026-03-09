@@ -107,14 +107,28 @@ pub async fn run_agent(
                                     .duration_since(UNIX_EPOCH)
                                     .unwrap_or_default()
                                     .as_millis() as u64;
-                                let seg = TranscriptSegment { text: text.clone(), timestamp_ms: ts };
+                                // Heuristic speaker label: questions → Interviewer, statements → You
+                                let speaker = if is_question(&text) {
+                                    "Interviewer".to_string()
+                                } else {
+                                    "You".to_string()
+                                };
+                                let seg = TranscriptSegment {
+                                    text: text.clone(),
+                                    timestamp_ms: ts,
+                                    speaker: speaker.clone(),
+                                };
                                 {
                                     let mut t = tr.write().await;
                                     t.push(seg);
                                     if t.len() > 100 { t.remove(0); }
                                 }
-                                let _ = etx.send(WsEvent::Transcript { text: text.clone(), timestamp_ms: ts });
-                                if is_question(&text) {
+                                let _ = etx.send(WsEvent::Transcript {
+                                    text: text.clone(),
+                                    timestamp_ms: ts,
+                                    speaker: speaker.clone(),
+                                });
+                                if speaker == "Interviewer" {
                                     let _ = qtx.send(text).await;
                                 }
                             }

@@ -24,8 +24,11 @@
       <p class="empty">Transcript will appear here when audio is captured...</p>
     {:else}
       {#each entries as entry (entry.timestamp_ms)}
-        <div class="entry">
-          <span class="time">{formatTime(entry.timestamp_ms)}</span>
+        <div class="entry" class:interviewer={entry.speaker === 'Interviewer'} class:you={entry.speaker === 'You'}>
+          <div class="meta">
+            <span class="speaker" class:interviewer={entry.speaker === 'Interviewer'}>{entry.speaker}</span>
+            <span class="time">{formatTime(entry.timestamp_ms)}</span>
+          </div>
           <span class="text">{entry.text}</span>
         </div>
       {/each}
@@ -56,15 +59,30 @@
   }
   .entry {
     display: flex;
-    gap: 0.75rem;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid #1e293b;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    border-left: 3px solid transparent;
   }
+  .entry.interviewer { border-left-color: #60a5fa; background: #0f1e33; }
+  .entry.you         { border-left-color: #4ade80; background: #0a1f14; }
+  .meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .speaker {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #4ade80;
+  }
+  .speaker.interviewer { color: #60a5fa; }
   .time {
-    flex-shrink: 0;
     color: #475569;
-    font-size: 0.75rem;
-    padding-top: 2px;
+    font-size: 0.7rem;
     font-family: monospace;
   }
   .text {

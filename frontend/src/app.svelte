@@ -31,7 +31,7 @@
   function handleWsEvent(event: WsEvent) {
     switch (event.type) {
       case 'transcript':
-        transcript = [...transcript, { text: event.text, timestamp_ms: event.timestamp_ms }];
+        transcript = [...transcript, { text: event.text, timestamp_ms: event.timestamp_ms, speaker: event.speaker }];
         break;
       case 'sentiment':
         emotion = event.emotion;

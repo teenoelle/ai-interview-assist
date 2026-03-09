@@ -1,5 +1,5 @@
 export type WsEvent =
-  | { type: 'transcript'; text: string; timestamp_ms: number }
+  | { type: 'transcript'; text: string; timestamp_ms: number; speaker: string }
   | { type: 'sentiment'; emotion: string }
   | { type: 'question_detected'; question: string }
   | { type: 'suggestion_token'; token: string }
@@ -12,4 +12,5 @@ export type Emotion = 'engaged' | 'curious' | 'neutral' | 'skeptical' | 'confuse
 export interface TranscriptEntry {
   text: string;
   timestamp_ms: number;
+  speaker: string;  // "Interviewer" or "You"
 }

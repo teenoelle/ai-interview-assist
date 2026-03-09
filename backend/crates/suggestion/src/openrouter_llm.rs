@@ -3,11 +3,14 @@ use tokio::sync::broadcast;
 use common::messages::WsEvent;
 use crate::groq_llm::stream_openai_compat;
 
-// Free models on OpenRouter (no credits needed, just a free account)
+// Free models on OpenRouter — verified available, no credits required.
+// Listed in preference order: largest/best first, smaller models as fallback.
 const FREE_MODELS: &[&str] = &[
     "meta-llama/llama-3.3-70b-instruct:free",
+    "deepseek/deepseek-r1:free",
+    "qwen/qwen-2.5-72b-instruct:free",
     "mistralai/mistral-7b-instruct:free",
-    "google/gemini-2.0-flash-exp:free",
+    "microsoft/phi-4:free",
 ];
 
 pub async fn stream_suggestions(

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WsEvent {
-    Transcript { text: String, timestamp_ms: u64 },
+    Transcript { text: String, timestamp_ms: u64, speaker: String },
     Sentiment { emotion: String },
     QuestionDetected { question: String },
     SuggestionToken { token: String },
@@ -16,6 +16,7 @@ pub enum WsEvent {
 pub struct TranscriptSegment {
     pub text: String,
     pub timestamp_ms: u64,
+    pub speaker: String,   // "Interviewer" or "You"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

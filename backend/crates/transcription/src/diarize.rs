@@ -94,7 +94,7 @@ pub type SharedTracker = Arc<Mutex<SpeakerTracker>>;
 
 // ── WAV encoding (for sending PCM to sidecar) ─────────────────────────────────
 
-pub fn pcm_to_wav(pcm: &[u8]) -> Result<Vec<u8>> {
+pub(crate) fn pcm_to_wav(pcm: &[u8]) -> Result<Vec<u8>> {
     let spec = WavSpec {
         channels: 1,
         sample_rate: 16000,
@@ -110,4 +110,81 @@ pub fn pcm_to_wav(pcm: &[u8]) -> Result<Vec<u8>> {
         writer.finalize()?;
     }
     Ok(buf.into_inner())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn seg(speaker: &str, start: f64, end: f64) -> Segment {
+        Segment { speaker: speaker.to_string(), start, end }
+    }
+
+    // ── dominant_speaker ─────────────────────────────────────────────────────
+
+    #[test]
+    fn dominant_speaker_picks_longest() {
+        let segs = vec![seg("SPEAKER_00", 0.0, 2.0), seg("SPEAKER_01", 2.0, 9.0)];
+        assert_eq!(dominant_speaker(&segs).as_deref(), Some("SPEAKER_01"));
+    }
+
+    #[test]
+    fn dominant_speaker_empty_returns_none() {
+        assert_eq!(dominant_speaker(&[]), None);
+    }
+
+    #[test]
+    fn dominant_speaker_single_entry() {
+        let segs = vec![seg("SPEAKER_00", 0.0, 5.0)];
+        assert_eq!(dominant_speaker(&segs).as_deref(), Some("SPEAKER_00"));
+    }
+
+    // ── SpeakerTracker ───────────────────────────────────────────────────────
+
+    #[test]
+    fn tracker_maps_longer_speaker_to_you() {
+        let mut t = SpeakerTracker::default();
+        // SPEAKER_00 talks for 30s total → "You"
+        t.record(&[seg("SPEAKER_00", 0.0, 15.0), seg("SPEAKER_00", 20.0, 35.0)]);
+        // SPEAKER_01 talks for 5s total → "Interviewer"
+        t.record(&[seg("SPEAKER_01", 35.0, 40.0)]);
+        assert_eq!(t.role("SPEAKER_00"), "You");
+        assert_eq!(t.role("SPEAKER_01"), "Interviewer");
+    }
+
+    #[test]
+    fn tracker_single_label_is_you() {
+        let mut t = SpeakerTracker::default();
+        t.record(&[seg("SPEAKER_00", 0.0, 10.0)]);
+        assert_eq!(t.role("SPEAKER_00"), "You");
+    }
+
+    #[test]
+    fn tracker_accumulates_across_calls() {
+        let mut t = SpeakerTracker::default();
+        t.record(&[seg("SPEAKER_00", 0.0, 5.0)]);
+        t.record(&[seg("SPEAKER_01", 5.0, 15.0)]); // SPEAKER_01 leads now
+        assert_eq!(t.role("SPEAKER_01"), "You");
+        assert_eq!(t.role("SPEAKER_00"), "Interviewer");
+        t.record(&[seg("SPEAKER_00", 15.0, 30.0)]); // SPEAKER_00 takes lead back
+        assert_eq!(t.role("SPEAKER_00"), "You");
+    }
+
+    // ── pcm_to_wav ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn pcm_to_wav_produces_valid_wav_header() {
+        let pcm = vec![0u8; 3200]; // 0.1s of silence at 16kHz
+        let wav = pcm_to_wav(&pcm).unwrap();
+        assert!(wav.starts_with(b"RIFF"), "missing RIFF header");
+        assert!(&wav[8..12] == b"WAVE", "missing WAVE marker");
+        assert!(wav.len() > 44, "WAV too short to have data");
+    }
+
+    #[test]
+    fn pcm_to_wav_empty_input() {
+        let wav = pcm_to_wav(&[]).unwrap();
+        // Should produce a valid but empty WAV (header only)
+        assert!(wav.starts_with(b"RIFF"));
+    }
 }

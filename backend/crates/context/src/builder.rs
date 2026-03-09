@@ -144,7 +144,7 @@ mod tests {
     }
 
     #[test]
-    fn cv_truncated_at_5000_chars() {
+    fn cv_truncated_at_limit() {
         let mut payload = empty_payload();
         payload.cv_text = "z".repeat(25000);
         let p = build_system_prompt(&payload, "", &[]);

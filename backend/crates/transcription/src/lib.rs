@@ -125,6 +125,125 @@ fn is_interviewer_turn(lower: &str, word_count: usize) -> bool {
     false
 }
 
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── is_interviewer_turn ──────────────────────────────────────────────────
+
+    #[test]
+    fn question_mark_is_interviewer_turn() {
+        assert!(is_interviewer_turn("so you've used kubernetes before?", 7));
+        assert!(is_interviewer_turn("really?", 1));
+    }
+
+    #[test]
+    fn question_word_starters() {
+        for phrase in &[
+            "what is your experience with rust",
+            "why did you leave your last role",
+            "how do you approach debugging",
+            "when did you start coding",
+            "where do you see yourself in five years",
+            "who was your most influential mentor",
+            "which approach would you prefer",
+            "can you walk me through your background",
+            "could you describe a challenge you faced",
+            "would you be open to relocation",
+            "have you led a team before",
+            "do you have experience with kubernetes",
+            "did you manage the full delivery",
+            "are you comfortable with ambiguity",
+            "were you the tech lead on that",
+            "will you be available to start in january",
+        ] {
+            let wc = phrase.split_whitespace().count();
+            assert!(is_interviewer_turn(phrase, wc), "failed: {phrase}");
+        }
+    }
+
+    #[test]
+    fn statement_question_starters() {
+        for phrase in &[
+            "tell me about yourself",
+            "walk me through your last project",
+            "describe your ideal team",
+            "explain how you approach conflict",
+            "share a time you failed",
+            "i'd like to understand your background",
+            "i'm curious about your decision to switch",
+            "i noticed you worked at acme",
+            "let's talk about your technical skills",
+            "moving on to the next topic",
+            "we're looking for someone who can lead",
+            "so tell me more about that project",
+            "so how did you handle that situation",
+        ] {
+            let wc = phrase.split_whitespace().count();
+            assert!(is_interviewer_turn(phrase, wc), "failed: {phrase}");
+        }
+    }
+
+    #[test]
+    fn non_interviewer_turns() {
+        for phrase in &[
+            "that's a great point",
+            "i completely agree with you",
+            "thank you for the question",
+            "let me think about that for a second",
+        ] {
+            let wc = phrase.split_whitespace().count();
+            assert!(!is_interviewer_turn(phrase, wc), "false positive: {phrase}");
+        }
+    }
+
+    // ── classify_speaker ─────────────────────────────────────────────────────
+
+    #[test]
+    fn short_acknowledgements_are_interviewer() {
+        for text in &["Right", "I see", "Okay", "Good", "Mm-hmm", "Interesting"] {
+            assert_eq!(classify_speaker(text, "You", 50), "Interviewer", "failed: {text}");
+        }
+    }
+
+    #[test]
+    fn candidate_self_reference_in_long_text_is_you() {
+        let text = "In my experience building distributed systems at my previous company, \
+                    I led a team of five engineers and we delivered the project on time.";
+        assert_eq!(classify_speaker(text, "Interviewer", 0), "You");
+    }
+
+    #[test]
+    fn long_segment_defaults_to_you() {
+        let text = "word ".repeat(65); // 65 words
+        assert_eq!(classify_speaker(text.trim(), "Interviewer", 10), "You");
+    }
+
+    #[test]
+    fn explicit_question_classifies_as_interviewer() {
+        assert_eq!(
+            classify_speaker("Tell me about yourself.", "You", 80),
+            "Interviewer"
+        );
+        assert_eq!(
+            classify_speaker("What is your experience with Rust?", "You", 5),
+            "Interviewer"
+        );
+    }
+
+    #[test]
+    fn alternation_bias_after_long_you_turn() {
+        // Short ambiguous segment after a long You turn → Interviewer
+        let short_ambiguous = "That makes sense. Let's move on.";
+        assert_eq!(
+            classify_speaker(short_ambiguous, "You", 80),
+            "Interviewer"
+        );
+    }
+}
+
 // ── Agent ─────────────────────────────────────────────────────────────────────
 
 pub async fn run_agent(

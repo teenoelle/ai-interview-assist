@@ -4,7 +4,8 @@
 #   .\run_tests.ps1 -Integration  # also run API integration tests (uses real keys + quota)
 
 param(
-    [switch]$Integration
+    [switch]$Integration,
+    [switch]$WithDiarize   # also start the diarization sidecar before running tests
 )
 
 $ErrorActionPreference = "Stop"

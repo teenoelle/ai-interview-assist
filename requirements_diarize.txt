@@ -1,0 +1,16 @@
+# Speaker diarization sidecar dependencies
+# Install with: pip install -r requirements_diarize.txt
+
+pyannote.audio>=3.3
+fastapi>=0.115
+uvicorn[standard]>=0.30
+
+# PyTorch — CPU version (smaller download, works on any machine):
+# pip install -r requirements_diarize.txt
+# pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+#
+# GPU version (faster, needs NVIDIA GPU + CUDA):
+# pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+torch>=2.0
+torchaudio>=2.0

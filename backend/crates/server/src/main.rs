@@ -43,6 +43,10 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Suggestion order: OpenRouter → Cerebras → Mistral → Groq → Gemini");
     tracing::info!("Transcription order: Groq Whisper → Gemini");
     tracing::info!("Sentiment: Gemini Vision only");
+    tracing::info!(
+        "Speaker diarization: {}",
+        config.diarize_url.as_deref().unwrap_or("disabled (set HF_TOKEN to enable)")
+    );
 
     let state = AppState {
         system_prompt: Arc::new(RwLock::new(String::new())),
@@ -66,6 +70,7 @@ async fn main() -> anyhow::Result<()> {
         state.transcript.clone(),
         config.gemini_api_key.clone(),
         config.groq_api_key.clone(),
+        config.diarize_url.clone(),
         rate_limiter.clone(),
     ));
 

@@ -6,6 +6,21 @@ pub struct InterviewerProfile {
     pub interests: String,
 }
 
+/// Parse one or more LinkedIn profiles separated by `---INTERVIEWER---`.
+/// Returns all profiles; caller uses `profiles[0]` as the primary one and
+/// the full list for the system prompt.
+pub fn parse_all_linkedin_profiles(text: &str) -> Vec<InterviewerProfile> {
+    if text.trim().is_empty() {
+        return vec![InterviewerProfile {
+            name: String::new(), role: String::new(), company: String::new(),
+            background: String::new(), interests: String::new(),
+        }];
+    }
+    text.split("---INTERVIEWER---")
+        .map(|block| parse_linkedin_text(block.trim()))
+        .collect()
+}
+
 pub fn parse_linkedin_text(text: &str) -> InterviewerProfile {
     if text.trim().is_empty() {
         return InterviewerProfile {

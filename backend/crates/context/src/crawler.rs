@@ -16,7 +16,23 @@ pub async fn crawl_website(start_url: &str, max_pages: usize) -> Result<String> 
     let mut queue: VecDeque<String> = VecDeque::new();
     let mut collected_text = String::new();
 
+    // Seed with the start URL first, then prioritise high-value paths
     queue.push_back(start_url.to_string());
+    let priority_paths = [
+        "/about", "/about-us", "/company", "/who-we-are",
+        "/team", "/leadership", "/people", "/our-team",
+        "/careers", "/jobs", "/work-with-us",
+        "/mission", "/values", "/culture",
+        "/products", "/services", "/solutions",
+    ];
+    for path in &priority_paths {
+        if let Ok(u) = base_url.join(path) {
+            let s = u.to_string();
+            if !queue.contains(&s) {
+                queue.push_front(s);
+            }
+        }
+    }
 
     let skip_extensions = [".pdf", ".jpg", ".jpeg", ".png", ".gif", ".zip", ".css", ".js"];
 

@@ -6,7 +6,7 @@ use axum::{
 use common::messages::SetupPayload;
 use context::builder::build_system_prompt;
 use context::crawler::crawl_website;
-use context::linkedin::parse_linkedin_text;
+use context::linkedin::parse_all_linkedin_profiles;
 use context::pdf::extract_pdf_text;
 use crate::state::AppState;
 
@@ -59,18 +59,18 @@ pub async fn handle_setup_finalize(
 
     // Crawl company website
     let company_info = if !payload.company_url.is_empty() {
-        crawl_website(&payload.company_url, 30)
+        crawl_website(&payload.company_url, 50)
             .await
             .unwrap_or_default()
     } else {
         String::new()
     };
 
-    // Parse LinkedIn
-    let interviewer_info = parse_linkedin_text(&payload.linkedin_text);
+    // Parse LinkedIn (supports multiple profiles separated by ---INTERVIEWER---)
+    let interviewer_profiles = parse_all_linkedin_profiles(&payload.linkedin_text);
 
     // Build system prompt
-    let system_prompt = build_system_prompt(&payload, &company_info, &interviewer_info);
+    let system_prompt = build_system_prompt(&payload, &company_info, &interviewer_profiles);
 
     // Store
     {

@@ -4,7 +4,7 @@ use crate::linkedin::InterviewerProfile;
 pub fn build_system_prompt(
     payload: &SetupPayload,
     company_info: &str,
-    interviewer: &InterviewerProfile,
+    interviewers: &[InterviewerProfile],
 ) -> String {
     let mut prompt = String::new();
 
@@ -37,8 +37,8 @@ pub fn build_system_prompt(
 
     if !company_info.is_empty() {
         prompt.push_str("## Company Information\n");
-        let company_preview = if company_info.len() > 8000 {
-            &company_info[..8000]
+        let company_preview = if company_info.len() > 15000 {
+            &company_info[..15000]
         } else {
             company_info
         };
@@ -46,22 +46,32 @@ pub fn build_system_prompt(
         prompt.push_str("\n\n");
     }
 
-    if !interviewer.name.is_empty() || !interviewer.role.is_empty() {
-        prompt.push_str("## Interviewer Profile\n");
-        if !interviewer.name.is_empty() {
-            prompt.push_str(&format!("Name: {}\n", interviewer.name));
+    let non_empty: Vec<&InterviewerProfile> = interviewers
+        .iter()
+        .filter(|p| !p.name.is_empty() || !p.role.is_empty() || !p.background.is_empty())
+        .collect();
+
+    if !non_empty.is_empty() {
+        if non_empty.len() > 1 {
+            prompt.push_str(&format!("## Interviewers ({} people)\n", non_empty.len()));
+        } else {
+            prompt.push_str("## Interviewer Profile\n");
         }
-        if !interviewer.role.is_empty() {
-            prompt.push_str(&format!("Role: {}\n", interviewer.role));
+        for (i, p) in non_empty.iter().enumerate() {
+            if non_empty.len() > 1 {
+                prompt.push_str(&format!("### Interviewer {}\n", i + 1));
+            }
+            if !p.name.is_empty() { prompt.push_str(&format!("Name: {}\n", p.name)); }
+            if !p.role.is_empty() { prompt.push_str(&format!("Role: {}\n", p.role)); }
+            if !p.company.is_empty() { prompt.push_str(&format!("Company: {}\n", p.company)); }
+            if !p.background.is_empty() {
+                let bg = if p.background.len() > 1500 { &p.background[..1500] } else { &p.background };
+                prompt.push_str("Background:\n");
+                prompt.push_str(bg);
+                prompt.push('\n');
+            }
+            prompt.push('\n');
         }
-        if !interviewer.company.is_empty() {
-            prompt.push_str(&format!("Company: {}\n", interviewer.company));
-        }
-        if !interviewer.background.is_empty() && interviewer.background.len() < 2000 {
-            prompt.push_str("Background:\n");
-            prompt.push_str(&interviewer.background);
-        }
-        prompt.push_str("\n\n");
     }
 
     prompt.push_str("## Instructions\n");

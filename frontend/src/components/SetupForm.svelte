@@ -3,7 +3,7 @@
 
   let jobDescription = $state('');
   let companyUrl = $state('');
-  let linkedinText = $state('');
+  let interviewers = $state<string[]>(['']);   // start with one empty slot
   let extraExperience = $state('');
   let cvFile: File | null = $state(null);
   let loading = $state(false);
@@ -12,6 +12,19 @@
 
   const { onSetupComplete } = $props<{ onSetupComplete: () => void }>();
 
+  function addInterviewer() {
+    interviewers = [...interviewers, ''];
+  }
+
+  function removeInterviewer(i: number) {
+    interviewers = interviewers.filter((_, idx) => idx !== i);
+    if (interviewers.length === 0) interviewers = [''];
+  }
+
+  function updateInterviewer(i: number, val: string) {
+    interviewers = interviewers.map((v, idx) => idx === i ? val : v);
+  }
+
   async function handleSubmit() {
     loading = true;
     error = '';
@@ -19,7 +32,13 @@
       const formData = new FormData();
       formData.append('job_description', jobDescription);
       formData.append('company_url', companyUrl);
+
+      // Join multiple interviewer profiles with a clear separator
+      const linkedinText = interviewers
+        .filter(t => t.trim().length > 0)
+        .join('\n\n---INTERVIEWER---\n\n');
       formData.append('linkedin_text', linkedinText);
+
       formData.append('extra_experience', extraExperience);
       if (cvFile) formData.append('cv_file', cvFile);
 
@@ -65,22 +84,38 @@
       bind:value={companyUrl}
       placeholder="https://company.com"
     />
-    <small>We'll crawl up to 30 pages to learn about the company</small>
+    <small>We'll crawl up to 50 pages, prioritising /about, /team, /careers and /leadership</small>
+  </div>
+
+  <div class="field">
+    <div class="field-header">
+      <label>Interviewer LinkedIn Profile(s)</label>
+      <button type="button" class="btn-add" onclick={addInterviewer}>+ Add interviewer</button>
+    </div>
+    {#each interviewers as text, i (i)}
+      <div class="interviewer-entry">
+        {#if interviewers.length > 1}
+          <div class="interviewer-label">Interviewer {i + 1}</div>
+        {/if}
+        <div class="interviewer-row">
+          <textarea
+            rows={4}
+            value={text}
+            oninput={(e) => updateInterviewer(i, (e.target as HTMLTextAreaElement).value)}
+            placeholder="Paste the interviewer's LinkedIn profile text here..."
+          ></textarea>
+          {#if interviewers.length > 1}
+            <button type="button" class="btn-remove" onclick={() => removeInterviewer(i)}>✕</button>
+          {/if}
+        </div>
+      </div>
+    {/each}
+    <small>Paste text copied from their LinkedIn page. Add one entry per interviewer.</small>
   </div>
 
   <div class="field">
     <label for="cv-file">Upload CV / Resume</label>
     <input id="cv-file" type="file" accept=".pdf,.txt" onchange={handleFileChange} />
-  </div>
-
-  <div class="field">
-    <label for="linkedin">Interviewer LinkedIn Profile (paste text)</label>
-    <textarea
-      id="linkedin"
-      bind:value={linkedinText}
-      rows={4}
-      placeholder="Paste the interviewer's LinkedIn profile text here..."
-    ></textarea>
   </div>
 
   <div class="field">
@@ -106,91 +141,60 @@
 </div>
 
 <style>
-  .setup-form {
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 2rem;
-  }
-  h2 {
-    font-size: 1.75rem;
+  .setup-form { max-width: 720px; margin: 0 auto; padding: 2rem; }
+  h2 { font-size: 1.75rem; margin-bottom: 0.5rem; color: #f1f5f9; }
+  .subtitle { color: #94a3b8; margin-bottom: 2rem; }
+  .field { margin-bottom: 1.5rem; }
+  .field-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     margin-bottom: 0.5rem;
-    color: #f1f5f9;
   }
-  .subtitle {
-    color: #94a3b8;
-    margin-bottom: 2rem;
+  .field-header label { margin-bottom: 0; }
+  label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: #cbd5e1; }
+  textarea, input[type='url'] {
+    width: 100%; padding: 0.75rem;
+    background: #1e293b; border: 1px solid #334155;
+    border-radius: 0.5rem; color: #e2e8f0;
+    font-size: 0.9rem; resize: vertical;
   }
-  .field {
-    margin-bottom: 1.5rem;
+  input[type='file'] { color: #94a3b8; }
+  small { display: block; margin-top: 0.25rem; color: #64748b; font-size: 0.8rem; }
+  .interviewer-entry { margin-bottom: 0.75rem; }
+  .interviewer-label { font-size: 0.75rem; color: #60a5fa; font-weight: 600; margin-bottom: 0.25rem; }
+  .interviewer-row { display: flex; gap: 0.5rem; align-items: flex-start; }
+  .interviewer-row textarea { flex: 1; }
+  .btn-add {
+    padding: 0.3rem 0.75rem; font-size: 0.8rem; font-weight: 600;
+    background: transparent; border: 1px solid #3b82f6; color: #60a5fa;
+    border-radius: 0.375rem; cursor: pointer; white-space: nowrap;
+    transition: background 0.15s;
   }
-  label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
-    color: #cbd5e1;
-  }
-  textarea,
-  input[type='url'] {
-    width: 100%;
-    padding: 0.75rem;
-    background: #1e293b;
-    border: 1px solid #334155;
-    border-radius: 0.5rem;
-    color: #e2e8f0;
-    font-size: 0.9rem;
-    resize: vertical;
-  }
-  input[type='file'] {
-    color: #94a3b8;
-  }
-  small {
-    display: block;
+  .btn-add:hover { background: #1e3a5f; }
+  .btn-remove {
+    flex-shrink: 0; padding: 0.4rem 0.6rem; background: transparent;
+    border: 1px solid #334155; color: #64748b; border-radius: 0.375rem;
+    cursor: pointer; font-size: 0.85rem; transition: all 0.15s;
     margin-top: 0.25rem;
-    color: #64748b;
-    font-size: 0.8rem;
   }
+  .btn-remove:hover { border-color: #ef4444; color: #ef4444; }
   .error {
-    padding: 1rem;
-    background: #450a0a;
-    border: 1px solid #7f1d1d;
-    border-radius: 0.5rem;
-    color: #fca5a5;
-    margin-bottom: 1rem;
+    padding: 1rem; background: #450a0a; border: 1px solid #7f1d1d;
+    border-radius: 0.5rem; color: #fca5a5; margin-bottom: 1rem;
   }
-  .preview {
-    margin-bottom: 1.5rem;
-  }
-  .preview summary {
-    cursor: pointer;
-    color: #60a5fa;
-  }
+  .preview { margin-bottom: 1.5rem; }
+  .preview summary { cursor: pointer; color: #60a5fa; }
   .preview pre {
-    margin-top: 0.5rem;
-    padding: 1rem;
-    background: #1e293b;
-    border-radius: 0.5rem;
-    white-space: pre-wrap;
-    font-size: 0.75rem;
-    color: #94a3b8;
-    max-height: 200px;
-    overflow: auto;
+    margin-top: 0.5rem; padding: 1rem; background: #1e293b;
+    border-radius: 0.5rem; white-space: pre-wrap; font-size: 0.75rem;
+    color: #94a3b8; max-height: 200px; overflow: auto;
   }
   .btn-primary {
-    padding: 0.75rem 2rem;
-    background: #3b82f6;
-    color: white;
-    border: none;
-    border-radius: 0.5rem;
-    font-size: 1rem;
-    cursor: pointer;
-    font-weight: 600;
-    transition: background 0.2s;
+    padding: 0.75rem 2rem; background: #3b82f6; color: white;
+    border: none; border-radius: 0.5rem; font-size: 1rem;
+    cursor: pointer; font-weight: 600; transition: background 0.2s;
   }
-  .btn-primary:hover:not(:disabled) {
-    background: #2563eb;
-  }
-  .btn-primary:disabled {
-    background: #1e3a5f;
-    cursor: not-allowed;
-  }
+  .btn-primary:hover:not(:disabled) { background: #2563eb; }
+  .btn-primary:disabled { background: #1e3a5f; cursor: not-allowed; }
 </style>

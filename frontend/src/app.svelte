@@ -76,15 +76,18 @@
         <h1>AI Interview Assistant</h1>
         <div class="header-controls">
           <SentimentBar {emotion} />
-          <CaptureButton onCapture={(v) => (capturing = v)} />
+          <CaptureButton onCapture={(v) => { capturing = v; if (!v) errorMessages = []; }} />
         </div>
       </header>
 
       {#if errorMessages.length > 0}
         <div class="error-banner">
-          {#each errorMessages as msg}
-            <div>{msg}</div>
-          {/each}
+          <div class="error-list">
+            {#each errorMessages as msg}
+              <div>{msg}</div>
+            {/each}
+          </div>
+          <button class="error-clear" onclick={() => (errorMessages = [])}>✕ Clear</button>
         </div>
       {/if}
 
@@ -159,10 +162,34 @@
     gap: 1rem;
   }
   .error-banner {
-    padding: 0.5rem 1.5rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.5rem 1rem 0.5rem 1.5rem;
     background: #450a0a;
     color: #fca5a5;
     font-size: 0.8rem;
+  }
+  .error-list {
+    flex: 1;
+    max-height: 6rem;
+    overflow-y: auto;
+  }
+  .error-clear {
+    flex-shrink: 0;
+    padding: 0.15rem 0.5rem;
+    background: transparent;
+    border: 1px solid #7f1d1d;
+    border-radius: 0.25rem;
+    color: #fca5a5;
+    font-size: 0.75rem;
+    cursor: pointer;
+    white-space: nowrap;
+    align-self: flex-start;
+    margin-top: 0.1rem;
+  }
+  .error-clear:hover {
+    background: #7f1d1d;
   }
   .status-banner {
     padding: 0.25rem 1.5rem;

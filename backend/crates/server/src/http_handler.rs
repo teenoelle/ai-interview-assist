@@ -7,7 +7,7 @@ use common::messages::SetupPayload;
 use context::builder::build_system_prompt;
 use context::crawler::crawl_website;
 use context::linkedin::parse_all_linkedin_profiles;
-use context::pdf::extract_pdf_text;
+use context::pdf::{extract_docx_text, extract_pdf_text};
 use crate::state::AppState;
 
 #[derive(serde::Serialize)]
@@ -50,9 +50,13 @@ pub async fn handle_setup_finalize(
 
     // Extract CV text
     if let Some(bytes) = cv_bytes {
-        if cv_filename.ends_with(".pdf") {
-            payload.cv_text = extract_pdf_text(&bytes).unwrap_or_else(|_| String::new());
+        let name_lower = cv_filename.to_lowercase();
+        if name_lower.ends_with(".pdf") {
+            payload.cv_text = extract_pdf_text(&bytes).unwrap_or_default();
+        } else if name_lower.ends_with(".docx") {
+            payload.cv_text = extract_docx_text(&bytes).unwrap_or_default();
         } else {
+            // .txt, .md, .rtf, etc — treat as plain UTF-8
             payload.cv_text = String::from_utf8_lossy(&bytes).to_string();
         }
     }

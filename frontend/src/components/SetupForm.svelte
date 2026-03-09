@@ -115,7 +115,7 @@
 
   <div class="field">
     <label for="cv-file">Upload CV / Resume</label>
-    <input id="cv-file" type="file" accept=".pdf,.txt" onchange={handleFileChange} />
+    <input id="cv-file" type="file" accept=".pdf,.docx,.txt,.md" onchange={handleFileChange} />
   </div>
 
   <div class="field">

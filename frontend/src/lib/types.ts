@@ -14,3 +14,9 @@ export interface TranscriptEntry {
   timestamp_ms: number;
   speaker: string;  // "Interviewer" or "You"
 }
+
+export interface SuggestionEntry {
+  question: string;
+  suggestion: string;
+  streaming: boolean;
+}

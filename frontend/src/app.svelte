@@ -5,7 +5,7 @@
   import SentimentBar from './components/SentimentBar.svelte';
   import SuggestionPanel from './components/SuggestionPanel.svelte';
   import { EventWebSocket } from './lib/websocket';
-  import type { TranscriptEntry, WsEvent } from './lib/types';
+  import type { TranscriptEntry, SuggestionEntry, WsEvent } from './lib/types';
 
   type Phase = 'setup' | 'interview';
 
@@ -13,9 +13,7 @@
   let capturing = $state(false);
   let transcript = $state<TranscriptEntry[]>([]);
   let emotion = $state('');
-  let currentQuestion = $state('');
-  let suggestion = $state('');
-  let streaming = $state(false);
+  let suggestions = $state<SuggestionEntry[]>([]);
   let statusMessages = $state<string[]>([]);
   let errorMessages = $state<string[]>([]);
 
@@ -37,16 +35,21 @@
         emotion = event.emotion;
         break;
       case 'question_detected':
-        currentQuestion = event.question;
-        suggestion = '';
-        streaming = true;
+        suggestions = [...suggestions, { question: event.question, suggestion: '', streaming: true }];
         break;
       case 'suggestion_token':
-        suggestion += event.token;
+        suggestions = suggestions.map((s, i) =>
+          i === suggestions.length - 1 && s.streaming
+            ? { ...s, suggestion: s.suggestion + event.token }
+            : s
+        );
         break;
       case 'suggestion_complete':
-        suggestion = event.full_text;
-        streaming = false;
+        suggestions = suggestions.map((s, i) =>
+          i === suggestions.length - 1 && s.streaming
+            ? { ...s, suggestion: event.full_text, streaming: false }
+            : s
+        );
         break;
       case 'status':
         statusMessages = [...statusMessages.slice(-4), event.message];
@@ -59,7 +62,6 @@
     }
   }
 
-  // suppress unused variable warning — capturing is used for potential future UI
   $effect(() => { void capturing; });
 </script>
 
@@ -107,7 +109,7 @@
           <TranscriptPanel entries={transcript} />
         </div>
         <div class="panel suggestions">
-          <SuggestionPanel {currentQuestion} {suggestion} {streaming} />
+          <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} />
         </div>
       </div>
     </div>

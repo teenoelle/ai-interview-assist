@@ -19,17 +19,7 @@ async fn suggest_with_fallback(
     rate_limiter: &RateLimiter,
     event_tx: broadcast::Sender<WsEvent>,
 ) -> anyhow::Result<()> {
-    // 1. Gemini (acquire rate-limit token first)
-    rate_limiter.acquire().await;
-    match gemini_llm::stream_suggestions(gemini_key, system_prompt, user_prompt, event_tx.clone()).await {
-        Ok(()) => return Ok(()),
-        Err(e) if is_quota_exhausted(&e) => {
-            tracing::warn!("Gemini suggestions quota exhausted, trying Groq");
-        }
-        Err(e) => return Err(e),
-    }
-
-    // 2. Groq Llama 3.3 70B
+    // 1. Groq Llama 3.3 70B — runs first to preserve Gemini credits for sentiment
     if let Some(key) = groq_key {
         match groq_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()).await {
             Ok(()) => return Ok(()),
@@ -40,9 +30,25 @@ async fn suggest_with_fallback(
         }
     }
 
-    // 3. OpenRouter free models
+    // 2. OpenRouter free models
     if let Some(key) = openrouter_key {
-        return openrouter_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx).await;
+        match openrouter_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()).await {
+            Ok(()) => return Ok(()),
+            Err(e) if is_quota_exhausted(&e) => {
+                tracing::warn!("OpenRouter suggestions quota exhausted, falling back to Gemini");
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
+    // 3. Gemini — last resort, keep credits free for sentiment analysis
+    rate_limiter.acquire().await;
+    match gemini_llm::stream_suggestions(gemini_key, system_prompt, user_prompt, event_tx).await {
+        Ok(()) => return Ok(()),
+        Err(e) if is_quota_exhausted(&e) => {
+            tracing::warn!("Gemini suggestions quota exhausted");
+        }
+        Err(e) => return Err(e),
     }
 
     anyhow::bail!("All suggestion providers exhausted")

@@ -36,13 +36,26 @@ fn is_question(text: &str) -> bool {
 }
 
 /// Try transcription providers in order, falling back on quota exhaustion.
+/// Groq Whisper runs first to preserve Gemini credits for sentiment analysis
+/// (vision-only feature that has no free alternative).
 async fn transcribe_with_fallback(
     gemini_key: &str,
     groq_key: Option<&str>,
     pcm: &[u8],
     rate_limiter: &RateLimiter,
 ) -> Result<String, anyhow::Error> {
-    // 1. Try Gemini with retry for temporary rate limits
+    // 1. Groq Whisper — free, fast, no vision quota used
+    if let Some(key) = groq_key {
+        match groq::transcribe(key, pcm).await {
+            Ok(text) => return Ok(text),
+            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
+                tracing::warn!("Groq transcription exhausted, falling back to Gemini");
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
+    // 2. Gemini — fallback only, preserves vision quota for sentiment
     let result = with_retry(rate_limiter, || {
         let k = gemini_key.to_string();
         let p = pcm.to_vec();
@@ -53,20 +66,9 @@ async fn transcribe_with_fallback(
     match result {
         Ok(text) => return Ok(text),
         Err(e) if is_quota_exhausted(&e) => {
-            tracing::warn!("Gemini transcription quota exhausted, falling back to Groq");
+            tracing::warn!("Gemini transcription quota exhausted");
         }
         Err(e) => return Err(e),
-    }
-
-    // 2. Try Groq Whisper
-    if let Some(key) = groq_key {
-        match groq::transcribe(key, pcm).await {
-            Ok(text) => return Ok(text),
-            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                tracing::warn!("Groq transcription also exhausted: {}", e);
-            }
-            Err(e) => return Err(e),
-        }
     }
 
     anyhow::bail!("All transcription providers exhausted")

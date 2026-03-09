@@ -4,6 +4,7 @@ use common::messages::{TranscriptSegment, WsEvent};
 use common::rate_limiter::RateLimiter;
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct AppState {
     pub system_prompt: Arc<RwLock<String>>,
     pub transcript: Arc<RwLock<Vec<TranscriptSegment>>>,

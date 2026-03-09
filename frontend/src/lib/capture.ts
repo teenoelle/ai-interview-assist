@@ -1,62 +1,91 @@
 import { AudioWebSocket, VideoWebSocket } from './websocket';
 
 export class MediaCapture {
-  private stream: MediaStream | null = null;
-  private audioCtx: AudioContext | null = null;
-  private audioWs: AudioWebSocket;
+  private systemStream: MediaStream | null = null;
+  private micStream: MediaStream | null = null;
+  private systemAudioCtx: AudioContext | null = null;
+  private micAudioCtx: AudioContext | null = null;
+  private systemAudioWs: AudioWebSocket;
+  private micAudioWs: AudioWebSocket;
   private videoWs: VideoWebSocket;
   private videoInterval: ReturnType<typeof setInterval> | null = null;
-  private workletNode: AudioWorkletNode | null = null;
+  private systemWorklet: AudioWorkletNode | null = null;
+  private micWorklet: AudioWorkletNode | null = null;
+
+  /** True if the microphone was successfully captured (two-stream mode). */
+  public micActive = false;
 
   constructor() {
-    this.audioWs = new AudioWebSocket();
-    this.videoWs = new VideoWebSocket();
+    this.systemAudioWs = new AudioWebSocket('/ws/audio');
+    this.micAudioWs    = new AudioWebSocket('/ws/audio/mic');
+    this.videoWs       = new VideoWebSocket();
   }
 
   async start(): Promise<void> {
-    this.stream = await navigator.mediaDevices.getDisplayMedia({
+    // 1. Screen + system audio (meeting playback = interviewer's voice)
+    this.systemStream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: 1 } as MediaTrackConstraints,
       audio: true,
     });
 
-    this.audioWs.connect();
-    this.videoWs.connect();
+    // 2. Microphone — your voice. Optional: falls back gracefully if denied.
+    try {
+      this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      this.micActive = true;
+    } catch {
+      console.warn(
+        'Microphone access denied — using single-stream mode. ' +
+        'Speaker labels will be less accurate.'
+      );
+    }
 
-    // Wait for WS connections to open
+    this.systemAudioWs.connect();
+    this.videoWs.connect();
+    if (this.micActive) this.micAudioWs.connect();
+
     await new Promise((resolve) => setTimeout(resolve, 500));
 
-    await this.startAudioCapture();
+    await this.startSystemAudioCapture();
+    if (this.micActive) await this.startMicCapture();
     this.startVideoCapture();
   }
 
-  private async startAudioCapture() {
-    if (!this.stream) return;
-
-    const audioTracks = this.stream.getAudioTracks();
-    if (audioTracks.length === 0) {
-      console.warn('No audio track available');
+  private async startSystemAudioCapture() {
+    if (!this.systemStream) return;
+    const tracks = this.systemStream.getAudioTracks();
+    if (tracks.length === 0) {
+      console.warn('No system audio track — make sure to check "Share audio" in the dialog.');
       return;
     }
-
-    const audioStream = new MediaStream([audioTracks[0]]);
-    this.audioCtx = new AudioContext({ sampleRate: 16000 });
-
-    await this.audioCtx.audioWorklet.addModule('/pcm-processor.js');
-    const source = this.audioCtx.createMediaStreamSource(audioStream);
-    this.workletNode = new AudioWorkletNode(this.audioCtx, 'pcm-processor');
-
-    this.workletNode.port.onmessage = (e: MessageEvent) => {
-      const int16Data: Int16Array = e.data;
-      this.audioWs.send(int16Data.buffer);
+    this.systemAudioCtx = new AudioContext({ sampleRate: 16000 });
+    await this.systemAudioCtx.audioWorklet.addModule('/pcm-processor.js');
+    const source = this.systemAudioCtx.createMediaStreamSource(new MediaStream([tracks[0]]));
+    this.systemWorklet = new AudioWorkletNode(this.systemAudioCtx, 'pcm-processor');
+    this.systemWorklet.port.onmessage = (e: MessageEvent) => {
+      this.systemAudioWs.send((e.data as Int16Array).buffer);
     };
+    source.connect(this.systemWorklet);
+    this.systemWorklet.connect(this.systemAudioCtx.destination);
+  }
 
-    source.connect(this.workletNode);
-    this.workletNode.connect(this.audioCtx.destination);
+  private async startMicCapture() {
+    if (!this.micStream) return;
+    const tracks = this.micStream.getAudioTracks();
+    if (tracks.length === 0) return;
+    this.micAudioCtx = new AudioContext({ sampleRate: 16000 });
+    await this.micAudioCtx.audioWorklet.addModule('/pcm-processor.js');
+    const source = this.micAudioCtx.createMediaStreamSource(new MediaStream([tracks[0]]));
+    this.micWorklet = new AudioWorkletNode(this.micAudioCtx, 'pcm-processor');
+    this.micWorklet.port.onmessage = (e: MessageEvent) => {
+      this.micAudioWs.send((e.data as Int16Array).buffer);
+    };
+    source.connect(this.micWorklet);
+    this.micWorklet.connect(this.micAudioCtx.destination);
   }
 
   private startVideoCapture() {
-    if (!this.stream) return;
-    const videoTracks = this.stream.getVideoTracks();
+    if (!this.systemStream) return;
+    const videoTracks = this.systemStream.getVideoTracks();
     if (videoTracks.length === 0) return;
 
     const canvas = document.createElement('canvas');
@@ -77,30 +106,31 @@ export class MediaCapture {
         const blob = await new Promise<Blob | null>((resolve) =>
           canvas.toBlob(resolve, 'image/jpeg', 0.7)
         );
-        if (blob) {
-          const buf = await blob.arrayBuffer();
-          this.videoWs.send(buf);
-        }
+        if (blob) this.videoWs.send(await blob.arrayBuffer());
       }
     };
 
-    // Capture first frame as soon as video is ready, then every 30s
     video.addEventListener('loadeddata', () => captureFrame(), { once: true });
     this.videoInterval = setInterval(captureFrame, 30000);
   }
 
   stop() {
     if (this.videoInterval) clearInterval(this.videoInterval);
-    this.workletNode?.disconnect();
-    this.audioCtx?.close();
-    this.stream?.getTracks().forEach((t) => t.stop());
-    this.audioWs.disconnect();
+    this.systemWorklet?.disconnect();
+    this.micWorklet?.disconnect();
+    this.systemAudioCtx?.close();
+    this.micAudioCtx?.close();
+    this.systemStream?.getTracks().forEach((t) => t.stop());
+    this.micStream?.getTracks().forEach((t) => t.stop());
+    this.systemAudioWs.disconnect();
+    this.micAudioWs.disconnect();
     this.videoWs.disconnect();
-    this.stream = null;
-    this.audioCtx = null;
+    this.systemStream = null;
+    this.micStream = null;
+    this.micActive = false;
   }
 
   get active() {
-    return this.stream !== null;
+    return this.systemStream !== null;
   }
 }

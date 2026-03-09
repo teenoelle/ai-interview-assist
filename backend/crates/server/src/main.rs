@@ -26,6 +26,7 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::from_env()?;
 
     let (audio_tx, audio_rx) = mpsc::channel::<Vec<u8>>(256);
+    let (mic_audio_tx, mic_audio_rx) = mpsc::channel::<Vec<u8>>(256);
     let (video_tx, video_rx) = mpsc::channel::<Vec<u8>>(32);
     let (question_tx, question_rx) = mpsc::channel::<String>(64);
     let (event_tx, _event_rx) = broadcast::channel::<WsEvent>(512);
@@ -41,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
         active(&config.mistral_api_key),
     );
     tracing::info!("Suggestion order: OpenRouter → Cerebras → Mistral → Groq → Gemini");
-    tracing::info!("Transcription order: Groq Whisper → Gemini");
+    tracing::info!("Transcription order: Groq Whisper → Gemini (both streams)");
     tracing::info!("Sentiment: Gemini Vision only");
     tracing::info!(
         "Speaker diarization: {}",
@@ -52,6 +53,7 @@ async fn main() -> anyhow::Result<()> {
         system_prompt: Arc::new(RwLock::new(String::new())),
         transcript: Arc::new(RwLock::new(Vec::new())),
         audio_tx,
+        mic_audio_tx,
         video_tx,
         question_tx,
         event_tx: event_tx.clone(),
@@ -63,6 +65,17 @@ async fn main() -> anyhow::Result<()> {
         rate_limiter: rate_limiter.clone(),
     };
 
+    // Mic agent: microphone audio → always "You", never triggers suggestions
+    tokio::spawn(transcription::run_mic_agent(
+        mic_audio_rx,
+        state.event_tx.clone(),
+        state.transcript.clone(),
+        config.gemini_api_key.clone(),
+        config.groq_api_key.clone(),
+        rate_limiter.clone(),
+    ));
+
+    // System audio agent: meeting playback → "Interviewer" (+ heuristic/diarize refinement)
     tokio::spawn(transcription::run_agent(
         audio_rx,
         state.question_tx.clone(),
@@ -103,6 +116,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .route("/ws/audio", get(ws_handler::ws_audio))
+        .route("/ws/audio/mic", get(ws_handler::ws_audio_mic))
         .route("/ws/video", get(ws_handler::ws_video))
         .route("/ws/events", get(ws_handler::ws_events))
         .route("/api/setup/finalize", post(http_handler::handle_setup_finalize))

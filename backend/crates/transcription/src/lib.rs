@@ -244,7 +244,74 @@ mod tests {
     }
 }
 
-// ── Agent ─────────────────────────────────────────────────────────────────────
+// ── Mic agent (always "You") ──────────────────────────────────────────────────
+
+/// Transcribes microphone audio and labels every segment as "You".
+/// Never triggers suggestion generation — the candidate's own speech is not a prompt.
+pub async fn run_mic_agent(
+    mut audio_rx: mpsc::Receiver<Vec<u8>>,
+    event_tx: broadcast::Sender<WsEvent>,
+    transcript: Arc<RwLock<Vec<TranscriptSegment>>>,
+    gemini_key: String,
+    groq_key: Option<String>,
+    rate_limiter: RateLimiter,
+) {
+    let mut ring_buf = buffer::RingBuffer::new();
+
+    loop {
+        match audio_rx.recv().await {
+            Some(chunk) => {
+                ring_buf.push(&chunk);
+                if ring_buf.should_flush() {
+                    let pcm = ring_buf.drain_segment();
+                    if pcm.is_empty() { continue; }
+
+                    let gkey = gemini_key.clone();
+                    let grkey = groq_key.clone();
+                    let etx = event_tx.clone();
+                    let tr = transcript.clone();
+                    let rl = rate_limiter.clone();
+
+                    tokio::spawn(async move {
+                        match transcribe_with_fallback(&gkey, grkey.as_deref(), &pcm, &rl).await {
+                            Ok(text) if !text.trim().is_empty() => {
+                                let ts = SystemTime::now()
+                                    .duration_since(UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_millis() as u64;
+                                let seg = TranscriptSegment {
+                                    text: text.clone(),
+                                    timestamp_ms: ts,
+                                    speaker: "You".to_string(),
+                                };
+                                {
+                                    let mut t = tr.write().await;
+                                    t.push(seg);
+                                    if t.len() > 100 { t.remove(0); }
+                                }
+                                let _ = etx.send(WsEvent::Transcript {
+                                    text,
+                                    timestamp_ms: ts,
+                                    speaker: "You".to_string(),
+                                });
+                            }
+                            Ok(_) => {}
+                            Err(e) => {
+                                tracing::error!("Mic transcription error: {}", e);
+                                let _ = etx.send(WsEvent::Error {
+                                    message: format!("Transcription error: {}", e),
+                                });
+                            }
+                        }
+                    });
+                }
+            }
+            None => break,
+        }
+    }
+}
+
+// ── System audio agent ────────────────────────────────────────────────────────
 
 pub async fn run_agent(
     mut audio_rx: mpsc::Receiver<Vec<u8>>,

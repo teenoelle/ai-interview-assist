@@ -39,10 +39,15 @@ export class EventWebSocket {
 
 export class AudioWebSocket {
   private ws: WebSocket | null = null;
+  private path: string;
+
+  constructor(path = '/ws/audio') {
+    this.path = path;
+  }
 
   connect() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    this.ws = new WebSocket(`${protocol}//${location.host}/ws/audio`);
+    this.ws = new WebSocket(`${protocol}//${location.host}${this.path}`);
   }
 
   send(data: ArrayBuffer) {

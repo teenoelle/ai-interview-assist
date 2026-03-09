@@ -6,6 +6,7 @@
   let interviewers = $state<string[]>(['']);   // start with one empty slot
   let extraExperience = $state('');
   let cvFile: File | null = $state(null);
+  let extraFile: File | null = $state(null);
   let loading = $state(false);
   let error = $state('');
   let systemPromptPreview = $state('');
@@ -41,6 +42,7 @@
 
       formData.append('extra_experience', extraExperience);
       if (cvFile) formData.append('cv_file', cvFile);
+      if (extraFile) formData.append('extra_file', extraFile);
 
       const result = await submitSetup(formData);
       systemPromptPreview = result.system_prompt_preview;
@@ -55,6 +57,11 @@
   function handleFileChange(e: Event) {
     const target = e.target as HTMLInputElement;
     cvFile = target.files?.[0] ?? null;
+  }
+
+  function handleExtraFileChange(e: Event) {
+    const target = e.target as HTMLInputElement;
+    extraFile = target.files?.[0] ?? null;
   }
 </script>
 
@@ -126,6 +133,11 @@
       rows={4}
       placeholder="Add any extra context, achievements, or talking points..."
     ></textarea>
+    <div class="file-row">
+      <label class="file-label" for="extra-file">Or upload a file</label>
+      <input id="extra-file" type="file" accept=".pdf,.docx,.txt,.md" onchange={handleExtraFileChange} />
+      {#if extraFile}<span class="file-chosen">{extraFile.name}</span>{/if}
+    </div>
   </div>
 
   {#if systemPromptPreview}
@@ -161,6 +173,9 @@
     font-size: 0.9rem; resize: vertical;
   }
   input[type='file'] { color: #94a3b8; }
+  .file-row { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem; flex-wrap: wrap; }
+  .file-label { font-size: 0.8rem; color: #64748b; white-space: nowrap; }
+  .file-chosen { font-size: 0.8rem; color: #60a5fa; }
   small { display: block; margin-top: 0.25rem; color: #64748b; font-size: 0.8rem; }
   .interviewer-entry { margin-bottom: 0.75rem; }
   .interviewer-label { font-size: 0.75rem; color: #60a5fa; font-weight: 600; margin-bottom: 0.25rem; }

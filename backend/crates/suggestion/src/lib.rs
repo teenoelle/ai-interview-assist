@@ -10,14 +10,14 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use common::messages::{TranscriptSegment, WsEvent};
 use common::rate_limiter::RateLimiter;
-use common::providers::is_quota_exhausted;
+use common::providers::{is_quota_exhausted, is_rate_limit};
 
 macro_rules! try_provider {
     ($name:expr, $call:expr, $etx:expr, $next:expr) => {
         match $call.await {
             Ok(()) => return Ok(()),
-            Err(e) if is_quota_exhausted(&e) => {
-                tracing::warn!("{} suggestions quota exhausted, trying next provider", $name);
+            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
+                tracing::warn!("{} unavailable (quota/rate-limit), trying next provider: {}", $name, e);
             }
             Err(e) => return Err(e),
         }

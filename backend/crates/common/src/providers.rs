@@ -38,5 +38,49 @@ pub fn is_quota_exhausted(err: &anyhow::Error) -> bool {
 
 pub fn is_rate_limit(err: &anyhow::Error) -> bool {
     let msg = err.to_string();
-    msg.contains("429") || msg.contains("rate_limit") || msg.contains("Rate limit")
+    msg.contains("429")
+        || msg.contains("rate_limit")
+        || msg.contains("Rate limit")
+        || msg.contains("rate-limited")
+        || msg.contains("Too Many Requests")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn err(msg: &str) -> anyhow::Error {
+        anyhow::anyhow!("{}", msg)
+    }
+
+    #[test]
+    fn quota_exhausted_detects_daily_limit() {
+        assert!(is_quota_exhausted(&err("GenerateRequestsPerDayPerProjectPerModel exceeded")));
+        assert!(is_quota_exhausted(&err("RESOURCE_EXHAUSTED: quota limit")));
+        assert!(is_quota_exhausted(&err("exceeded your current quota")));
+        assert!(is_quota_exhausted(&err("No credits remaining")));
+        assert!(is_quota_exhausted(&err("rate_limit_exceeded for daily")));
+        assert!(is_quota_exhausted(&err("insufficient_quota")));
+    }
+
+    #[test]
+    fn quota_exhausted_does_not_match_transient() {
+        assert!(!is_quota_exhausted(&err("500 Internal Server Error")));
+        assert!(!is_quota_exhausted(&err("connection refused")));
+        assert!(!is_quota_exhausted(&err("404 Not Found")));
+    }
+
+    #[test]
+    fn rate_limit_detects_429() {
+        assert!(is_rate_limit(&err("429 Too Many Requests")));
+        assert!(is_rate_limit(&err("temporarily rate-limited upstream")));
+        assert!(is_rate_limit(&err("Rate limit reached, retry later")));
+        assert!(is_rate_limit(&err("rate_limit exceeded")));
+    }
+
+    #[test]
+    fn rate_limit_does_not_match_other_errors() {
+        assert!(!is_rate_limit(&err("404 Not Found")));
+        assert!(!is_rate_limit(&err("500 Internal Server Error")));
+    }
 }

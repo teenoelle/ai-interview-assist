@@ -72,3 +72,48 @@ pub fn parse_linkedin_text(text: &str) -> InterviewerProfile {
         interests: String::new(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_name_and_role() {
+        let text = "Jane Smith\nSenior Engineer at Acme Corp\nPassionate about Rust and distributed systems";
+        let p = parse_linkedin_text(text);
+        assert_eq!(p.name, "Jane Smith");
+        assert_eq!(p.role, "Senior Engineer at Acme Corp");
+        assert_eq!(p.company, "Acme Corp");
+    }
+
+    #[test]
+    fn parses_company_with_bullet() {
+        let text = "John Doe\nEngineering Manager\n· BigTech Inc";
+        let p = parse_linkedin_text(text);
+        assert_eq!(p.company, "BigTech Inc");
+    }
+
+    #[test]
+    fn empty_input_returns_empty_profile() {
+        let p = parse_linkedin_text("");
+        assert!(p.name.is_empty());
+        assert!(p.role.is_empty());
+        assert!(p.company.is_empty());
+    }
+
+    #[test]
+    fn multiple_profiles_split_correctly() {
+        let text = "Alice\nCTO at Startup\n---INTERVIEWER---\nBob\nVP Engineering at Corp";
+        let profiles = parse_all_linkedin_profiles(text);
+        assert_eq!(profiles.len(), 2);
+        assert_eq!(profiles[0].name, "Alice");
+        assert_eq!(profiles[1].name, "Bob");
+    }
+
+    #[test]
+    fn single_empty_text_returns_one_empty_profile() {
+        let profiles = parse_all_linkedin_profiles("");
+        assert_eq!(profiles.len(), 1);
+        assert!(profiles[0].name.is_empty());
+    }
+}

@@ -81,3 +81,75 @@ pub fn build_system_prompt(
 
     prompt
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use common::messages::SetupPayload;
+
+    fn empty_payload() -> SetupPayload {
+        SetupPayload::default()
+    }
+
+    #[test]
+    fn prompt_contains_instructions() {
+        let p = build_system_prompt(&empty_payload(), "", &[]);
+        assert!(p.contains("## Instructions"));
+        assert!(p.contains("3 numbered talking points"));
+    }
+
+    #[test]
+    fn prompt_includes_job_description() {
+        let mut payload = empty_payload();
+        payload.job_description = "Rust backend engineer".to_string();
+        let p = build_system_prompt(&payload, "", &[]);
+        assert!(p.contains("## Job Description"));
+        assert!(p.contains("Rust backend engineer"));
+    }
+
+    #[test]
+    fn prompt_includes_company_info() {
+        let p = build_system_prompt(&empty_payload(), "Acme builds widgets", &[]);
+        assert!(p.contains("## Company Information"));
+        assert!(p.contains("Acme builds widgets"));
+    }
+
+    #[test]
+    fn prompt_includes_single_interviewer() {
+        let interviewer = InterviewerProfile {
+            name: "Jane Smith".to_string(),
+            role: "CTO".to_string(),
+            company: "Acme".to_string(),
+            background: "20 years in systems".to_string(),
+            interests: String::new(),
+        };
+        let p = build_system_prompt(&empty_payload(), "", &[interviewer]);
+        assert!(p.contains("## Interviewer Profile"));
+        assert!(p.contains("Jane Smith"));
+    }
+
+    #[test]
+    fn prompt_numbers_multiple_interviewers() {
+        let make = |name: &str| InterviewerProfile {
+            name: name.to_string(),
+            role: String::new(),
+            company: String::new(),
+            background: "x".to_string(),
+            interests: String::new(),
+        };
+        let p = build_system_prompt(&empty_payload(), "", &[make("Alice"), make("Bob")]);
+        assert!(p.contains("## Interviewers (2 people)"));
+        assert!(p.contains("### Interviewer 1"));
+        assert!(p.contains("### Interviewer 2"));
+    }
+
+    #[test]
+    fn cv_truncated_at_5000_chars() {
+        let mut payload = empty_payload();
+        payload.cv_text = "x".repeat(6000);
+        let p = build_system_prompt(&payload, "", &[]);
+        // The prompt should contain 5000 x's but not 6000
+        let count = p.matches('x').count();
+        assert_eq!(count, 5000);
+    }
+}

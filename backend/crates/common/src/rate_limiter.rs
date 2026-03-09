@@ -88,7 +88,7 @@ where
     anyhow::bail!("Gemini API: exceeded max retries (5) due to rate limiting")
 }
 
-fn parse_retry_delay(msg: &str) -> Option<u64> {
+pub(crate) fn parse_retry_delay(msg: &str) -> Option<u64> {
     // Looks for patterns like: "retryDelay": "20s" or "retry in 20.4s"
     let patterns = [r#""retryDelay": ""#, "retry in "];
     for pat in &patterns {
@@ -101,4 +101,36 @@ fn parse_retry_delay(msg: &str) -> Option<u64> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_retry_delay_from_json() {
+        assert_eq!(parse_retry_delay(r#""retryDelay": "20s""#), Some(20));
+        assert_eq!(parse_retry_delay(r#""retryDelay": "5s""#), Some(5));
+    }
+
+    #[test]
+    fn parse_retry_delay_from_prose() {
+        assert_eq!(parse_retry_delay("retry in 30.4s please"), Some(31));
+        assert_eq!(parse_retry_delay("retry in 10s"), Some(10));
+    }
+
+    #[test]
+    fn parse_retry_delay_missing() {
+        assert_eq!(parse_retry_delay("some unrelated error"), None);
+        assert_eq!(parse_retry_delay(""), None);
+    }
+
+    #[tokio::test]
+    async fn rate_limiter_grants_tokens() {
+        let limiter = RateLimiter::new();
+        // Should succeed immediately (12 tokens available)
+        tokio::time::timeout(std::time::Duration::from_millis(100), limiter.acquire())
+            .await
+            .expect("acquire should not block when tokens available");
+    }
 }

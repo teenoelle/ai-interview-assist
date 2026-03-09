@@ -6,9 +6,9 @@
 
 const SAMPLE_RATE: usize = 16000;
 const BYTES_PER_SAMPLE: usize = 2;
-const MIN_SEGMENT_BYTES: usize = SAMPLE_RATE * 8 * BYTES_PER_SAMPLE;  // 8 seconds min
-const MAX_SEGMENT_BYTES: usize = SAMPLE_RATE * 20 * BYTES_PER_SAMPLE; // 20 seconds max
-const SILENCE_THRESHOLD_BYTES: usize = SAMPLE_RATE * 2 * BYTES_PER_SAMPLE; // 2 seconds silence
+pub(crate) const MIN_SEGMENT_BYTES: usize = SAMPLE_RATE * 8 * BYTES_PER_SAMPLE;
+pub(crate) const MAX_SEGMENT_BYTES: usize = SAMPLE_RATE * 20 * BYTES_PER_SAMPLE;
+pub(crate) const SILENCE_THRESHOLD_BYTES: usize = SAMPLE_RATE * 2 * BYTES_PER_SAMPLE;
 
 pub struct RingBuffer {
     data: Vec<u8>,
@@ -75,5 +75,70 @@ impl RingBuffer {
 impl Default for RingBuffer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn silent_chunk(bytes: usize) -> Vec<u8> {
+        vec![0u8; bytes] // zero amplitude = silence
+    }
+
+    fn loud_chunk(bytes: usize) -> Vec<u8> {
+        // i16 value 10000 → energy ~10000, well above 500 threshold
+        let sample: i16 = 10000;
+        let [lo, hi] = sample.to_le_bytes();
+        (0..bytes / 2).flat_map(|_| [lo, hi]).collect()
+    }
+
+    #[test]
+    fn does_not_flush_empty_buffer() {
+        let buf = RingBuffer::new();
+        assert!(!buf.should_flush());
+    }
+
+    #[test]
+    fn does_not_flush_short_silent_buffer() {
+        let mut buf = RingBuffer::new();
+        buf.push(&silent_chunk(1000));
+        assert!(!buf.should_flush());
+    }
+
+    #[test]
+    fn flushes_at_max_size() {
+        let mut buf = RingBuffer::new();
+        buf.push(&loud_chunk(MAX_SEGMENT_BYTES));
+        assert!(buf.should_flush());
+    }
+
+    #[test]
+    fn flushes_after_speech_then_silence() {
+        let mut buf = RingBuffer::new();
+        // Push enough speech to exceed min segment
+        buf.push(&loud_chunk(MIN_SEGMENT_BYTES + 1000));
+        assert!(!buf.should_flush()); // no silence yet
+        // Push 2s of silence
+        buf.push(&silent_chunk(SILENCE_THRESHOLD_BYTES));
+        assert!(buf.should_flush());
+    }
+
+    #[test]
+    fn does_not_flush_min_size_with_silence_but_no_speech() {
+        let mut buf = RingBuffer::new();
+        buf.push(&silent_chunk(MIN_SEGMENT_BYTES + SILENCE_THRESHOLD_BYTES));
+        // has_speech is false → should not flush despite size
+        assert!(!buf.should_flush());
+    }
+
+    #[test]
+    fn drain_resets_buffer() {
+        let mut buf = RingBuffer::new();
+        buf.push(&loud_chunk(1000));
+        let drained = buf.drain_segment();
+        assert_eq!(drained.len(), 1000);
+        assert!(!buf.should_flush());
+        assert!(buf.data.is_empty());
     }
 }

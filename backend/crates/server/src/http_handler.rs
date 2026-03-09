@@ -24,6 +24,8 @@ pub async fn handle_setup_finalize(
     let mut payload = SetupPayload::default();
     let mut cv_bytes: Option<Vec<u8>> = None;
     let mut cv_filename = String::new();
+    let mut extra_file_bytes: Option<Vec<u8>> = None;
+    let mut extra_filename = String::new();
 
     while let Ok(Some(field)) = multipart.next_field().await {
         let name = field.name().unwrap_or("").to_string();
@@ -44,6 +46,10 @@ pub async fn handle_setup_finalize(
                 cv_filename = field.file_name().unwrap_or("").to_string();
                 cv_bytes = Some(field.bytes().await.unwrap_or_default().to_vec());
             }
+            "extra_file" => {
+                extra_filename = field.file_name().unwrap_or("").to_string();
+                extra_file_bytes = Some(field.bytes().await.unwrap_or_default().to_vec());
+            }
             _ => {}
         }
     }
@@ -58,6 +64,24 @@ pub async fn handle_setup_finalize(
         } else {
             // .txt, .md, .rtf, etc — treat as plain UTF-8
             payload.cv_text = String::from_utf8_lossy(&bytes).to_string();
+        }
+    }
+
+    // Extract extra experience file and append to text
+    if let Some(bytes) = extra_file_bytes {
+        let name_lower = extra_filename.to_lowercase();
+        let file_text = if name_lower.ends_with(".pdf") {
+            extract_pdf_text(&bytes).unwrap_or_default()
+        } else if name_lower.ends_with(".docx") {
+            extract_docx_text(&bytes).unwrap_or_default()
+        } else {
+            String::from_utf8_lossy(&bytes).to_string()
+        };
+        if !file_text.is_empty() {
+            if !payload.extra_experience.is_empty() {
+                payload.extra_experience.push_str("\n\n");
+            }
+            payload.extra_experience.push_str(&file_text);
         }
     }
 

@@ -32,11 +32,17 @@ async fn main() -> anyhow::Result<()> {
 
     let rate_limiter = RateLimiter::new();
 
+    let active = |k: &Option<String>| if k.is_some() { "yes" } else { "no" };
     tracing::info!(
-        "Providers — Gemini: yes, Groq: {}, OpenRouter: {}",
-        if config.groq_api_key.is_some() { "yes" } else { "no (set GROQ_API_KEY)" },
-        if config.openrouter_api_key.is_some() { "yes" } else { "no (set OPENROUTER_API_KEY)" },
+        "Providers — Gemini: yes | Groq: {} | OpenRouter: {} | Cerebras: {} | Mistral: {}",
+        active(&config.groq_api_key),
+        active(&config.openrouter_api_key),
+        active(&config.cerebras_api_key),
+        active(&config.mistral_api_key),
     );
+    tracing::info!("Suggestion order: OpenRouter → Cerebras → Mistral → Groq → Gemini");
+    tracing::info!("Transcription order: Groq Whisper → Gemini");
+    tracing::info!("Sentiment: Gemini Vision only");
 
     let state = AppState {
         system_prompt: Arc::new(RwLock::new(String::new())),
@@ -48,10 +54,11 @@ async fn main() -> anyhow::Result<()> {
         gemini_key: config.gemini_api_key.clone(),
         groq_key: config.groq_api_key.clone(),
         openrouter_key: config.openrouter_api_key.clone(),
+        mistral_key: config.mistral_api_key.clone(),
+        cerebras_key: config.cerebras_api_key.clone(),
         rate_limiter: rate_limiter.clone(),
     };
 
-    // Spawn agent tasks (all share the same Gemini rate limiter)
     tokio::spawn(transcription::run_agent(
         audio_rx,
         state.question_tx.clone(),
@@ -77,6 +84,8 @@ async fn main() -> anyhow::Result<()> {
         config.gemini_api_key.clone(),
         config.groq_api_key.clone(),
         config.openrouter_api_key.clone(),
+        config.mistral_api_key.clone(),
+        config.cerebras_api_key.clone(),
         rate_limiter.clone(),
     ));
 

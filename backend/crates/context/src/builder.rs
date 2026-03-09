@@ -20,8 +20,8 @@ pub fn build_system_prompt(
 
     if !payload.cv_text.is_empty() {
         prompt.push_str("## Candidate CV / Resume\n");
-        let cv_preview = if payload.cv_text.len() > 5000 {
-            &payload.cv_text[..5000]
+        let cv_preview = if payload.cv_text.len() > 20000 {
+            &payload.cv_text[..20000]
         } else {
             &payload.cv_text
         };
@@ -146,10 +146,10 @@ mod tests {
     #[test]
     fn cv_truncated_at_5000_chars() {
         let mut payload = empty_payload();
-        payload.cv_text = "x".repeat(6000);
+        payload.cv_text = "z".repeat(25000);
         let p = build_system_prompt(&payload, "", &[]);
-        // The prompt should contain 5000 x's but not 6000
-        let count = p.matches('x').count();
-        assert_eq!(count, 5000);
+        // The prompt should contain 20000 z's but not 25000
+        let count = p.matches('z').count();
+        assert_eq!(count, 20000);
     }
 }

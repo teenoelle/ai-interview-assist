@@ -52,7 +52,9 @@
         statusMessages = [...statusMessages.slice(-4), event.message];
         break;
       case 'error':
-        errorMessages = [...errorMessages.slice(-4), event.message];
+        if (!errorMessages.includes(event.message)) {
+          errorMessages = [...errorMessages, event.message];
+        }
         break;
     }
   }
@@ -76,7 +78,7 @@
         <h1>AI Interview Assistant</h1>
         <div class="header-controls">
           <SentimentBar {emotion} />
-          <CaptureButton onCapture={(v) => { capturing = v; if (!v) errorMessages = []; }} />
+          <CaptureButton onCapture={(v) => { capturing = v; }} />
         </div>
       </header>
 
@@ -87,7 +89,10 @@
               <div>{msg}</div>
             {/each}
           </div>
-          <button class="error-clear" onclick={() => (errorMessages = [])}>✕ Clear</button>
+          <div class="error-actions">
+            <button class="error-btn" onclick={() => navigator.clipboard.writeText(errorMessages.join('\n'))}>Copy</button>
+            <button class="error-btn" onclick={() => (errorMessages = [])}>✕</button>
+          </div>
         </div>
       {/if}
 
@@ -175,8 +180,15 @@
     max-height: 6rem;
     overflow-y: auto;
   }
-  .error-clear {
+  .error-actions {
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    align-self: flex-start;
+    margin-top: 0.1rem;
+  }
+  .error-btn {
     padding: 0.15rem 0.5rem;
     background: transparent;
     border: 1px solid #7f1d1d;
@@ -185,10 +197,8 @@
     font-size: 0.75rem;
     cursor: pointer;
     white-space: nowrap;
-    align-self: flex-start;
-    margin-top: 0.1rem;
   }
-  .error-clear:hover {
+  .error-btn:hover {
     background: #7f1d1d;
   }
   .status-banner {

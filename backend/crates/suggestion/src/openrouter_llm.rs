@@ -10,7 +10,7 @@ const FREE_MODELS: &[&str] = &[
     "deepseek/deepseek-r1:free",
     "qwen/qwen-2.5-72b-instruct:free",
     "mistralai/mistral-7b-instruct:free",
-    "microsoft/phi-4:free",
+    "google/gemma-3-27b-it:free",
 ];
 
 pub async fn stream_suggestions(

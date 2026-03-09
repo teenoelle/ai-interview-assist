@@ -5,6 +5,7 @@ pub mod gemini;
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use common::messages::{TranscriptSegment, WsEvent};
+use common::rate_limiter::{RateLimiter, with_retry};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn is_question(text: &str) -> bool {
@@ -41,6 +42,7 @@ pub async fn run_agent(
     event_tx: broadcast::Sender<WsEvent>,
     transcript: Arc<RwLock<Vec<TranscriptSegment>>>,
     gemini_key: String,
+    rate_limiter: RateLimiter,
 ) {
     let mut ring_buf = buffer::RingBuffer::new();
 
@@ -57,8 +59,16 @@ pub async fn run_agent(
                     let qtx = question_tx.clone();
                     let etx = event_tx.clone();
                     let tr = transcript.clone();
+                    let rl = rate_limiter.clone();
                     tokio::spawn(async move {
-                        match gemini::transcribe(&key, &segment_pcm).await {
+                        let result = with_retry(&rl, || {
+                            let k = key.clone();
+                            let pcm = segment_pcm.clone();
+                            async move { gemini::transcribe(&k, &pcm).await }
+                        })
+                        .await;
+
+                        match result {
                             Ok(text) if !text.trim().is_empty() => {
                                 let ts = SystemTime::now()
                                     .duration_since(UNIX_EPOCH)

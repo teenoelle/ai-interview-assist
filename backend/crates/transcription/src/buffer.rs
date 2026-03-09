@@ -6,9 +6,9 @@
 
 const SAMPLE_RATE: usize = 16000;
 const BYTES_PER_SAMPLE: usize = 2;
-const MIN_SEGMENT_BYTES: usize = SAMPLE_RATE * 3 * BYTES_PER_SAMPLE;  // 3 seconds
-const MAX_SEGMENT_BYTES: usize = SAMPLE_RATE * 15 * BYTES_PER_SAMPLE; // 15 seconds
-const SILENCE_THRESHOLD_BYTES: usize = SAMPLE_RATE * 1 * BYTES_PER_SAMPLE; // 1 second silence
+const MIN_SEGMENT_BYTES: usize = SAMPLE_RATE * 8 * BYTES_PER_SAMPLE;  // 8 seconds min
+const MAX_SEGMENT_BYTES: usize = SAMPLE_RATE * 20 * BYTES_PER_SAMPLE; // 20 seconds max
+const SILENCE_THRESHOLD_BYTES: usize = SAMPLE_RATE * 2 * BYTES_PER_SAMPLE; // 2 seconds silence
 
 pub struct RingBuffer {
     data: Vec<u8>,

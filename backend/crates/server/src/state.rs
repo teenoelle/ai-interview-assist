@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use common::messages::{TranscriptSegment, WsEvent};
+use common::rate_limiter::RateLimiter;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -11,4 +12,5 @@ pub struct AppState {
     pub question_tx: mpsc::Sender<String>,
     pub event_tx: broadcast::Sender<WsEvent>,
     pub gemini_key: String,
+    pub rate_limiter: RateLimiter,
 }

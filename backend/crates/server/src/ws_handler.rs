@@ -5,8 +5,7 @@ use axum::{
     },
     response::Response,
 };
-use futures::{SinkExt, StreamExt};
-use common::messages::WsEvent;
+use futures::StreamExt;
 use crate::state::AppState;
 
 pub async fn ws_audio(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {

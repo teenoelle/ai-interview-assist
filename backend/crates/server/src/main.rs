@@ -8,6 +8,7 @@ use tower_http::{cors::CorsLayer, services::ServeDir};
 use tracing_subscriber::EnvFilter;
 use common::config::Config;
 use common::messages::WsEvent;
+use common::rate_limiter::RateLimiter;
 use crate::state::AppState;
 
 mod state;
@@ -29,6 +30,8 @@ async fn main() -> anyhow::Result<()> {
     let (question_tx, question_rx) = mpsc::channel::<String>(64);
     let (event_tx, _event_rx) = broadcast::channel::<WsEvent>(512);
 
+    let rate_limiter = RateLimiter::new();
+
     let state = AppState {
         system_prompt: Arc::new(RwLock::new(String::new())),
         transcript: Arc::new(RwLock::new(Vec::new())),
@@ -37,21 +40,24 @@ async fn main() -> anyhow::Result<()> {
         question_tx,
         event_tx: event_tx.clone(),
         gemini_key: config.gemini_api_key.clone(),
+        rate_limiter: rate_limiter.clone(),
     };
 
-    // Spawn agent tasks
+    // Spawn agent tasks (all share the same rate limiter)
     tokio::spawn(transcription::run_agent(
         audio_rx,
         state.question_tx.clone(),
         state.event_tx.clone(),
         state.transcript.clone(),
         config.gemini_api_key.clone(),
+        rate_limiter.clone(),
     ));
 
     tokio::spawn(sentiment::run_agent(
         video_rx,
         state.event_tx.clone(),
         config.gemini_api_key.clone(),
+        rate_limiter.clone(),
     ));
 
     tokio::spawn(suggestion::run_agent(
@@ -60,6 +66,7 @@ async fn main() -> anyhow::Result<()> {
         state.system_prompt.clone(),
         state.transcript.clone(),
         config.gemini_api_key.clone(),
+        rate_limiter.clone(),
     ));
 
     let frontend_path = std::env::current_dir()
@@ -74,7 +81,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/ws/video", get(ws_handler::ws_video))
         .route("/ws/events", get(ws_handler::ws_events))
         .route("/api/setup/finalize", post(http_handler::handle_setup_finalize))
-        .nest_service("/", ServeDir::new(&frontend_path))
+        .fallback_service(ServeDir::new(&frontend_path))
         .layer(CorsLayer::permissive())
         .with_state(state);
 

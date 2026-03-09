@@ -130,8 +130,7 @@
     color: #cbd5e1;
   }
   textarea,
-  input[type='url'],
-  input[type='text'] {
+  input[type='url'] {
     width: 100%;
     padding: 0.75rem;
     background: #1e293b;

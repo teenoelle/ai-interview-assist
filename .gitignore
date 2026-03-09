@@ -8,8 +8,11 @@ frontend/dist/
 
 # Environment (never commit real keys)
 .env
+.env.txt
+*.env
 
 # Editor / OS
 .claude/
 *.DS_Store
 Thumbs.db
+info for t.txt

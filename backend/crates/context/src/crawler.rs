@@ -20,10 +20,15 @@ pub async fn crawl_website(start_url: &str, max_pages: usize) -> Result<String> 
     queue.push_back(start_url.to_string());
     let priority_paths = [
         "/about", "/about-us", "/company", "/who-we-are",
+        "/mission", "/values", "/culture",
+        "/products", "/services", "/solutions", "/how-it-works",
         "/team", "/leadership", "/people", "/our-team",
         "/careers", "/jobs", "/work-with-us",
-        "/mission", "/values", "/culture",
-        "/products", "/services", "/solutions",
+        "/blog", "/news", "/newsroom", "/press",
+        "/case-studies", "/customers", "/clients",
+        "/engineering", "/tech",
+        "/investors", "/investor-relations",
+        "/partners",
     ];
     for path in &priority_paths {
         if let Ok(u) = base_url.join(path) {

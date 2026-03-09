@@ -84,12 +84,12 @@
       bind:value={companyUrl}
       placeholder="https://company.com"
     />
-    <small>We'll crawl up to 50 pages, prioritising /about, /team, /careers and /leadership</small>
+    <small>We'll crawl up to 50 pages, prioritising mission, products, team, careers, blog, news, case studies, and investor pages</small>
   </div>
 
   <div class="field">
     <div class="field-header">
-      <label>Interviewer LinkedIn Profile(s)</label>
+      <span class="field-label">Interviewer LinkedIn Profile(s)</span>
       <button type="button" class="btn-add" onclick={addInterviewer}>+ Add interviewer</button>
     </div>
     {#each interviewers as text, i (i)}
@@ -151,7 +151,8 @@
     justify-content: space-between;
     margin-bottom: 0.5rem;
   }
-  .field-header label { margin-bottom: 0; }
+  .field-header .field-label { margin-bottom: 0; }
+  .field-label { font-weight: 500; color: #cbd5e1; }
   label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: #cbd5e1; }
   textarea, input[type='url'] {
     width: 100%; padding: 0.75rem;

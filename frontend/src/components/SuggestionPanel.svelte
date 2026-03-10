@@ -1,62 +1,208 @@
 <script lang="ts">
   import type { SuggestionEntry } from '../lib/types';
 
-  const { suggestions, onClear } = $props<{
+  const { suggestions, onClear, teleprompter = false } = $props<{
     suggestions: SuggestionEntry[];
     onClear: () => void;
+    teleprompter?: boolean;
   }>();
 
   let container: HTMLElement;
 
   $effect(() => {
-    if (suggestions.length && container) {
+    if (!teleprompter && suggestions.length && container) {
       container.scrollTop = container.scrollHeight;
     }
   });
 
-  // Convert **bold** markdown to <strong> tags for scannable keywords
   function renderBold(text: string): string {
     return text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   }
+
+  const latest = $derived(suggestions.length > 0 ? suggestions[suggestions.length - 1] : null);
+  const previous = $derived(suggestions.length > 1 ? suggestions.slice(0, -1) : []);
 </script>
 
-<div class="suggestion-panel">
-  <div class="panel-header">
-    <div class="header-left">
-      <h3>AI Suggestions</h3>
-      <span class="glance-hint">glance at bold keywords — don't read aloud</span>
+{#if teleprompter}
+  <!-- Teleprompter mode: latest suggestion large + centered under webcam -->
+  <div class="teleprompter">
+    <div class="tp-header">
+      <span class="tp-hint">glance at bold — don't read aloud</span>
+      {#if suggestions.length > 0}
+        <button class="tp-clear" onclick={onClear}>Clear</button>
+      {/if}
     </div>
-    {#if suggestions.length > 0}
-      <button class="clear-btn" onclick={onClear}>Clear</button>
+
+    {#if latest}
+      <div class="tp-card">
+        <div class="tp-question">"{latest.question}"</div>
+        <div class="tp-suggestion">
+          {#if latest.suggestion}
+            {@html renderBold(latest.suggestion)}{#if latest.streaming}<span class="cursor">|</span>{/if}
+          {:else if latest.streaming}
+            <span class="tp-loading">Generating<span class="dots">...</span></span>
+          {/if}
+        </div>
+      </div>
+    {:else}
+      <div class="tp-empty">Waiting for a question...</div>
+    {/if}
+
+    {#if previous.length > 0}
+      <div class="tp-history">
+        {#each previous as entry, i (i)}
+          <div class="tp-history-item" title={entry.question}>
+            Q{i + 1}: {entry.question}
+          </div>
+        {/each}
+      </div>
     {/if}
   </div>
 
-  <div class="entries" bind:this={container}>
-    {#if suggestions.length === 0}
-      <p class="empty">
-        Suggestions will appear when the interviewer speaks...
-      </p>
-    {:else}
-      {#each suggestions as entry, i (i)}
-        <div class="entry" class:latest={i === suggestions.length - 1}>
-          <div class="question-row">
-            <span class="badge">Interviewer</span>
-            <p class="question-text">"{entry.question}"</p>
+{:else}
+  <!-- Standard panel mode -->
+  <div class="suggestion-panel">
+    <div class="panel-header">
+      <div class="header-left">
+        <h3>AI Suggestions</h3>
+        <span class="glance-hint">glance at bold keywords — don't read aloud</span>
+      </div>
+      {#if suggestions.length > 0}
+        <button class="clear-btn" onclick={onClear}>Clear</button>
+      {/if}
+    </div>
+
+    <div class="entries" bind:this={container}>
+      {#if suggestions.length === 0}
+        <p class="empty">Suggestions will appear when the interviewer speaks...</p>
+      {:else}
+        {#each suggestions as entry, i (i)}
+          <div class="entry" class:latest={i === suggestions.length - 1}>
+            <div class="question-row">
+              <span class="badge">Interviewer</span>
+              <p class="question-text">"{entry.question}"</p>
+            </div>
+            <div class="suggestion-text">
+              {#if entry.suggestion}
+                {@html renderBold(entry.suggestion)}{#if entry.streaming}<span class="cursor">|</span>{/if}
+              {:else if entry.streaming}
+                <span class="loading">Generating<span class="dots">...</span></span>
+              {/if}
+            </div>
           </div>
-          <div class="suggestion-text">
-            {#if entry.suggestion}
-              {@html renderBold(entry.suggestion)}{#if entry.streaming}<span class="cursor">|</span>{/if}
-            {:else if entry.streaming}
-              <span class="loading">Generating<span class="dots">...</span></span>
-            {/if}
-          </div>
-        </div>
-      {/each}
-    {/if}
+        {/each}
+      {/if}
+    </div>
   </div>
-</div>
+{/if}
 
 <style>
+  /* === Teleprompter mode === */
+  .teleprompter {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .tp-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .tp-hint {
+    font-size: 0.62rem;
+    color: #334155;
+    font-style: italic;
+  }
+
+  .tp-clear {
+    padding: 0.1rem 0.5rem;
+    background: transparent;
+    border: 1px solid #1e293b;
+    border-radius: 0.25rem;
+    color: #475569;
+    font-size: 0.7rem;
+    cursor: pointer;
+  }
+  .tp-clear:hover { border-color: #475569; color: #94a3b8; }
+
+  .tp-card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    background: #07101e;
+    border-radius: 0.75rem;
+    border: 1px solid #1a2d4a;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  .tp-question {
+    color: #4d94d4;
+    font-style: italic;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #0f1e33;
+    flex-shrink: 0;
+  }
+
+  .tp-suggestion {
+    color: #b8cce4;
+    line-height: 2.3;
+    white-space: pre-wrap;
+    font-size: 1rem;
+  }
+
+  :global(.tp-suggestion strong) {
+    color: #f0f6ff;
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+  }
+
+  .tp-loading {
+    color: #4d94d4;
+    font-style: italic;
+    font-size: 0.9rem;
+  }
+
+  .tp-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #1e293b;
+    font-style: italic;
+    font-size: 0.85rem;
+  }
+
+  .tp-history {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    max-height: 4.5rem;
+    overflow-y: auto;
+  }
+
+  .tp-history-item {
+    font-size: 0.65rem;
+    color: #1e3a5f;
+    padding: 0.12rem 0.5rem;
+    background: #06101a;
+    border-radius: 0.2rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* === Standard panel mode === */
   .suggestion-panel {
     height: 100%;
     display: flex;
@@ -162,6 +308,7 @@
     font-weight: 700;
     letter-spacing: 0.01em;
   }
+
   .cursor {
     animation: blink 1s step-end infinite;
   }

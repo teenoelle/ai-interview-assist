@@ -11,12 +11,12 @@ pub fn build_user_prompt(question: &str, transcript: &[TranscriptSegment]) -> St
 
     if context.is_empty() {
         format!(
-            "The interviewer just asked: '{}'\nGive 3 concise talking points (max 2 sentences each) to answer this well based on my background.",
+            "The interviewer just asked: '{}'\n\nProvide 3 talking points using ONLY the candidate's documented background above. Use the scannable format from the instructions. If no relevant experience exists, say so honestly.",
             question
         )
     } else {
         format!(
-            "Recent conversation: {}\n\nThe interviewer just asked: '{}'\nGive 3 concise talking points (max 2 sentences each) to answer this well based on my background.",
+            "Recent conversation: {}\n\nThe interviewer just asked: '{}'\n\nProvide 3 talking points using ONLY the candidate's documented background above. Use the scannable format from the instructions. If no relevant experience exists, say so honestly.",
             context, question
         )
     }

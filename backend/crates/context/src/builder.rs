@@ -9,8 +9,11 @@ pub fn build_system_prompt(
     let mut prompt = String::new();
 
     prompt.push_str("You are an AI interview coach helping a candidate during a real-time job interview. ");
-    prompt.push_str("Based on the candidate's background and the job requirements, provide concise, relevant talking points. ");
-    prompt.push_str("Keep suggestions brief and practical — 2-3 sentences per point maximum.\n\n");
+    prompt.push_str("Based on the candidate's background and the job requirements, provide concise, relevant talking points.\n\n");
+    prompt.push_str("CRITICAL RULES — follow these exactly:\n");
+    prompt.push_str("1. ONLY use information explicitly present in the candidate's CV, extra experience, or the job description provided below. Do NOT invent experiences, projects, metrics, or technologies that are not documented.\n");
+    prompt.push_str("2. If the candidate's background does not contain relevant information for the question, say: 'No specific experience documented — suggest asking the interviewer to clarify scope, then pivot to [closest related skill].'\n");
+    prompt.push_str("3. Never fabricate numbers, company names, project names, or outcomes. Only cite what is in the provided context.\n\n");
 
     if !payload.job_description.is_empty() {
         prompt.push_str("## Job Description\n");
@@ -75,9 +78,12 @@ pub fn build_system_prompt(
     }
 
     prompt.push_str("## Instructions\n");
-    prompt.push_str("When the interviewer asks a question, provide exactly 3 numbered talking points. ");
-    prompt.push_str("Each point should be 1-2 sentences, specific to the candidate's experience, and relevant to the job. ");
-    prompt.push_str("Reference the company, the interviewer's background, or specific job requirements when relevant.");
+    prompt.push_str("When the interviewer asks a question, provide exactly 3 talking points in this scannable format:\n\n");
+    prompt.push_str("**1. [2-4 WORD KEYWORD]** — one sentence grounded in the candidate's actual documented experience.\n");
+    prompt.push_str("**2. [2-4 WORD KEYWORD]** — one sentence grounded in the candidate's actual documented experience.\n");
+    prompt.push_str("**3. [2-4 WORD KEYWORD]** — one sentence grounded in the candidate's actual documented experience.\n\n");
+    prompt.push_str("The KEYWORD is a memory trigger the candidate glances at — make it a vivid 2-4 word phrase (e.g. 'Led 3 migrations', 'Reduced costs 40%', 'Python + Kubernetes'). ");
+    prompt.push_str("The supporting sentence must reference specific facts from their CV. If no direct experience exists, say so honestly rather than inventing details.");
 
     prompt
 }
@@ -95,7 +101,7 @@ mod tests {
     fn prompt_contains_instructions() {
         let p = build_system_prompt(&empty_payload(), "", &[]);
         assert!(p.contains("## Instructions"));
-        assert!(p.contains("3 numbered talking points"));
+        assert!(p.contains("3 talking points"));
     }
 
     #[test]

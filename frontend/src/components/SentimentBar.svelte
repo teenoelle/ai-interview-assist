@@ -1,5 +1,5 @@
 <script lang="ts">
-  const { emotion } = $props<{ emotion: string }>();
+  const { emotion, coaching } = $props<{ emotion: string; coaching?: string }>();
 
   const emotionConfig: Record<string, { color: string; icon: string; label: string }> = {
     engaged:   { color: '#22c55e', icon: '🎯', label: 'Engaged' },
@@ -15,12 +15,18 @@
 </script>
 
 <div class="sentiment-bar">
-  <h3>Interviewer Sentiment</h3>
+  <h3>Interviewer</h3>
   {#if emotion}
     <div class="emotion" style="--color: {config.color}">
       <span class="icon">{config.icon}</span>
       <span class="label">{config.label}</span>
     </div>
+    {#if coaching}
+      <div class="coaching-tip">
+        <span class="coaching-icon">💡</span>
+        <span class="coaching-text">{coaching}</span>
+      </div>
+    {/if}
   {:else}
     <p class="empty">Sentiment analysis will appear when video is captured...</p>
   {/if}
@@ -54,6 +60,26 @@
     font-size: 1.2rem;
     font-weight: 700;
     color: var(--color);
+  }
+  .coaching-tip {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: #1a2744;
+    border-radius: 0.5rem;
+    border-left: 3px solid #f59e0b;
+  }
+  .coaching-icon {
+    flex-shrink: 0;
+    font-size: 0.85rem;
+    margin-top: 0.05rem;
+  }
+  .coaching-text {
+    font-size: 0.78rem;
+    color: #fcd34d;
+    line-height: 1.4;
   }
   .empty {
     color: #475569;

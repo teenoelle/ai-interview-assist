@@ -6,14 +6,19 @@ const VALID_EMOTIONS: &[&str] = &[
     "engaged", "curious", "neutral", "skeptical", "confused", "bored", "pleased",
 ];
 
-pub async fn analyze_sentiment(api_key: &str, jpeg_bytes: &[u8]) -> Result<String> {
+pub struct SentimentResult {
+    pub emotion: String,
+    pub coaching: Option<String>,
+}
+
+pub async fn analyze_sentiment(api_key: &str, jpeg_bytes: &[u8]) -> Result<SentimentResult> {
     let b64 = base64::engine::general_purpose::STANDARD.encode(jpeg_bytes);
 
     let body = json!({
         "contents": [{
             "parts": [
                 { "inlineData": { "mimeType": "image/jpeg", "data": b64 } },
-                { "text": "This is a screenshot of a video interview call. Focus on the interviewer (not the self-preview thumbnail). In one word, what emotion are they showing? Choose from: engaged, curious, neutral, skeptical, confused, bored, pleased. Reply with ONLY the one word." }
+                { "text": "This is a screenshot of a video interview call. Focus on the interviewer (not the self-preview thumbnail). Analyze their facial expression, body language, and engagement level.\n\nRespond in exactly this format (two lines, nothing else):\nEMOTION: <one word: engaged, curious, neutral, skeptical, confused, bored, pleased>\nCOACHING: <one specific action the candidate should take right now based on what you observe>\n\nExamples:\nEMOTION: skeptical\nCOACHING: Add a concrete number or specific example to back up your last point.\n\nEMOTION: bored\nCOACHING: Pick up your energy and pace — ask the interviewer a question to re-engage them." }
             ]
         }]
     });
@@ -40,17 +45,35 @@ pub async fn analyze_sentiment(api_key: &str, jpeg_bytes: &[u8]) -> Result<Strin
     let json: Value = resp.json().await?;
     let raw = json["candidates"][0]["content"]["parts"][0]["text"]
         .as_str()
-        .unwrap_or("neutral")
+        .unwrap_or("")
         .trim()
-        .to_lowercase();
-
-    // Find valid emotion in response
-    let emotion = VALID_EMOTIONS
-        .iter()
-        .find(|&&e| raw.contains(e))
-        .copied()
-        .unwrap_or("neutral")
         .to_string();
 
-    Ok(emotion)
+    let (emotion, coaching) = parse_sentiment_response(&raw);
+    Ok(SentimentResult { emotion, coaching })
+}
+
+fn parse_sentiment_response(raw: &str) -> (String, Option<String>) {
+    let mut emotion = "neutral".to_string();
+    let mut coaching: Option<String> = None;
+
+    for line in raw.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("EMOTION:") {
+            let word = rest.trim().to_lowercase();
+            emotion = VALID_EMOTIONS
+                .iter()
+                .find(|&&e| word.contains(e))
+                .copied()
+                .unwrap_or("neutral")
+                .to_string();
+        } else if let Some(rest) = line.strip_prefix("COACHING:") {
+            let tip = rest.trim().to_string();
+            if !tip.is_empty() {
+                coaching = Some(tip);
+            }
+        }
+    }
+
+    (emotion, coaching)
 }

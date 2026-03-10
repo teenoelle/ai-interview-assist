@@ -4,12 +4,13 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WsEvent {
     Transcript { text: String, timestamp_ms: u64, speaker: String },
-    Sentiment { emotion: String },
+    Sentiment { emotion: String, coaching: Option<String> },
     QuestionDetected { question: String },
     SuggestionToken { token: String },
     SuggestionComplete { full_text: String },
     Error { message: String },
     Status { message: String },
+    RateLimit { provider: String, requests_remaining: u32, requests_limit: u32 },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -122,7 +122,8 @@
 
   <div class="field">
     <label for="cv-file">Upload CV / Resume</label>
-    <input id="cv-file" type="file" accept=".pdf,.docx,.txt,.md" onchange={handleFileChange} />
+    <input id="cv-file" type="file" accept=".pdf,.docx,.txt,.md,.pptx,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.webp" onchange={handleFileChange} />
+    <small>Supported: PDF, Word, PowerPoint, Excel, CSV, plain text, images</small>
   </div>
 
   <div class="field">
@@ -135,9 +136,10 @@
     ></textarea>
     <div class="file-row">
       <label class="file-label" for="extra-file">Or upload a file</label>
-      <input id="extra-file" type="file" accept=".pdf,.docx,.txt,.md" onchange={handleExtraFileChange} />
+      <input id="extra-file" type="file" accept=".pdf,.docx,.txt,.md,.pptx,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.webp" onchange={handleExtraFileChange} />
       {#if extraFile}<span class="file-chosen">{extraFile.name}</span>{/if}
     </div>
+    <small>Supported: PDF, Word, PowerPoint (.pptx), Excel (.xlsx), CSV, images — text is extracted automatically</small>
   </div>
 
   {#if systemPromptPreview}

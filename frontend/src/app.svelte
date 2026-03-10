@@ -13,9 +13,30 @@
   let capturing = $state(false);
   let transcript = $state<TranscriptEntry[]>([]);
   let emotion = $state('');
+  let coaching = $state('');
   let suggestions = $state<SuggestionEntry[]>([]);
   let statusMessages = $state<string[]>([]);
   let errorMessages = $state<string[]>([]);
+
+  // Resizable panels — leftPct is transcript width as % of panels container
+  let leftPct = $state(55);
+  let dragging = $state(false);
+  let panelsEl = $state<HTMLDivElement | null>(null);
+
+  function onDividerPointerDown(e: PointerEvent) {
+    dragging = true;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function onDividerPointerMove(e: PointerEvent) {
+    if (!dragging || !panelsEl) return;
+    const rect = panelsEl.getBoundingClientRect();
+    const pct = ((e.clientX - rect.left) / rect.width) * 100;
+    leftPct = Math.min(Math.max(pct, 20), 80);
+  }
+  function onDividerPointerUp() { dragging = false; }
+
+  interface RateLimitInfo { remaining: number; limit: number; }
+  let rateLimits = $state<Record<string, RateLimitInfo>>({});
 
   let eventWs: EventWebSocket | null = null;
 
@@ -33,6 +54,7 @@
         break;
       case 'sentiment':
         emotion = event.emotion;
+        if (event.coaching) coaching = event.coaching;
         break;
       case 'question_detected':
         suggestions = [...suggestions, { question: event.question, suggestion: '', streaming: true }];
@@ -59,6 +81,9 @@
           errorMessages = [...errorMessages, event.message];
         }
         break;
+      case 'rate_limit':
+        rateLimits = { ...rateLimits, [event.provider]: { remaining: event.requests_remaining, limit: event.requests_limit } };
+        break;
     }
   }
 
@@ -79,7 +104,12 @@
       <header class="interview-header">
         <h1>AI Interview Assistant</h1>
         <div class="header-controls">
-          <SentimentBar {emotion} />
+          {#each Object.entries(rateLimits) as [provider, info]}
+            <span class="rate-limit-badge" class:low={info.remaining < info.limit * 0.1}>
+              {provider}: {info.remaining}/{info.limit}
+            </span>
+          {/each}
+          <SentimentBar {emotion} {coaching} />
           <CaptureButton onCapture={(v) => { capturing = v; }} />
         </div>
       </header>
@@ -104,11 +134,17 @@
         </div>
       {/if}
 
-      <div class="panels">
-        <div class="panel transcript">
+      <div class="panels" role="none" bind:this={panelsEl}
+        onpointermove={onDividerPointerMove}
+        onpointerup={onDividerPointerUp}>
+        <div class="panel" style="width: {leftPct}%">
           <TranscriptPanel entries={transcript} />
         </div>
-        <div class="panel suggestions">
+        <div class="divider" class:dragging
+          onpointerdown={onDividerPointerDown}
+          role="separator" aria-orientation="vertical" tabindex="-1">
+        </div>
+        <div class="panel" style="width: {100 - leftPct}%">
           <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} />
         </div>
       </div>
@@ -168,6 +204,19 @@
     align-items: center;
     gap: 1rem;
   }
+  .rate-limit-badge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 9999px;
+    color: #94a3b8;
+    white-space: nowrap;
+  }
+  .rate-limit-badge.low {
+    border-color: #92400e;
+    color: #fbbf24;
+  }
   .error-banner {
     display: flex;
     align-items: flex-start;
@@ -213,21 +262,26 @@
     display: flex;
     flex: 1;
     overflow: hidden;
-    gap: 1px;
     background: #1e293b;
+    user-select: none;
   }
   .panel {
-    flex: 1;
+    flex-shrink: 0;
     background: #0f172a;
     padding: 1.25rem;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    box-sizing: border-box;
   }
-  .transcript {
-    flex: 1.2;
+  .divider {
+    flex-shrink: 0;
+    width: 4px;
+    background: #1e293b;
+    cursor: col-resize;
+    transition: background 0.15s;
   }
-  .suggestions {
-    flex: 0.8;
+  .divider:hover, .divider.dragging {
+    background: #3b82f6;
   }
 </style>

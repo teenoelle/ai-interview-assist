@@ -13,11 +13,19 @@
       container.scrollTop = container.scrollHeight;
     }
   });
+
+  // Convert **bold** markdown to <strong> tags for scannable keywords
+  function renderBold(text: string): string {
+    return text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  }
 </script>
 
 <div class="suggestion-panel">
   <div class="panel-header">
-    <h3>AI Suggestions</h3>
+    <div class="header-left">
+      <h3>AI Suggestions</h3>
+      <span class="glance-hint">glance at bold keywords — don't read aloud</span>
+    </div>
     {#if suggestions.length > 0}
       <button class="clear-btn" onclick={onClear}>Clear</button>
     {/if}
@@ -37,7 +45,7 @@
           </div>
           <div class="suggestion-text">
             {#if entry.suggestion}
-              {entry.suggestion}{#if entry.streaming}<span class="cursor">|</span>{/if}
+              {@html renderBold(entry.suggestion)}{#if entry.streaming}<span class="cursor">|</span>{/if}
             {:else if entry.streaming}
               <span class="loading">Generating<span class="dots">...</span></span>
             {/if}
@@ -56,9 +64,22 @@
   }
   .panel-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     margin-bottom: 0.75rem;
+    gap: 0.5rem;
+  }
+  .header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  .glance-hint {
+    font-size: 0.65rem;
+    color: #475569;
+    font-style: italic;
+    text-transform: none;
+    letter-spacing: 0;
   }
   h3 {
     font-size: 1rem;
@@ -130,10 +151,16 @@
   }
 
   .suggestion-text {
-    color: #e2e8f0;
-    line-height: 1.7;
+    color: #cbd5e1;
+    line-height: 1.9;
     white-space: pre-wrap;
     font-size: 0.9rem;
+  }
+  :global(.suggestion-text strong) {
+    color: #f1f5f9;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
   }
   .cursor {
     animation: blink 1s step-end infinite;

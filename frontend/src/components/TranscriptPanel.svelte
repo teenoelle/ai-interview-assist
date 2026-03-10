@@ -15,10 +15,26 @@
     const d = new Date(ms);
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
+
+  function exportTranscript() {
+    const lines = entries.map(e => `[${formatTime(e.timestamp_ms)}] ${e.speaker}: ${e.text}`);
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `interview-transcript-${new Date().toISOString().slice(0,10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 </script>
 
 <div class="transcript-panel">
-  <h3>Live Transcript</h3>
+  <div class="panel-header">
+    <h3>Live Transcript</h3>
+    {#if entries.length > 0}
+      <button class="export-btn" onclick={exportTranscript} title="Download transcript">↓ Export</button>
+    {/if}
+  </div>
   <div class="entries" bind:this={container}>
     {#if entries.length === 0}
       <p class="empty">Transcript will appear here when audio is captured...</p>
@@ -37,63 +53,35 @@
 </div>
 
 <style>
-  .transcript-panel {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
+  .transcript-panel { height: 100%; display: flex; flex-direction: column; }
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 0.75rem;
   }
   h3 {
-    font-size: 1rem;
-    font-weight: 600;
-    color: #94a3b8;
-    margin-bottom: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    font-size: 1rem; font-weight: 600; color: #94a3b8; margin: 0;
+    text-transform: uppercase; letter-spacing: 0.05em;
   }
-  .entries {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+  .export-btn {
+    padding: 0.15rem 0.5rem; background: transparent;
+    border: 1px solid #334155; border-radius: 0.25rem;
+    color: #64748b; font-size: 0.72rem; cursor: pointer;
   }
+  .export-btn:hover { border-color: #60a5fa; color: #60a5fa; }
+  .entries { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; }
   .entry {
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-    padding: 0.5rem 0.75rem;
-    border-radius: 0.5rem;
-    border-left: 3px solid transparent;
+    display: flex; flex-direction: column; gap: 0.2rem;
+    padding: 0.5rem 0.75rem; border-radius: 0.5rem; border-left: 3px solid transparent;
   }
   .entry.interviewer { border-left-color: #60a5fa; background: #0f1e33; }
   .entry.you         { border-left-color: #4ade80; background: #0a1f14; }
-  .meta {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
+  .meta { display: flex; align-items: center; gap: 0.5rem; }
   .speaker {
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    color: #4ade80;
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.07em; color: #4ade80;
   }
   .speaker.interviewer { color: #60a5fa; }
-  .time {
-    color: #475569;
-    font-size: 0.7rem;
-    font-family: monospace;
-  }
-  .text {
-    color: #cbd5e1;
-    font-size: 0.9rem;
-    line-height: 1.5;
-  }
-  .empty {
-    color: #475569;
-    font-style: italic;
-    text-align: center;
-    padding: 2rem;
-  }
+  .time { color: #475569; font-size: 0.7rem; font-family: monospace; }
+  .text { color: #cbd5e1; font-size: 0.9rem; line-height: 1.5; }
+  .empty { color: #475569; font-style: italic; text-align: center; padding: 2rem; }
 </style>

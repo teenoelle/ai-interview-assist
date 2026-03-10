@@ -35,15 +35,22 @@ async fn main() -> anyhow::Result<()> {
 
     let active = |k: &Option<String>| if k.is_some() { "yes" } else { "no" };
     tracing::info!(
-        "Providers — Gemini: yes | Groq: {} | OpenRouter: {} | Cerebras: {} | Mistral: {}",
+        "Providers — Gemini: yes | Anthropic: {} | Groq: {} | OpenRouter: {} | Cerebras: {} | Mistral: {}",
+        active(&config.anthropic_api_key),
         active(&config.groq_api_key),
         active(&config.openrouter_api_key),
         active(&config.cerebras_api_key),
         active(&config.mistral_api_key),
     );
-    tracing::info!("Suggestion order: OpenRouter → Cerebras → Mistral → Groq → Gemini");
+    tracing::info!(
+        "Suggestion order: {} OpenRouter → Cerebras → Mistral → Groq → Gemini",
+        if config.anthropic_api_key.is_some() { "Claude →" } else { "" }
+    );
     tracing::info!("Transcription order: Groq Whisper → Gemini (both streams)");
-    tracing::info!("Sentiment: Gemini Vision only");
+    tracing::info!(
+        "Sentiment: {} → Gemini Vision fallback",
+        if config.anthropic_api_key.is_some() { "Claude Haiku (primary)" } else { "Gemini Vision only" }
+    );
     tracing::info!(
         "Speaker diarization: {}",
         config.diarize_url.as_deref().unwrap_or("disabled (set HF_TOKEN to enable)")
@@ -58,6 +65,7 @@ async fn main() -> anyhow::Result<()> {
         question_tx,
         event_tx: event_tx.clone(),
         gemini_key: config.gemini_api_key.clone(),
+        anthropic_key: config.anthropic_api_key.clone(),
         groq_key: config.groq_api_key.clone(),
         openrouter_key: config.openrouter_api_key.clone(),
         mistral_key: config.mistral_api_key.clone(),
@@ -91,6 +99,7 @@ async fn main() -> anyhow::Result<()> {
         video_rx,
         state.event_tx.clone(),
         config.gemini_api_key.clone(),
+        config.anthropic_api_key.clone(),
         rate_limiter.clone(),
     ));
 
@@ -100,6 +109,7 @@ async fn main() -> anyhow::Result<()> {
         state.system_prompt.clone(),
         state.transcript.clone(),
         config.gemini_api_key.clone(),
+        config.anthropic_api_key.clone(),
         config.groq_api_key.clone(),
         config.openrouter_api_key.clone(),
         config.mistral_api_key.clone(),
@@ -120,6 +130,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/ws/video", get(ws_handler::ws_video))
         .route("/ws/events", get(ws_handler::ws_events))
         .route("/api/setup/finalize", post(http_handler::handle_setup_finalize))
+        .route("/api/debrief", post(http_handler::handle_debrief))
+        .route("/api/practice-question", post(http_handler::handle_practice_question))
         .fallback_service(ServeDir::new(&frontend_path))
         .layer(CorsLayer::permissive())
         .with_state(state);

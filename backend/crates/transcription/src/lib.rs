@@ -51,24 +51,17 @@ async fn transcribe_with_fallback(
 
 // ── Heuristic speaker classifier (fallback when diarization unavailable) ──────
 
-/// Layered heuristic for single-stream speaker classification.
-/// Used when the pyannote sidecar is not running.
-fn classify_speaker(text: &str, prev_speaker: &str, prev_word_count: usize) -> &'static str {
+/// Layered heuristic speaker classifier.
+///
+/// `default_speaker`: the assumed speaker when no strong signal is found.
+/// - `"Interviewer"` for the system-audio stream (speakers output = other person)
+/// - `"You"` for the mic stream (but mic agent never calls this — always labels "You")
+fn classify_speaker(text: &str, prev_speaker: &str, prev_word_count: usize, default_speaker: &'static str) -> &'static str {
     let lower = text.trim().to_lowercase();
     let word_count = text.split_whitespace().count();
 
-    // 1. Very short acknowledgements → Interviewer
-    if word_count <= 6 {
-        let acks = ["mm", "hmm", "right", "okay", "ok", "good", "great", "perfect",
-                    "i see", "sure", "yes", "yep", "got it", "interesting",
-                    "absolutely", "exactly", "fair enough", "makes sense"];
-        for ack in &acks {
-            if lower.contains(ack) { return "Interviewer"; }
-        }
-    }
-
-    // 2. Strong candidate self-reference in longer segments → You
-    if word_count > 15 {
+    // 1. Strong candidate self-reference → You (works regardless of stream)
+    if word_count > 10 {
         let candidate_signals = [
             "in my experience", "at my previous", "at my last", "in my last",
             "when i was at", "when i worked", "i've worked", "i worked on",
@@ -79,19 +72,30 @@ fn classify_speaker(text: &str, prev_speaker: &str, prev_word_count: usize) -> &
         for sig in &candidate_signals { if lower.contains(sig) { return "You"; } }
     }
 
-    // 3. Explicit interviewer-turn patterns
+    // 2. Explicit interviewer-turn patterns → Interviewer
     if is_interviewer_turn(&lower, word_count) { return "Interviewer"; }
 
-    // 4. Long segments → almost certainly the candidate
-    if word_count > 60 { return "You"; }
+    // 3. Very short acknowledgements → Interviewer
+    if word_count <= 6 {
+        let acks = ["mm", "hmm", "right", "okay", "ok", "good", "great", "perfect",
+                    "i see", "sure", "yes", "yep", "got it", "interesting",
+                    "absolutely", "exactly", "fair enough", "makes sense"];
+        for ack in &acks {
+            if lower.contains(ack) { return "Interviewer"; }
+        }
+    }
+
+    // 4. Very long answer-style response → You
+    //    (only flip default when clearly a long monologue response)
+    if default_speaker == "Interviewer" && word_count > 80 { return "You"; }
 
     // 5. Alternation bias: short segment after a long You response → Interviewer
-    if prev_speaker == "You" && prev_word_count > 40 && word_count < 50 {
+    if prev_speaker == "You" && prev_word_count > 40 && word_count < 40 {
         return "Interviewer";
     }
 
-    // 6. Default
-    "You"
+    // 6. Default (stream-dependent)
+    default_speaker
 }
 
 fn is_interviewer_turn(lower: &str, word_count: usize) -> bool {
@@ -204,7 +208,7 @@ mod tests {
     #[test]
     fn short_acknowledgements_are_interviewer() {
         for text in &["Right", "I see", "Okay", "Good", "Mm-hmm", "Interesting"] {
-            assert_eq!(classify_speaker(text, "You", 50), "Interviewer", "failed: {text}");
+            assert_eq!(classify_speaker(text, "You", 50, "Interviewer"), "Interviewer", "failed: {text}");
         }
     }
 
@@ -212,23 +216,24 @@ mod tests {
     fn candidate_self_reference_in_long_text_is_you() {
         let text = "In my experience building distributed systems at my previous company, \
                     I led a team of five engineers and we delivered the project on time.";
-        assert_eq!(classify_speaker(text, "Interviewer", 0), "You");
+        assert_eq!(classify_speaker(text, "Interviewer", 0, "Interviewer"), "You");
     }
 
     #[test]
-    fn long_segment_defaults_to_you() {
-        let text = "word ".repeat(65); // 65 words
-        assert_eq!(classify_speaker(text.trim(), "Interviewer", 10), "You");
+    fn very_long_monologue_on_system_audio_is_you() {
+        // >80 words on system audio stream → must be the candidate answering at length
+        let text = "word ".repeat(85);
+        assert_eq!(classify_speaker(text.trim(), "Interviewer", 10, "Interviewer"), "You");
     }
 
     #[test]
     fn explicit_question_classifies_as_interviewer() {
         assert_eq!(
-            classify_speaker("Tell me about yourself.", "You", 80),
+            classify_speaker("Tell me about yourself.", "You", 80, "Interviewer"),
             "Interviewer"
         );
         assert_eq!(
-            classify_speaker("What is your experience with Rust?", "You", 5),
+            classify_speaker("What is your experience with Rust?", "You", 5, "Interviewer"),
             "Interviewer"
         );
     }
@@ -238,7 +243,7 @@ mod tests {
         // Short ambiguous segment after a long You turn → Interviewer
         let short_ambiguous = "That makes sense. Let's move on.";
         assert_eq!(
-            classify_speaker(short_ambiguous, "You", 80),
+            classify_speaker(short_ambiguous, "You", 80, "Interviewer"),
             "Interviewer"
         );
     }
@@ -399,10 +404,10 @@ pub async fn run_agent(
                             if let Some(dominant) = diarize::dominant_speaker(&segs) {
                                 t.role(&dominant).to_string()
                             } else {
-                                classify_speaker(&text, &ps, pwc).to_string()
+                                classify_speaker(&text, &ps, pwc, "Interviewer").to_string()
                             }
                         } else {
-                            classify_speaker(&text, &ps, pwc).to_string()
+                            classify_speaker(&text, &ps, pwc, "Interviewer").to_string()
                         };
 
                         let seg = TranscriptSegment {

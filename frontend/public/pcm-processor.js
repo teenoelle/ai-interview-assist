@@ -2,7 +2,7 @@ class PcmProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this._buffer = [];
-    this._chunkSize = 8000; // 0.5s at 16kHz
+    this._chunkSize = 8000;
   }
 
   process(inputs) {
@@ -16,6 +16,13 @@ class PcmProcessor extends AudioWorkletProcessor {
 
     while (this._buffer.length >= this._chunkSize) {
       const chunk = this._buffer.splice(0, this._chunkSize);
+
+      // Compute RMS level before conversion
+      let sumSq = 0;
+      for (let i = 0; i < chunk.length; i++) sumSq += chunk[i] * chunk[i];
+      const rms = Math.sqrt(sumSq / chunk.length);
+      this.port.postMessage({ type: 'level', rms });
+
       const int16 = new Int16Array(chunk.length);
       for (let i = 0; i < chunk.length; i++) {
         const s = Math.max(-1, Math.min(1, chunk[i]));

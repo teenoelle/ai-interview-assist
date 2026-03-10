@@ -1,5 +1,7 @@
 import { AudioWebSocket, VideoWebSocket } from './websocket';
 
+export type LevelCallback = (micLevel: number, systemLevel: number) => void;
+
 export class MediaCapture {
   private systemStream: MediaStream | null = null;
   private micStream: MediaStream | null = null;
@@ -11,8 +13,11 @@ export class MediaCapture {
   private videoInterval: ReturnType<typeof setInterval> | null = null;
   private systemWorklet: AudioWorkletNode | null = null;
   private micWorklet: AudioWorkletNode | null = null;
+  private _paused = false;
+  private _micLevel = 0;
+  private _systemLevel = 0;
+  private _levelCallback: LevelCallback | null = null;
 
-  /** True if the microphone was successfully captured (two-stream mode). */
   public micActive = false;
 
   constructor() {
@@ -21,22 +26,24 @@ export class MediaCapture {
     this.videoWs       = new VideoWebSocket();
   }
 
+  onLevel(cb: LevelCallback) { this._levelCallback = cb; }
+
+  get paused() { return this._paused; }
+  pause()  { this._paused = true;  }
+  resume() { this._paused = false; }
+  togglePause() { this._paused = !this._paused; return this._paused; }
+
   async start(): Promise<void> {
-    // 1. Screen + system audio (meeting playback = interviewer's voice)
     this.systemStream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: 1 } as MediaTrackConstraints,
       audio: true,
     });
 
-    // 2. Microphone — your voice. Optional: falls back gracefully if denied.
     try {
       this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       this.micActive = true;
     } catch {
-      console.warn(
-        'Microphone access denied — using single-stream mode. ' +
-        'Speaker labels will be less accurate.'
-      );
+      console.warn('Microphone access denied — using single-stream mode.');
     }
 
     this.systemAudioWs.connect();
@@ -53,16 +60,18 @@ export class MediaCapture {
   private async startSystemAudioCapture() {
     if (!this.systemStream) return;
     const tracks = this.systemStream.getAudioTracks();
-    if (tracks.length === 0) {
-      console.warn('No system audio track — make sure to check "Share audio" in the dialog.');
-      return;
-    }
+    if (tracks.length === 0) return;
     this.systemAudioCtx = new AudioContext({ sampleRate: 16000 });
     await this.systemAudioCtx.audioWorklet.addModule('/pcm-processor.js');
     const source = this.systemAudioCtx.createMediaStreamSource(new MediaStream([tracks[0]]));
     this.systemWorklet = new AudioWorkletNode(this.systemAudioCtx, 'pcm-processor');
     this.systemWorklet.port.onmessage = (e: MessageEvent) => {
-      this.systemAudioWs.send((e.data as Int16Array).buffer);
+      if (e.data instanceof Int16Array) {
+        if (!this._paused) this.systemAudioWs.send(e.data.buffer);
+      } else if (e.data?.type === 'level') {
+        this._systemLevel = e.data.rms;
+        this._levelCallback?.(this._micLevel, this._systemLevel);
+      }
     };
     source.connect(this.systemWorklet);
     this.systemWorklet.connect(this.systemAudioCtx.destination);
@@ -77,7 +86,12 @@ export class MediaCapture {
     const source = this.micAudioCtx.createMediaStreamSource(new MediaStream([tracks[0]]));
     this.micWorklet = new AudioWorkletNode(this.micAudioCtx, 'pcm-processor');
     this.micWorklet.port.onmessage = (e: MessageEvent) => {
-      this.micAudioWs.send((e.data as Int16Array).buffer);
+      if (e.data instanceof Int16Array) {
+        if (!this._paused) this.micAudioWs.send(e.data.buffer);
+      } else if (e.data?.type === 'level') {
+        this._micLevel = e.data.rms;
+        this._levelCallback?.(this._micLevel, this._systemLevel);
+      }
     };
     source.connect(this.micWorklet);
     this.micWorklet.connect(this.micAudioCtx.destination);
@@ -87,16 +101,11 @@ export class MediaCapture {
     if (!this.systemStream) return;
     const videoTracks = this.systemStream.getVideoTracks();
     if (videoTracks.length === 0) return;
-
     const canvas = document.createElement('canvas');
-    canvas.width = 640;
-    canvas.height = 360;
+    canvas.width = 640; canvas.height = 360;
     const ctx = canvas.getContext('2d')!;
-
     const video = document.createElement('video');
-    video.muted = true;
-    video.autoplay = true;
-    video.playsInline = true;
+    video.muted = true; video.autoplay = true; video.playsInline = true;
     video.srcObject = new MediaStream([videoTracks[0]]);
     video.play().catch((e) => console.warn('Video play failed:', e));
 
@@ -109,7 +118,6 @@ export class MediaCapture {
         if (blob) this.videoWs.send(await blob.arrayBuffer());
       }
     };
-
     video.addEventListener('loadeddata', () => captureFrame(), { once: true });
     this.videoInterval = setInterval(captureFrame, 30000);
   }
@@ -128,9 +136,8 @@ export class MediaCapture {
     this.systemStream = null;
     this.micStream = null;
     this.micActive = false;
+    this._paused = false;
   }
 
-  get active() {
-    return this.systemStream !== null;
-  }
+  get active() { return this.systemStream !== null; }
 }

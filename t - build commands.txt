@@ -1,0 +1,58 @@
+
+WORKSPACE
+
+powershell:
+cd "D:\tee\work\code\ai interview assist"
+claude
+
+cmd:
+cd /d "D:\\tee\\work\\code\\ai interview assist"
+claude
+
+
+BUILD COMMANDS
+
+continue where i left off:
+--resume
+
+read the files in this project to understand the current state of the codebase.
+cd "D:/tee/work/code/ai interview assist/backend" && cargo check 2>&1
+cd "D:/tee/work/code/ai interview assist/backend" && cargo test 2>&1 | tail -30
+
+rebuild backend:
+  cd "D:\tee\work\code\ai interview assist\backend"
+    cargo build --release
+  cd "D:\tee\work\code\ai interview assist\backend"
+    cargo run
+  cd "D:\tee\work\code\ai interview assist\backend"
+    cargo build --release 2>&1
+
+rebuild frontend:
+  cd "D:\tee\work\code\ai interview assist\frontend"
+  npm run dev
+  cd "D:\tee\work\code\ai interview assist\frontend"
+  npm run build
+
+run python diarization sidecar to distinguish speakers:
+  cd "D:\tee\work\code\ai interview assist"
+  python diarize_server.py
+  set python token to enable.
+
+restart the server:
+./target/release/server
+.\target\release\server.exe
+
+
+TEST COMMANDS
+
+Then to run the tests:
+
+  # Unit tests only (fast, no API calls, no quota used):
+  cd "D:\tee\work\code\ai interview assist"
+  .\run_tests.ps1
+
+  # Unit + API integration tests (makes real calls, uses quota):
+  .\run_tests.ps1 -Integration
+
+cd "D:\tee\work\code\ai interview assist\backend" && cargo test --workspace --quiet       2>&1
+

@@ -12,7 +12,7 @@ pub async fn stream_suggestions(
     stream_openai_compat(
         api_key,
         "https://api.cerebras.ai/v1/chat/completions",
-        "llama-3.3-70b-v2",
+        "llama3.1-8b",
         system_prompt,
         user_prompt,
         event_tx,

@@ -10,8 +10,13 @@
   let loading = $state(false);
   let error = $state('');
   let systemPromptPreview = $state('');
+  let predictedQuestions = $state<string[]>([]);
+  let setupDone = $state(false);
 
-  const { onSetupComplete } = $props<{ onSetupComplete: () => void }>();
+  const { onSetupComplete, onPractice } = $props<{
+    onSetupComplete: () => void;
+    onPractice: (questions: string[]) => void;
+  }>();
 
   function addInterviewer() {
     interviewers = [...interviewers, ''];
@@ -46,7 +51,8 @@
 
       const result = await submitSetup(formData);
       systemPromptPreview = result.system_prompt_preview;
-      onSetupComplete();
+      predictedQuestions = result.predicted_questions ?? [];
+      setupDone = true;
     } catch (e) {
       error = String(e);
     } finally {
@@ -73,85 +79,107 @@
     <div class="error">{error}</div>
   {/if}
 
-  <div class="field">
-    <label for="job-desc">Job Description</label>
-    <textarea
-      id="job-desc"
-      bind:value={jobDescription}
-      rows={6}
-      placeholder="Paste the full job description here..."
-    ></textarea>
-  </div>
+  {#if setupDone}
+    <div class="post-setup">
+      {#if systemPromptPreview}
+        <details class="preview">
+          <summary>System prompt preview</summary>
+          <pre>{systemPromptPreview}</pre>
+        </details>
+      {/if}
 
-  <div class="field">
-    <label for="company-url">Company Website URL</label>
-    <input
-      id="company-url"
-      type="url"
-      bind:value={companyUrl}
-      placeholder="https://company.com"
-    />
-    <small>We'll crawl up to 50 pages, prioritising mission, products, team, careers, blog, news, case studies, and investor pages</small>
-  </div>
-
-  <div class="field">
-    <div class="field-header">
-      <span class="field-label">Interviewer LinkedIn Profile(s)</span>
-      <button type="button" class="btn-add" onclick={addInterviewer}>+ Add interviewer</button>
-    </div>
-    {#each interviewers as text, i (i)}
-      <div class="interviewer-entry">
-        {#if interviewers.length > 1}
-          <div class="interviewer-label">Interviewer {i + 1}</div>
-        {/if}
-        <div class="interviewer-row">
-          <textarea
-            rows={4}
-            value={text}
-            oninput={(e) => updateInterviewer(i, (e.target as HTMLTextAreaElement).value)}
-            placeholder="Paste the interviewer's LinkedIn profile text here..."
-          ></textarea>
-          {#if interviewers.length > 1}
-            <button type="button" class="btn-remove" onclick={() => removeInterviewer(i)}>✕</button>
-          {/if}
+      {#if predictedQuestions.length > 0}
+        <div class="predicted">
+          <h3>Predicted Interview Questions</h3>
+          <ol class="questions-list">
+            {#each predictedQuestions as q}
+              <li>{q}</li>
+            {/each}
+          </ol>
         </div>
+      {/if}
+
+      <div class="action-row">
+        <button onclick={onSetupComplete} class="btn-primary">Start Interview →</button>
+        {#if predictedQuestions.length > 0}
+          <button onclick={() => onPractice(predictedQuestions)} class="btn-secondary">Practice First</button>
+        {/if}
       </div>
-    {/each}
-    <small>Paste text copied from their LinkedIn page. Add one entry per interviewer.</small>
-  </div>
-
-  <div class="field">
-    <label for="cv-file">Upload CV / Resume</label>
-    <input id="cv-file" type="file" accept=".pdf,.docx,.txt,.md,.pptx,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.webp" onchange={handleFileChange} />
-    <small>Supported: PDF, Word, PowerPoint, Excel, CSV, plain text, images</small>
-  </div>
-
-  <div class="field">
-    <label for="extra">Additional Experience / Notes</label>
-    <textarea
-      id="extra"
-      bind:value={extraExperience}
-      rows={4}
-      placeholder="Add any extra context, achievements, or talking points..."
-    ></textarea>
-    <div class="file-row">
-      <label class="file-label" for="extra-file">Or upload a file</label>
-      <input id="extra-file" type="file" accept=".pdf,.docx,.txt,.md,.pptx,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.webp" onchange={handleExtraFileChange} />
-      {#if extraFile}<span class="file-chosen">{extraFile.name}</span>{/if}
     </div>
-    <small>Supported: PDF, Word, PowerPoint (.pptx), Excel (.xlsx), CSV, images — text is extracted automatically</small>
-  </div>
+  {:else}
+    <div class="field">
+      <label for="job-desc">Job Description</label>
+      <textarea
+        id="job-desc"
+        bind:value={jobDescription}
+        rows={6}
+        placeholder="Paste the full job description here..."
+      ></textarea>
+    </div>
 
-  {#if systemPromptPreview}
-    <details class="preview">
-      <summary>System prompt preview</summary>
-      <pre>{systemPromptPreview}</pre>
-    </details>
+    <div class="field">
+      <label for="company-url">Company Website URL</label>
+      <input
+        id="company-url"
+        type="url"
+        bind:value={companyUrl}
+        placeholder="https://company.com"
+      />
+      <small>We'll crawl up to 50 pages, prioritising mission, products, team, careers, blog, news, case studies, and investor pages</small>
+    </div>
+
+    <div class="field">
+      <div class="field-header">
+        <span class="field-label">Interviewer LinkedIn Profile(s)</span>
+        <button type="button" class="btn-add" onclick={addInterviewer}>+ Add interviewer</button>
+      </div>
+      {#each interviewers as text, i (i)}
+        <div class="interviewer-entry">
+          {#if interviewers.length > 1}
+            <div class="interviewer-label">Interviewer {i + 1}</div>
+          {/if}
+          <div class="interviewer-row">
+            <textarea
+              rows={4}
+              value={text}
+              oninput={(e) => updateInterviewer(i, (e.target as HTMLTextAreaElement).value)}
+              placeholder="Paste the interviewer's LinkedIn profile text here..."
+            ></textarea>
+            {#if interviewers.length > 1}
+              <button type="button" class="btn-remove" onclick={() => removeInterviewer(i)}>✕</button>
+            {/if}
+          </div>
+        </div>
+      {/each}
+      <small>Paste text copied from their LinkedIn page. Add one entry per interviewer.</small>
+    </div>
+
+    <div class="field">
+      <label for="cv-file">Upload CV / Resume</label>
+      <input id="cv-file" type="file" accept=".pdf,.docx,.txt,.md,.pptx,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.webp" onchange={handleFileChange} />
+      <small>Supported: PDF, Word, PowerPoint, Excel, CSV, plain text, images</small>
+    </div>
+
+    <div class="field">
+      <label for="extra">Additional Experience / Notes</label>
+      <textarea
+        id="extra"
+        bind:value={extraExperience}
+        rows={4}
+        placeholder="Add any extra context, achievements, or talking points..."
+      ></textarea>
+      <div class="file-row">
+        <label class="file-label" for="extra-file">Or upload a file</label>
+        <input id="extra-file" type="file" accept=".pdf,.docx,.txt,.md,.pptx,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.webp" onchange={handleExtraFileChange} />
+        {#if extraFile}<span class="file-chosen">{extraFile.name}</span>{/if}
+      </div>
+      <small>Supported: PDF, Word, PowerPoint (.pptx), Excel (.xlsx), CSV, images — text is extracted automatically</small>
+    </div>
+
+    <button onclick={handleSubmit} disabled={loading} class="btn-primary">
+      {loading ? 'Processing...' : 'Start Session'}
+    </button>
   {/if}
-
-  <button onclick={handleSubmit} disabled={loading} class="btn-primary">
-    {loading ? 'Processing...' : 'Start Session'}
-  </button>
 </div>
 
 <style>
@@ -215,4 +243,16 @@
   }
   .btn-primary:hover:not(:disabled) { background: #2563eb; }
   .btn-primary:disabled { background: #1e3a5f; cursor: not-allowed; }
+  .post-setup { display: flex; flex-direction: column; gap: 1.5rem; }
+  .predicted { background: #1e293b; border-radius: 0.5rem; padding: 1.25rem; }
+  .predicted h3 { font-size: 0.85rem; color: #60a5fa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.75rem; }
+  .questions-list { margin: 0; padding-left: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
+  .questions-list li { color: #cbd5e1; font-size: 0.9rem; line-height: 1.5; }
+  .action-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .btn-secondary {
+    padding: 0.75rem 2rem; background: transparent; color: #60a5fa;
+    border: 2px solid #3b82f6; border-radius: 0.5rem; font-size: 1rem;
+    cursor: pointer; font-weight: 600; transition: all 0.2s;
+  }
+  .btn-secondary:hover { background: #1e3a5f; }
 </style>

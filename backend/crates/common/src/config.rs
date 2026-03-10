@@ -7,6 +7,7 @@ pub struct Config {
     pub openrouter_api_key: Option<String>,
     pub mistral_api_key: Option<String>,
     pub cerebras_api_key: Option<String>,
+    pub anthropic_api_key: Option<String>,
     pub diarize_url: Option<String>,
     pub port: u16,
 }
@@ -20,6 +21,7 @@ impl Config {
         let openrouter_api_key = std::env::var("OPENROUTER_API_KEY").ok();
         let mistral_api_key = std::env::var("MISTRAL_API_KEY").ok();
         let cerebras_api_key = std::env::var("CEREBRAS_API_KEY").ok();
+        let anthropic_api_key = std::env::var("ANTHROPIC_API_KEY").ok();
         // Diarization sidecar — optional; defaults to localhost:8001 if HF_TOKEN is set
         let diarize_url = if std::env::var("HF_TOKEN").is_ok() {
             Some(
@@ -33,6 +35,6 @@ impl Config {
             .unwrap_or_else(|_| "3000".to_string())
             .parse::<u16>()
             .context("PORT must be a valid number")?;
-        Ok(Self { gemini_api_key, groq_api_key, openrouter_api_key, mistral_api_key, cerebras_api_key, diarize_url, port })
+        Ok(Self { gemini_api_key, groq_api_key, openrouter_api_key, mistral_api_key, cerebras_api_key, anthropic_api_key, diarize_url, port })
     }
 }

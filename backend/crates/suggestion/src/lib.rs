@@ -4,6 +4,7 @@ pub mod groq_llm;
 pub mod openrouter_llm;
 pub mod mistral_llm;
 pub mod cerebras_llm;
+pub mod claude_llm;
 pub mod prompt;
 
 use std::sync::Arc;
@@ -26,6 +27,7 @@ macro_rules! try_provider {
 
 async fn suggest_with_fallback(
     gemini_key: &str,
+    anthropic_key: Option<&str>,
     groq_key: Option<&str>,
     openrouter_key: Option<&str>,
     mistral_key: Option<&str>,
@@ -35,36 +37,42 @@ async fn suggest_with_fallback(
     rate_limiter: &RateLimiter,
     event_tx: broadcast::Sender<WsEvent>,
 ) -> anyhow::Result<()> {
-    // Priority order designed to preserve Gemini credits for sentiment (vision-only):
-    // 1. OpenRouter — no daily cap, just RPM throttled; best for high-volume use
+    // 1. Claude — primary when key available; fast, high quality, separate quota
+    if let Some(key) = anthropic_key {
+        try_provider!("Claude",
+            claude_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
+            event_tx, ());
+    }
+
+    // 2. OpenRouter — no daily cap, just RPM throttled
     if let Some(key) = openrouter_key {
         try_provider!("OpenRouter",
             openrouter_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
             event_tx, ());
     }
 
-    // 2. Cerebras — very fast free Llama 3.3 70B, generous free tier
+    // 3. Cerebras — fast free Llama, generous free tier
     if let Some(key) = cerebras_key {
         try_provider!("Cerebras",
             cerebras_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
             event_tx, ());
     }
 
-    // 3. Mistral — free tier mistral-small, reliable fallback
+    // 4. Mistral — free tier mistral-small
     if let Some(key) = mistral_key {
         try_provider!("Mistral",
             mistral_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
             event_tx, ());
     }
 
-    // 4. Groq — 1,000 req/day LLM limit; saved here since Whisper uses a separate quota
+    // 5. Groq — 1,000 req/day LLM limit; saved here since Whisper uses a separate quota
     if let Some(key) = groq_key {
         try_provider!("Groq",
             groq_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
             event_tx, ());
     }
 
-    // 5. Gemini — absolute last resort, keep credits for sentiment analysis
+    // 6. Gemini — absolute last resort, keep credits for sentiment analysis
     rate_limiter.acquire().await;
     match gemini_llm::stream_suggestions(gemini_key, system_prompt, user_prompt, event_tx).await {
         Ok(()) => return Ok(()),
@@ -81,6 +89,7 @@ pub async fn run_agent(
     system_prompt: Arc<RwLock<String>>,
     transcript: Arc<RwLock<Vec<TranscriptSegment>>>,
     gemini_key: String,
+    anthropic_key: Option<String>,
     groq_key: Option<String>,
     openrouter_key: Option<String>,
     mistral_key: Option<String>,
@@ -91,6 +100,7 @@ pub async fn run_agent(
         match question_rx.recv().await {
             Some(question) => {
                 let gkey = gemini_key.clone();
+                let akey = anthropic_key.clone();
                 let grkey = groq_key.clone();
                 let orkey = openrouter_key.clone();
                 let mkey = mistral_key.clone();
@@ -106,6 +116,7 @@ pub async fn run_agent(
                 tokio::spawn(async move {
                     match suggest_with_fallback(
                         &gkey,
+                        akey.as_deref(),
                         grkey.as_deref(),
                         orkey.as_deref(),
                         mkey.as_deref(),

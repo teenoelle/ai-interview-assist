@@ -14,6 +14,7 @@ pub struct AppState {
     pub question_tx: mpsc::Sender<String>,
     pub event_tx: broadcast::Sender<WsEvent>,
     pub gemini_key: String,
+    pub anthropic_key: Option<String>,
     pub groq_key: Option<String>,
     pub openrouter_key: Option<String>,
     pub mistral_key: Option<String>,

@@ -2,6 +2,7 @@ export interface SetupResponse {
   success: boolean;
   system_prompt_preview: string;
   message: string;
+  predicted_questions: string[];
 }
 
 export async function submitSetup(formData: FormData): Promise<SetupResponse> {

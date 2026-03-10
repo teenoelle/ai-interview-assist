@@ -78,7 +78,7 @@ def _load_pipeline():
     print(f"[diarize] Loading pyannote/speaker-diarization-3.1 on {device}…")
     p = PyannotePipeline.from_pretrained(
         "pyannote/speaker-diarization-3.1",
-        use_auth_token=HF_TOKEN,
+        token=HF_TOKEN,
     )
     p.to(torch.device(device))
     print(f"[diarize] Pipeline ready on {device}.")

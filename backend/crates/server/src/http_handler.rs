@@ -44,6 +44,9 @@ pub async fn handle_setup_finalize(
             "linkedin_text" => {
                 payload.linkedin_text = field.text().await.unwrap_or_default();
             }
+            "interviewee_linkedin" => {
+                payload.interviewee_linkedin = field.text().await.unwrap_or_default();
+            }
             "extra_experience" => {
                 payload.extra_experience = field.text().await.unwrap_or_default();
             }

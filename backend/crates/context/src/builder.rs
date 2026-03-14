@@ -32,6 +32,17 @@ pub fn build_system_prompt(
         prompt.push_str("\n\n");
     }
 
+    if !payload.interviewee_linkedin.is_empty() {
+        prompt.push_str("## Candidate LinkedIn Profile\n");
+        let li_preview = if payload.interviewee_linkedin.len() > 5000 {
+            &payload.interviewee_linkedin[..5000]
+        } else {
+            &payload.interviewee_linkedin
+        };
+        prompt.push_str(li_preview);
+        prompt.push_str("\n\n");
+    }
+
     if !payload.extra_experience.is_empty() {
         prompt.push_str("## Additional Experience / Notes\n");
         prompt.push_str(&payload.extra_experience);

@@ -8,6 +8,7 @@
   let jobDescription = $state('');
   let companyUrl = $state('');
   let interviewers = $state<string[]>(['']);   // start with one empty slot
+  let intervieweeLinkedin = $state('');
   let extraExperience = $state('');
   let cvFile: File | null = $state(null);
   let extraFile: File | null = $state(null);
@@ -52,6 +53,7 @@
         .filter(t => t.trim().length > 0)
         .join('\n\n---INTERVIEWER---\n\n');
       formData.append('linkedin_text', linkedinText);
+      formData.append('interviewee_linkedin', intervieweeLinkedin);
 
       formData.append('extra_experience', extraExperience);
       if (cvFile) formData.append('cv_file', cvFile);
@@ -202,6 +204,17 @@
       <label for="cv-file">Upload CV / Resume</label>
       <input id="cv-file" type="file" accept=".pdf,.docx,.txt,.md,.pptx,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.webp" onchange={handleFileChange} />
       <small>Supported: PDF, Word, PowerPoint, Excel, CSV, plain text, images</small>
+    </div>
+
+    <div class="field">
+      <label for="interviewee-linkedin">Your LinkedIn Profile</label>
+      <textarea
+        id="interviewee-linkedin"
+        bind:value={intervieweeLinkedin}
+        rows={4}
+        placeholder="Paste your own LinkedIn profile text here so the AI knows your background in depth..."
+      ></textarea>
+      <small>Helps the AI reference your experience accurately when coaching your answers</small>
     </div>
 
     <div class="field">

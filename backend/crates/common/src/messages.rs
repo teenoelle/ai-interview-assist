@@ -25,6 +25,7 @@ pub struct SetupPayload {
     pub job_description: String,
     pub company_url: String,
     pub linkedin_text: String,
+    pub interviewee_linkedin: String,
     pub extra_experience: String,
     pub cv_text: String,
 }

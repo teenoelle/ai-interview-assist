@@ -40,7 +40,7 @@ pub fn build_user_prompt(question: &str, transcript: &[TranscriptSegment]) -> St
 Reply in this EXACT format — no extra text:\n\
 Say: [3-6 word hook — the outcome or boldest action, e.g. 'led migration, cut costs 40%%']\n\
 ---\n\
-**S:** [3-5 word situation cue]\n\
+**S:** [situation cue + business impact — e.g. 'legacy system → $2M risk']\n\
 **T:** [3-5 word task/ownership cue]\n\
 **A:** [3-6 word action cue with one **bold** keyword]\n\
 **R:** [3-5 word result cue, include number if possible]\n\

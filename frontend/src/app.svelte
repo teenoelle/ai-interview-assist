@@ -5,13 +5,13 @@
   import SentimentBar from './components/SentimentBar.svelte';
   import SuggestionPanel from './components/SuggestionPanel.svelte';
   import RateLimitPanel from './components/RateLimitPanel.svelte';
-  import StatsBar from './components/StatsBar.svelte';
   import DebriefModal from './components/DebriefModal.svelte';
   import PracticePanel from './components/PracticePanel.svelte';
   import { EventWebSocket } from './lib/websocket';
   import { countFillers, totalFillers } from './lib/filler';
   import type { TranscriptEntry, SuggestionEntry, WsEvent } from './lib/types';
   import type { FillerCount } from './lib/filler';
+  import type { MediaCapture } from './lib/capture';
 
   type Phase = 'setup' | 'practice' | 'interview';
 
@@ -28,20 +28,52 @@
   let showDebrief = $state(false);
   let focusMode = $state(false);
 
+  // Capture instance (for triggerFrameCapture)
+  let captureInst = $state<MediaCapture | null>(null);
+  let lastSentimentTrigger = 0;
+
   // Webcam self-view
   let webcamStream = $state<MediaStream | null>(null);
   let webcamEl: HTMLVideoElement | undefined = $state();
   $effect(() => {
-    if (webcamEl && webcamStream) {
-      webcamEl.srcObject = webcamStream;
-    }
+    if (webcamEl && webcamStream) webcamEl.srcObject = webcamStream;
   });
+
+  // Column widths (resizable, persisted)
+  let leftW = $state(Number(localStorage.getItem('col-left') ?? 240));
+  let centerW = $state(Number(localStorage.getItem('col-center') ?? 320));
+
+  function startResize(col: 'left' | 'center', e: MouseEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = col === 'left' ? leftW : centerW;
+    const min = col === 'left' ? 150 : 200;
+    const max = col === 'left' ? 450 : 550;
+    function onMove(ev: MouseEvent) {
+      const w = Math.max(min, Math.min(max, startW + ev.clientX - startX));
+      if (col === 'left') leftW = w; else centerW = w;
+    }
+    function onUp() {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      localStorage.setItem('col-left', String(leftW));
+      localStorage.setItem('col-center', String(centerW));
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
 
   // TTS voice hints
   let ttsEnabled = $state(false);
   let ttsVoices = $state<SpeechSynthesisVoice[]>([]);
   let ttsVoiceURI = $state('');
+  let ttsRate = $state(Number(localStorage.getItem('tts-rate') ?? 1.5));
+  let ttsVolume = $state(Number(localStorage.getItem('tts-volume') ?? 1.0));
   let showVoiceMenu = $state(false);
+  // Silence gating: track last time anyone spoke
+  let lastSpeechAt = 0; // ms timestamp
+  const TTS_SILENCE_GAP_MS = 2500; // wait this long after last speech before speaking
+  const TTS_MAX_WORDS = 12; // ~3s at 1.5x rate
 
   function loadVoices() {
     const voices = speechSynthesis.getVoices();
@@ -55,14 +87,24 @@
     speechSynthesis.addEventListener('voiceschanged', loadVoices);
     return () => speechSynthesis.removeEventListener('voiceschanged', loadVoices);
   });
+  $effect(() => { localStorage.setItem('tts-rate', String(ttsRate)); });
+  $effect(() => { localStorage.setItem('tts-volume', String(ttsVolume)); });
 
   function speakText(text: string) {
     if (!ttsEnabled || !text) return;
+    // Don't speak if someone spoke within TTS_SILENCE_GAP_MS
+    if (Date.now() - lastSpeechAt < TTS_SILENCE_GAP_MS) return;
+    // Also don't speak if user is actively answering
+    if (answerStartTime !== null) return;
+    // Trim to max words
+    const words = text.split(/\s+/);
+    const trimmed = words.slice(0, TTS_MAX_WORDS).join(' ');
     speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(text);
+    const utt = new SpeechSynthesisUtterance(trimmed);
     const voice = ttsVoices.find(v => v.voiceURI === ttsVoiceURI);
     if (voice) utt.voice = voice;
-    utt.rate = 1.1;
+    utt.rate = ttsRate;
+    utt.volume = ttsVolume;
     speechSynthesis.speak(utt);
   }
 
@@ -126,7 +168,6 @@
   );
   const interviewerPct = $derived(youPct > 0 ? 100 - youPct : 0);
   const fillerTotal = $derived(totalFillers(allFillerCounts));
-  // Thresholds: green <15s, amber 15-30s, red >30s
   const timerColor = $derived(
     answerMs === 0 ? '#475569' :
     answerMs < 15000 ? '#22c55e' :
@@ -147,19 +188,10 @@
   let wsStatus = $state('disconnected');
   let wsAttempt = $state(0);
 
-  // WebSocket
   let eventWs: EventWebSocket | null = null;
 
-  function handleSetupComplete() {
-    phase = 'interview';
-    connectWs();
-  }
-
-  function handlePractice(questions: string[]) {
-    predictedQuestions = questions;
-    phase = 'practice';
-    connectWs();
-  }
+  function handleSetupComplete() { phase = 'interview'; connectWs(); }
+  function handlePractice(questions: string[]) { predictedQuestions = questions; phase = 'practice'; connectWs(); }
 
   function connectWs() {
     eventWs = new EventWebSocket();
@@ -173,6 +205,7 @@
       case 'transcript': {
         const entry = { text: event.text, timestamp_ms: event.timestamp_ms, speaker: event.speaker };
         transcript = [...transcript, entry];
+        lastSpeechAt = Date.now();
         if (event.speaker === 'You') {
           youSegments++;
           startAnswerTimer();
@@ -184,10 +217,16 @@
         } else if (event.speaker === 'Interviewer') {
           interviewerSegments++;
           resetAnswerTimer();
-          // Update audio sentiment from transcript text
           const tone = analyzeAudioTone(event.text);
           audioEmotion = tone.emotion;
           audioReason = tone.reason;
+          // If we haven't captured a sentiment frame recently, trigger one now
+          // (catches interviewer turning camera on mid-interview)
+          const now = Date.now();
+          if (captureInst && now - lastSentimentTrigger > 10000) {
+            lastSentimentTrigger = now;
+            captureInst.triggerFrameCapture();
+          }
         }
         break;
       }
@@ -209,12 +248,11 @@
         suggestions = suggestions.map((s, i) =>
           i === suggestions.length - 1 && s.streaming ? { ...s, suggestion: event.full_text, streaming: false } : s
         );
-        // TTS: speak the Tell: line (first line of suggestion)
-        const tellLine = event.full_text.split('\n')[0]
-          ?.replace(/^Tell:\s*/i, '')
-          ?.replace(/^Ask:\s*/i, '')
+        // Speak only the Say: cue line, capped at TTS_MAX_WORDS
+        const sayLine = event.full_text.split('\n')[0]
+          ?.replace(/^(Say|Answer|Tell|Ask):\s*/i, '')
           ?.trim();
-        if (tellLine) speakText(tellLine);
+        if (sayLine) speakText(sayLine);
         break;
       }
       case 'status':
@@ -237,12 +275,11 @@
     return text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   }
 
-  // Keyboard shortcuts
   $effect(() => {
     function onKey(e: KeyboardEvent) {
       if (phase !== 'interview') return;
       const tag = (e.target as HTMLElement).tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       switch (e.key) {
         case 'f': case 'F': focusMode = !focusMode; break;
         case 'Escape':
@@ -251,9 +288,7 @@
           break;
         case '+': case '=': fontSize = Math.min(20, fontSize + 1); break;
         case '-': case '_': fontSize = Math.max(11, fontSize - 1); break;
-        case 't': case 'T':
-          if (!showVoiceMenu) { ttsEnabled = !ttsEnabled; }
-          break;
+        case 't': case 'T': if (!showVoiceMenu) ttsEnabled = !ttsEnabled; break;
       }
     }
     window.addEventListener('keydown', onKey);
@@ -287,23 +322,29 @@
         <div class="header-right">
           <div class="shortcuts-hint">F: focus · T: voice · Esc: clear · +/−: font</div>
 
-          <!-- TTS toggle -->
+          <!-- TTS controls -->
           <div class="tts-controls">
             <button
               class="tts-btn"
               class:tts-on={ttsEnabled}
               onclick={() => ttsEnabled = !ttsEnabled}
               title="Toggle voice hints (T)"
-            >
-              {ttsEnabled ? '🔊' : '🔇'} Voice
-            </button>
+            >{ttsEnabled ? '🔊' : '🔇'} Voice</button>
+
             {#if ttsEnabled}
-              <button
-                class="voice-pick-btn"
-                onclick={() => showVoiceMenu = !showVoiceMenu}
-                title="Choose voice"
-              >▾</button>
+              <!-- Speed slider -->
+              <label class="rate-label" title="Speech speed">
+                <span class="rate-val">{ttsRate.toFixed(1)}×</span>
+                <input type="range" min="0.7" max="2.0" step="0.1" bind:value={ttsRate} class="rate-slider" />
+              </label>
+              <!-- Volume slider -->
+              <label class="rate-label" title="Voice volume">
+                <span class="rate-val">{Math.round(ttsVolume * 100)}%</span>
+                <input type="range" min="0" max="1" step="0.05" bind:value={ttsVolume} class="rate-slider vol-slider" />
+              </label>
+              <button class="voice-pick-btn" onclick={() => showVoiceMenu = !showVoiceMenu} title="Choose voice">▾</button>
             {/if}
+
             {#if showVoiceMenu}
               <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
               <div class="voice-menu" role="menu" onmouseleave={() => showVoiceMenu = false}>
@@ -320,8 +361,9 @@
 
           <button class="debrief-btn" onclick={() => showDebrief = true}>End Interview</button>
           <CaptureButton
-            onCapture={(v) => { capturing = v; if (!v) webcamStream = null; }}
+            onCapture={(v) => { capturing = v; if (!v) { webcamStream = null; captureInst = null; } }}
             onStreams={(_, webcam) => { webcamStream = webcam; }}
+            onReady={(cap) => { captureInst = cap; }}
           />
         </div>
       </header>
@@ -340,28 +382,26 @@
         <div class="status-banner">{statusMessages[statusMessages.length - 1]}</div>
       {/if}
 
-      <!-- 3-column teleprompter layout -->
+      <!-- Resizable 3-column layout -->
       <div class="three-col">
-        <!-- Left: Transcript (dim reference) -->
-        <div class="col col-left">
+        <!-- Left: Transcript -->
+        <div class="col col-left" style="width: {leftW}px">
           <div class="col-label">Transcript</div>
           <div class="col-body">
             <TranscriptPanel entries={transcript} />
           </div>
         </div>
 
-        <!-- Center: AI Suggestions + self-view webcam at top -->
-        <div class="col col-center">
+        <!-- Resize handle: left | center -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="resize-handle" onmousedown={(e) => startResize('left', e)} title="Drag to resize"></div>
+
+        <!-- Center: AI Suggestions -->
+        <div class="col col-center" style="width: {centerW}px">
           {#if webcamStream}
             <div class="selfview-strip">
               <!-- svelte-ignore a11y_media_has_caption -->
-              <video
-                bind:this={webcamEl}
-                class="selfview"
-                autoplay
-                muted
-                playsinline
-              ></video>
+              <video bind:this={webcamEl} class="selfview" autoplay muted playsinline></video>
               <div class="selfview-label">You</div>
             </div>
           {/if}
@@ -370,7 +410,11 @@
           </div>
         </div>
 
-        <!-- Right: Sentiment + Stats + Rate limits -->
+        <!-- Resize handle: center | right -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="resize-handle" onmousedown={(e) => startResize('center', e)} title="Drag to resize"></div>
+
+        <!-- Right: Sentiment + Stats -->
         <div class="col col-right">
           <div class="col-label">Interviewer</div>
           <div class="col-body col-right-body">
@@ -397,11 +441,9 @@
               </div>
               <div class="side-stat filler-stat" title="Filler word count">
                 <span class="side-label">Fillers</span>
-                <button
-                  class="filler-btn"
-                  class:has-fillers={fillerTotal > 0}
-                  onclick={() => showFillers = !showFillers}
-                >{fillerTotal > 0 ? fillerTotal : '—'}</button>
+                <button class="filler-btn" class:has-fillers={fillerTotal > 0} onclick={() => showFillers = !showFillers}>
+                  {fillerTotal > 0 ? fillerTotal : '—'}
+                </button>
                 {#if showFillers && allFillerCounts.length > 0}
                   <div class="filler-popup">
                     {#each allFillerCounts as f}
@@ -412,11 +454,7 @@
               </div>
               <div class="side-stat" title="WebSocket connection">
                 <span class="side-label">WS</span>
-                <span
-                  class="side-value ws-dot"
-                  class:connected={wsStatus === 'connected'}
-                  class:reconnecting={wsStatus === 'reconnecting'}
-                >
+                <span class="side-value ws-dot" class:connected={wsStatus === 'connected'} class:reconnecting={wsStatus === 'reconnecting'}>
                   {wsStatus === 'connected' ? '●' : wsStatus === 'reconnecting' ? `↻ #${wsAttempt}` : '○'}
                 </span>
               </div>
@@ -431,7 +469,6 @@
       </div>
     </div>
 
-    <!-- Focus mode overlay (F key) -->
     {#if focusMode}
       <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
       <div class="focus-overlay" onclick={() => focusMode = false}>
@@ -456,10 +493,7 @@
     {/if}
 
     {#if showDebrief}
-      <DebriefModal
-        {transcript} {suggestions}
-        onClose={() => showDebrief = false}
-      />
+      <DebriefModal {transcript} {suggestions} onClose={() => showDebrief = false} />
     {/if}
   {/if}
 </main>
@@ -476,7 +510,6 @@
   }
   .setup-header p { color: #64748b; margin-top: 0.5rem; }
 
-  /* Interview layout */
   .interview-layout { display: flex; flex-direction: column; height: 100vh; }
   .interview-header {
     display: flex; align-items: center; justify-content: space-between;
@@ -492,19 +525,25 @@
   .debrief-btn {
     padding: 0.3rem 0.8rem; background: transparent;
     border: 1px solid #334155; border-radius: 0.375rem;
-    color: #64748b; font-size: 0.75rem; cursor: pointer; transition: all 0.15s; white-space: nowrap;
+    color: #64748b; font-size: 0.75rem; cursor: pointer; white-space: nowrap;
   }
   .debrief-btn:hover { border-color: #a78bfa; color: #a78bfa; }
 
-  /* TTS controls */
-  .tts-controls { position: relative; display: flex; align-items: center; gap: 0.2rem; }
+  /* TTS */
+  .tts-controls { position: relative; display: flex; align-items: center; gap: 0.25rem; }
   .tts-btn {
-    padding: 0.25rem 0.6rem; background: transparent;
+    padding: 0.25rem 0.5rem; background: transparent;
     border: 1px solid #334155; border-radius: 0.375rem;
     color: #64748b; font-size: 0.72rem; cursor: pointer; white-space: nowrap;
   }
   .tts-btn.tts-on { border-color: #22c55e; color: #22c55e; }
-  .tts-btn:hover { border-color: #94a3b8; }
+  .rate-label {
+    display: flex; align-items: center; gap: 0.25rem;
+    font-size: 0.68rem; color: #64748b;
+  }
+  .rate-val { min-width: 2rem; text-align: right; font-variant-numeric: tabular-nums; }
+  .rate-slider { width: 56px; accent-color: #22c55e; cursor: pointer; }
+  .vol-slider { accent-color: #60a5fa; }
   .voice-pick-btn {
     padding: 0.2rem 0.35rem; background: transparent;
     border: 1px solid #334155; border-radius: 0.25rem;
@@ -535,16 +574,12 @@
     color: #fca5a5; font-size: 0.75rem; cursor: pointer;
   }
   .error-btn:hover { background: #7f1d1d; }
-  .status-banner {
-    padding: 0.2rem 1rem; background: #1e3a5f; color: #93c5fd; font-size: 0.8rem; flex-shrink: 0;
-  }
+  .status-banner { padding: 0.2rem 1rem; background: #1e3a5f; color: #93c5fd; font-size: 0.8rem; flex-shrink: 0; }
 
-  /* 3-column layout — narrower center for less eye travel */
+  /* Resizable 3-column layout */
   .three-col {
     flex: 1;
-    display: grid;
-    grid-template-columns: 22% 320px 1fr;
-    gap: 0;
+    display: flex;
     overflow: hidden;
     background: #070c14;
     min-height: 0;
@@ -554,192 +589,107 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border-right: 1px solid #0f172a;
-  }
-  .col:last-child { border-right: none; }
-
-  .col-label {
-    font-size: 0.6rem;
-    font-weight: 700;
-    color: #334155;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    padding: 0.35rem 0.75rem 0;
     flex-shrink: 0;
   }
 
-  .col-body {
-    flex: 1;
-    overflow: hidden;
-    padding: 0.5rem 0.75rem 0.75rem;
-    display: flex;
-    flex-direction: column;
+  .col-right {
+    flex: 1; /* right column takes remaining space */
+    min-width: 180px;
+    background: #080d18;
   }
 
-  /* Left column: transcript */
+  /* Drag resize handles */
+  .resize-handle {
+    width: 5px;
+    flex-shrink: 0;
+    background: #0f172a;
+    cursor: col-resize;
+    transition: background 0.15s;
+  }
+  .resize-handle:hover { background: #1e293b; }
+
+  .col-label {
+    font-size: 0.6rem; font-weight: 700; color: #334155;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    padding: 0.35rem 0.75rem 0; flex-shrink: 0;
+  }
+  .col-body {
+    flex: 1; overflow: hidden;
+    padding: 0.5rem 0.75rem 0.75rem;
+    display: flex; flex-direction: column;
+  }
+
   .col-left { background: #080d18; }
   .col-left .col-body { opacity: 0.75; }
   .col-left .col-body:hover { opacity: 1; transition: opacity 0.2s; }
 
-  /* Center column: suggestions */
   .col-center {
     background: #07101e;
-    border-right: 1px solid #1e293b;
-    border-left: 1px solid #1e293b;
-    flex-shrink: 0;
+    border-right: 1px solid #0f172a;
+    border-left: 1px solid #0f172a;
   }
   .col-center .col-body { padding: 0.5rem 0.75rem; }
 
-  /* Webcam self-view strip */
+  /* Webcam self-view */
   .selfview-strip {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.35rem 0.75rem;
-    border-bottom: 1px solid #1e293b;
-    background: #060e1a;
-    flex-shrink: 0;
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.35rem 0.75rem; border-bottom: 1px solid #1e293b;
+    background: #060e1a; flex-shrink: 0;
   }
   .selfview {
-    width: 80px;
-    height: 60px;
-    object-fit: cover;
-    border-radius: 0.375rem;
-    border: 1px solid #1e293b;
-    background: #0f172a;
-    transform: scaleX(-1); /* mirror for self-view */
+    width: 80px; height: 60px; object-fit: cover;
+    border-radius: 0.375rem; border: 1px solid #1e293b;
+    background: #0f172a; transform: scaleX(-1);
   }
-  .selfview-label {
-    font-size: 0.6rem;
-    color: #334155;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
+  .selfview-label { font-size: 0.6rem; color: #334155; text-transform: uppercase; letter-spacing: 0.08em; }
 
-  /* Right column: stats */
-  .col-right { background: #080d18; }
-  .col-right-body {
-    gap: 0.75rem;
-    overflow-y: auto;
-  }
+  .col-right-body { gap: 0.75rem; overflow-y: auto; }
 
-  /* Side stats */
   .side-stats {
-    display: flex;
-    flex-direction: column;
-    gap: 0.1rem;
+    display: flex; flex-direction: column; gap: 0.1rem;
     padding: 0.5rem 0.25rem;
-    border-top: 1px solid #1e293b;
-    border-bottom: 1px solid #1e293b;
-    flex-shrink: 0;
+    border-top: 1px solid #1e293b; border-bottom: 1px solid #1e293b; flex-shrink: 0;
   }
   .side-stat {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.2rem 0.25rem;
-    position: relative;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.2rem 0.25rem; position: relative;
   }
-  .side-label {
-    font-size: 0.62rem;
-    color: #475569;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-weight: 600;
-  }
-  .side-value {
-    font-size: 0.75rem;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    color: #475569;
-  }
+  .side-label { font-size: 0.62rem; color: #475569; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .side-value { font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #475569; }
   .ws-dot { font-size: 0.8rem; }
   .ws-dot.connected { color: #22c55e; }
   .ws-dot.reconnecting { color: #f59e0b; }
   .filler-stat { position: relative; }
-  .filler-btn {
-    background: none; border: none; cursor: pointer;
-    font-size: 0.75rem; font-weight: 700; color: #475569; padding: 0;
-  }
+  .filler-btn { background: none; border: none; cursor: pointer; font-size: 0.75rem; font-weight: 700; color: #475569; padding: 0; }
   .filler-btn.has-fillers { color: #f59e0b; }
   .filler-popup {
     position: absolute; top: 100%; right: 0; z-index: 50;
-    background: #1e293b; border: 1px solid #334155;
-    border-radius: 0.375rem; padding: 0.5rem;
-    display: flex; flex-direction: column; gap: 0.2rem;
-    white-space: nowrap; min-width: 120px;
+    background: #1e293b; border: 1px solid #334155; border-radius: 0.375rem; padding: 0.5rem;
+    display: flex; flex-direction: column; gap: 0.2rem; white-space: nowrap; min-width: 120px;
   }
   .filler-item { font-size: 0.72rem; color: #f59e0b; }
-
   .side-ratelimits { flex: 1; overflow-y: auto; min-height: 0; }
 
-  /* Focus mode overlay */
+  /* Focus overlay */
   .focus-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.93);
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 1.5rem 2rem 2rem;
-    cursor: pointer;
+    position: fixed; inset: 0; background: rgba(0,0,0,0.93);
+    z-index: 1000; display: flex; flex-direction: column;
+    align-items: center; padding: 1.5rem 2rem 2rem; cursor: pointer;
   }
-
   .focus-card {
-    width: 100%;
-    max-width: 680px;
-    background: #07101e;
-    border: 1px solid #1e3a5f;
-    border-radius: 1rem;
-    padding: 1.75rem 2rem;
-    cursor: default;
-    box-shadow: 0 0 60px rgba(59, 130, 246, 0.08);
+    width: 100%; max-width: 680px; background: #07101e;
+    border: 1px solid #1e3a5f; border-radius: 1rem; padding: 1.75rem 2rem;
+    cursor: default; box-shadow: 0 0 60px rgba(59,130,246,0.08);
   }
-
   .focus-question {
-    color: #60a5fa;
-    font-style: italic;
-    font-size: 0.95rem;
-    line-height: 1.5;
-    margin-bottom: 1.25rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid #1e293b;
+    color: #60a5fa; font-style: italic; font-size: 0.95rem; line-height: 1.5;
+    margin-bottom: 1.25rem; padding-bottom: 1rem; border-bottom: 1px solid #1e293b;
   }
-
-  .focus-suggestion {
-    color: #cbd5e1;
-    line-height: 2.4;
-    white-space: pre-wrap;
-    font-size: 1.05rem;
-  }
-
-  :global(.focus-suggestion strong) {
-    color: #ffffff;
-    font-size: 1.45rem;
-    font-weight: 800;
-    letter-spacing: 0.01em;
-  }
-
-  .focus-cursor {
-    animation: blink 1s step-end infinite;
-    color: #60a5fa;
-  }
+  .focus-suggestion { color: #cbd5e1; line-height: 2.4; white-space: pre-wrap; font-size: 1.05rem; }
+  :global(.focus-suggestion strong) { color: #fff; font-size: 1.45rem; font-weight: 800; }
+  .focus-cursor { animation: blink 1s step-end infinite; color: #60a5fa; }
   @keyframes blink { 50% { opacity: 0; } }
-
   .focus-loading { color: #60a5fa; font-style: italic; }
-
-  .focus-empty {
-    color: #334155;
-    font-style: italic;
-    font-size: 1rem;
-    text-align: center;
-    padding: 3rem 0;
-  }
-
-  .focus-hint {
-    margin-top: 0.75rem;
-    font-size: 0.65rem;
-    color: #1e293b;
-  }
+  .focus-empty { color: #334155; font-style: italic; font-size: 1rem; text-align: center; padding: 3rem 0; }
+  .focus-hint { margin-top: 0.75rem; font-size: 0.65rem; color: #1e293b; }
 </style>

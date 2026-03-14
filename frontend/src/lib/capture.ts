@@ -112,6 +112,13 @@ export class MediaCapture {
     this.micWorklet.connect(this.micAudioCtx.destination);
   }
 
+  private _captureFrameFn: (() => Promise<void>) | null = null;
+
+  /** Trigger an immediate sentiment frame capture (e.g. when interviewer starts talking). */
+  public triggerFrameCapture() {
+    if (this._captureFrameFn) this._captureFrameFn();
+  }
+
   private startVideoCapture() {
     if (!this.systemStream) return;
     const videoTracks = this.systemStream.getVideoTracks();
@@ -133,8 +140,12 @@ export class MediaCapture {
         if (blob) this.videoWs.send(await blob.arrayBuffer());
       }
     };
+    this._captureFrameFn = captureFrame;
     video.addEventListener('loadeddata', () => captureFrame(), { once: true });
-    this.videoInterval = setInterval(captureFrame, 30000);
+    // Backup initial capture in case loadeddata already fired
+    setTimeout(() => captureFrame(), 3000);
+    // 12s interval — fast enough to catch interviewer camera turning on mid-call
+    this.videoInterval = setInterval(captureFrame, 12000);
   }
 
   stop() {

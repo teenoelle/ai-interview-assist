@@ -6,6 +6,66 @@ when i read the ai suggestions during the interview it looks like i'm reading of
 make sure the ai suggestions have the least ammount of hallucinations. if it doesn't know the answer then don't make it up. 
 
 
-have the front end tell me how many credits i have left out of my limit. 
+have the front end tell me how many credits i have left out of my limits, what percentage is left, and how quickly i'm using them. 
 
 let the front end be fully modular so that i can reposition the sections dynamically.
+
+let it talk in my ear to give me hints. 
+
+
+
+
+
+
+
+
+is there a way to overlay the meeting video into the app without using many credits? the reason is for the interviewee to see the interviewer's and their own expressions while using the app. maybe the sentiment and body language notes can be near the relevant speaker's video square. the placement should be relevant for the interviewee to maintain eye contact with the interviewer while reading the suggestions.
+
+interviewee answer time should be way below 2 min. update it to be under half a minute. also, the suggestions may be too long. reduce the answer to a quick sentence or bullet, and include the ability to click into it to get more context.
+
+make the suggestions section narrower so i stop moving my eyes when i read. but make sure the suggestions appear succinctly so that i don't have to scroll down to read it. also, make it clearer which parts i can speak and which parts i should read to understand more context. Add cues like "Ask" or "Tell". 
+
+let me be able to easily move and resize all sections in the app.
+
+sometimes when the interviewer talks after asking a question, the suggestions update and i can't see the previous answer. make it possible to view previous suggestions?
+
+show video and audio sentiment separately and explain why for each.
+
+interview debrief shows an error: Error: Debrief failed: 405
+
+another error: NotAllowedError: Permission denied by user
+
+there's a bug: the app works for meetings if they're in the browser. but zoom and teams applications, and probably other non-browser apps, do not show updates to the live transcript. can you fix this?
+
+add qwen to the free models. i included the key in the env file.
+
+the suggestions don't come up quickly enough. waiting too long before answering makes the conversation sound unnatural. what are solutions for this?
+
+the transcript sometimes doesn't catch what interviewers are saying. is it possible to add ai understanding of various english accents?
+
+add a toggle option for the ai to talk in my ear to give me hints. let me choose between voices. 
+
+the answer time continues counting even when the meeting has stopped capturing. in the fillers section, make it clear which fillers i'm saying. 
+
+the claude api usage is working. but if there are other apis working at the same time, make sure their usage appears, too.
+
+before answering each question i want suggestions of what to say to acknowledge the interviewer's pain points and reason for asking their question. and then after answering each question, i want suggestions of follow up questions to ask the interviewer.
+
+
+
+
+
+
+let me be able to resize the sections. 
+
+change the cue "Tell" to "Say" or "Answer"i. make sure the color for you in the live transcript matches the color of the cue that i need to say.
+
+The voice talks too slow. Add the option to change the speed of the voice. Make sure the voice says a cue not much longer than 3 or 4 seconds. And to not speak if I'm talking or the interviewer is talking. 
+
+If the interviewer opens their camera partway through the interview, the app needs to recognize this and start documenting visual sentiment from the interviewer during the capture. 
+
+the suggestions get cut off so that i can't see the full sentence. fix this. 
+
+
+make it more user friendly to find previous questions and answer suggestions. the previous and next questions should be easily viewed and clickable. also, if the interviewer asks a new question as i am answering a previous question, the app should add the ability to move forward or to the latest question to see suggestions for the new question. 
+

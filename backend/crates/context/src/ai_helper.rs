@@ -140,6 +140,7 @@ pub struct DebriefResult {
     pub strong_points: Vec<String>,
     pub improvement_areas: Vec<String>,
     pub followup_email: Vec<String>,
+    pub followup_email_draft: String,
 }
 
 /// Generate a post-interview debrief from transcript and suggestions.
@@ -150,12 +151,12 @@ pub async fn generate_debrief(
     anthropic_key: Option<&str>,
 ) -> Result<DebriefResult> {
     let prompt = format!(
-        "You are analyzing a completed job interview. Based on the transcript and AI suggestions below, write a concise debrief.\n\nRespond in EXACTLY this format (use these exact section headers):\n\nSUMMARY:\n[2-3 sentence overall assessment]\n\nSTRONG:\n• [specific thing done well]\n• [specific thing done well]\n\nIMPROVE:\n• [specific area to improve]\n• [specific area to improve]\n\nFOLLOWUP:\n• [point to include in thank-you email]\n• [point to include in thank-you email]\n\n---\nTRANSCRIPT:\n{}\n\nAI SUGGESTIONS PROVIDED:\n{}",
+        "You are analyzing a completed job interview. Based on the transcript and AI suggestions below, write a concise debrief.\n\nRespond in EXACTLY this format (use these exact section headers):\n\nSUMMARY:\n[2-3 sentence overall assessment]\n\nSTRONG:\n• [specific thing done well]\n• [specific thing done well]\n\nIMPROVE:\n• [specific area to improve]\n• [specific area to improve]\n\nFOLLOWUP:\n• [point to include in thank-you email]\n• [point to include in thank-you email]\n\nEMAIL:\n[Complete thank-you email, ready to copy and send. Include: Subject line on the first line starting with 'Subject: ', then a blank line, then a proper greeting, 2-3 warm paragraphs referencing specific topics from the interview, a forward-looking close, and a sign-off. Use [Your Name] and [Interviewer Name] as placeholders.]\n\n---\nTRANSCRIPT:\n{}\n\nAI SUGGESTIONS PROVIDED:\n{}",
         &transcript_text[..transcript_text.len().min(4000)],
         &suggestions_text[..suggestions_text.len().min(2000)]
     );
 
-    let text = call_ai(&prompt, gemini_key, anthropic_key, 800).await?;
+    let text = call_ai(&prompt, gemini_key, anthropic_key, 1400).await?;
     Ok(parse_debrief(&text))
 }
 
@@ -164,6 +165,7 @@ fn parse_debrief(text: &str) -> DebriefResult {
     let mut strong = Vec::new();
     let mut improve = Vec::new();
     let mut followup = Vec::new();
+    let mut email_lines: Vec<String> = Vec::new();
     let mut section = "";
 
     for line in text.lines() {
@@ -173,13 +175,18 @@ fn parse_debrief(text: &str) -> DebriefResult {
             "STRONG:" => { section = "strong"; continue; }
             "IMPROVE:" => { section = "improve"; continue; }
             "FOLLOWUP:" => { section = "followup"; continue; }
+            "EMAIL:" => { section = "email"; continue; }
             _ => {}
         }
-        if t.is_empty() { continue; }
+        // Separator between sections — stop email section
+        if t == "---" { section = ""; continue; }
+
         match section {
             "summary" => {
-                if !summary.is_empty() { summary.push(' '); }
-                summary.push_str(t);
+                if !t.is_empty() {
+                    if !summary.is_empty() { summary.push(' '); }
+                    summary.push_str(t);
+                }
             }
             "strong" => {
                 let item = t.trim_start_matches(['•', '-', '*', ' '].as_ref()).trim();
@@ -193,14 +200,28 @@ fn parse_debrief(text: &str) -> DebriefResult {
                 let item = t.trim_start_matches(['•', '-', '*', ' '].as_ref()).trim();
                 if !item.is_empty() { followup.push(item.to_string()); }
             }
+            "email" => {
+                // Preserve lines as-is (including blank lines for spacing)
+                email_lines.push(line.to_string());
+            }
             _ => {}
         }
     }
+
+    // Trim leading/trailing blank lines from email
+    while email_lines.first().map(|l| l.trim().is_empty()).unwrap_or(false) {
+        email_lines.remove(0);
+    }
+    while email_lines.last().map(|l| l.trim().is_empty()).unwrap_or(false) {
+        email_lines.pop();
+    }
+    let email_draft = email_lines.join("\n");
 
     DebriefResult {
         summary: if summary.is_empty() { "Interview completed.".to_string() } else { summary },
         strong_points: strong,
         improvement_areas: improve,
         followup_email: followup,
+        followup_email_draft: email_draft,
     }
 }

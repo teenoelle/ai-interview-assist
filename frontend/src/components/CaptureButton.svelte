@@ -2,10 +2,12 @@
   import { MediaCapture } from '../lib/capture';
   import AudioMeter from './AudioMeter.svelte';
 
+  import type { MediaCapture } from '../lib/capture';
   type StreamsReadyCallback = (screen: MediaStream, webcam: MediaStream | null) => void;
-  const { onCapture, onStreams } = $props<{
+  const { onCapture, onStreams, onReady } = $props<{
     onCapture: (active: boolean) => void;
     onStreams?: StreamsReadyCallback;
+    onReady?: (cap: MediaCapture) => void;
   }>();
 
   let capture: MediaCapture | null = $state(null);
@@ -33,6 +35,7 @@
         await capture.start();
         active = true;
         onCapture(true);
+        onReady?.(capture);
       } catch (e: unknown) {
         const msg = String(e);
         if (msg.includes('Permission denied') || msg.includes('NotAllowedError')) {

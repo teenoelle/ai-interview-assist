@@ -62,13 +62,14 @@ pub async fn call_ai_simple(
         let body = json!({
             "model": "claude-haiku-4-5-20251001",
             "max_tokens": 400,
-            "system": system_prompt,
+            "system": [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
             "messages": [{ "role": "user", "content": user_prompt }]
         });
         let resp = reqwest::Client::new()
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", key)
             .header("anthropic-version", "2023-06-01")
+            .header("anthropic-beta", "prompt-caching-2024-07-31")
             .json(&body)
             .timeout(std::time::Duration::from_secs(30))
             .send()

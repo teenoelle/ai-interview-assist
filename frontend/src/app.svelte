@@ -554,11 +554,26 @@
               <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
               <div class="voice-menu" role="menu" onmouseleave={() => showVoiceMenu = false}>
                 {#each ttsVoices as v}
-                  <button
-                    class="voice-option"
-                    class:selected={v.voiceURI === ttsVoiceURI}
-                    onclick={() => { ttsVoiceURI = v.voiceURI; showVoiceMenu = false; }}
-                  >{v.name} ({v.lang})</button>
+                  <div class="voice-row" class:selected={v.voiceURI === ttsVoiceURI}>
+                    <button
+                      class="voice-option"
+                      class:selected={v.voiceURI === ttsVoiceURI}
+                      onclick={() => { ttsVoiceURI = v.voiceURI; showVoiceMenu = false; }}
+                    >{v.name} ({v.lang})</button>
+                    <button
+                      class="voice-test-btn"
+                      title="Preview this voice"
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        speechSynthesis.cancel();
+                        const utt = new SpeechSynthesisUtterance("Hi, I'm excited to be here today.");
+                        utt.voice = v;
+                        utt.rate = ttsRate;
+                        utt.volume = ttsVolume;
+                        speechSynthesis.speak(utt);
+                      }}
+                    >▶</button>
+                  </div>
                 {/each}
               </div>
             {/if}
@@ -929,12 +944,23 @@
     min-width: 200px; max-height: 250px; overflow-y: auto;
     display: flex; flex-direction: column;
   }
+  .voice-row {
+    display: flex; align-items: center;
+  }
+  .voice-row:hover { background: #334155; }
+  .voice-row.selected { background: #1e3a5f; }
   .voice-option {
-    padding: 0.3rem 0.75rem; background: transparent; border: none;
+    flex: 1; padding: 0.3rem 0.5rem 0.3rem 0.75rem; background: transparent; border: none;
     color: #94a3b8; font-size: 0.72rem; cursor: pointer; text-align: left;
   }
-  .voice-option:hover { background: #334155; color: #e2e8f0; }
+  .voice-option:hover { color: #e2e8f0; }
   .voice-option.selected { color: #60a5fa; }
+  .voice-test-btn {
+    flex-shrink: 0; padding: 0.25rem 0.5rem; background: transparent; border: none;
+    color: #475569; font-size: 0.65rem; cursor: pointer; opacity: 0.7;
+    transition: color 0.15s, opacity 0.15s;
+  }
+  .voice-test-btn:hover { color: #60a5fa; opacity: 1; }
 
   .error-banner {
     display: flex; align-items: flex-start; gap: 0.75rem;

@@ -1,8 +1,28 @@
+export interface CompanyBrief {
+  name: string;
+  what_they_do: string;
+  products: string[];
+  culture: string;
+  recent_news: string;
+  why_join: string;
+}
+
+export interface InterviewerSummary {
+  name: string;
+  role: string;
+  background: string;
+  tenure: string;
+  rapport_tip: string;
+}
+
 export interface SetupResponse {
   success: boolean;
   system_prompt_preview: string;
   message: string;
   predicted_questions: string[];
+  company_brief?: CompanyBrief;
+  interviewer_summaries?: InterviewerSummary[];
+  jd_keywords?: string[];
 }
 
 export async function submitSetup(formData: FormData): Promise<SetupResponse> {

@@ -22,8 +22,25 @@
   let copied = $state(false);
   let emailTo = $state(localStorage.getItem('debrief-email') ?? '');
   let emailSent = $state(false);
+  let nextSteps = $state<string[]>([]);
+  let loadingNextSteps = $state(false);
+
+  async function fetchNextSteps() {
+    if (transcript.length === 0) return;
+    loadingNextSteps = true;
+    try {
+      const resp = await fetch('/api/next-steps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript: transcript.map(e => ({ speaker: e.speaker, text: e.text })) }),
+      });
+      if (resp.ok) { const d = await resp.json(); nextSteps = d.steps ?? []; }
+    } catch { /* ignore */ }
+    loadingNextSteps = false;
+  }
 
   async function fetchDebrief() {
+    fetchNextSteps();
     try {
       const resp = await fetch('/api/debrief', {
         method: 'POST',
@@ -131,6 +148,21 @@
           </section>
         </div>
 
+        <section class="next-steps-section">
+          <h3 class="amber">Next Steps</h3>
+          {#if loadingNextSteps}
+            <p class="steps-loading">Extracting next steps...</p>
+          {:else if nextSteps.length > 0}
+            <ul>
+              {#each nextSteps as step}
+                <li>{step}</li>
+              {/each}
+            </ul>
+          {:else}
+            <p class="steps-empty">No specific next steps mentioned in the interview.</p>
+          {/if}
+        </section>
+
         <section class="email-section">
           <div class="followup-header">
             <h3>Follow-up Email</h3>
@@ -208,6 +240,9 @@
   h3 { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #94a3b8; margin: 0; }
   h3.green { color: #4ade80; }
   h3.yellow { color: #f59e0b; }
+  h3.amber { color: #fb923c; }
+  .next-steps-section { gap: 0.5rem; display: flex; flex-direction: column; }
+  .steps-loading, .steps-empty { color: #475569; font-size: 0.85rem; font-style: italic; margin: 0; }
   .summary { color: #cbd5e1; line-height: 1.6; font-size: 0.9rem; margin: 0; }
   ul { margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.3rem; }
   li { color: #94a3b8; font-size: 0.875rem; line-height: 1.5; }

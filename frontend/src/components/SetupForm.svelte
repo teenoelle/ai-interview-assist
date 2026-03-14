@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { submitSetup } from '../lib/api';
+  import { submitSetup, type CompanyBrief, type InterviewerSummary } from '../lib/api';
+  import { saveKeywords } from '../lib/keywordTracker';
+  import CompanyBriefPanel from './CompanyBriefPanel.svelte';
+  import InterviewerProfilePanel from './InterviewerProfilePanel.svelte';
+  import StoryBankPanel from './StoryBankPanel.svelte';
 
   let jobDescription = $state('');
   let companyUrl = $state('');
@@ -11,10 +15,14 @@
   let error = $state('');
   let systemPromptPreview = $state('');
   let predictedQuestions = $state<string[]>([]);
+  let companyBrief = $state<CompanyBrief | null>(null);
+  let interviewerSummaries = $state<InterviewerSummary[]>([]);
+  let jdKeywords = $state<string[]>([]);
   let setupDone = $state(false);
+  let activeTab = $state<'overview' | 'stories'>('overview');
 
   const { onSetupComplete, onPractice } = $props<{
-    onSetupComplete: () => void;
+    onSetupComplete: (data?: { companyBrief?: any; interviewerSummaries?: any[]; jdKeywords?: string[] }) => void;
     onPractice: (questions: string[]) => void;
   }>();
 
@@ -52,6 +60,10 @@
       const result = await submitSetup(formData);
       systemPromptPreview = result.system_prompt_preview;
       predictedQuestions = result.predicted_questions ?? [];
+      companyBrief = result.company_brief ?? null;
+      interviewerSummaries = result.interviewer_summaries ?? [];
+      jdKeywords = result.jd_keywords ?? [];
+      if (jdKeywords.length > 0) saveKeywords(jdKeywords);
       setupDone = true;
     } catch (e) {
       error = String(e);
@@ -81,26 +93,58 @@
 
   {#if setupDone}
     <div class="post-setup">
-      {#if systemPromptPreview}
-        <details class="preview">
-          <summary>System prompt preview</summary>
-          <pre>{systemPromptPreview}</pre>
-        </details>
-      {/if}
+      <!-- Tab bar -->
+      <div class="tab-bar">
+        <button class="tab" class:tab-active={activeTab === 'overview'} onclick={() => activeTab = 'overview'}>Overview</button>
+        <button class="tab" class:tab-active={activeTab === 'stories'} onclick={() => activeTab = 'stories'}>Story Bank</button>
+      </div>
 
-      {#if predictedQuestions.length > 0}
-        <div class="predicted">
-          <h3>Predicted Interview Questions</h3>
-          <ol class="questions-list">
-            {#each predictedQuestions as q}
-              <li>{q}</li>
-            {/each}
-          </ol>
-        </div>
+      {#if activeTab === 'overview'}
+        {#if companyBrief}
+          <CompanyBriefPanel brief={companyBrief} />
+        {/if}
+
+        {#if interviewerSummaries.length > 0}
+          <div class="section-block">
+            <div class="section-block-label">Interviewer Profiles</div>
+            <InterviewerProfilePanel interviewers={interviewerSummaries} />
+          </div>
+        {/if}
+
+        {#if jdKeywords.length > 0}
+          <div class="section-block">
+            <div class="section-block-label">Keywords to mention</div>
+            <div class="keyword-chips">
+              {#each jdKeywords as kw}
+                <span class="kw-chip">{kw}</span>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        {#if predictedQuestions.length > 0}
+          <div class="predicted">
+            <h3>Predicted Interview Questions</h3>
+            <ol class="questions-list">
+              {#each predictedQuestions as q}
+                <li>{q}</li>
+              {/each}
+            </ol>
+          </div>
+        {/if}
+
+        {#if systemPromptPreview}
+          <details class="preview">
+            <summary>System prompt preview</summary>
+            <pre>{systemPromptPreview}</pre>
+          </details>
+        {/if}
+      {:else}
+        <StoryBankPanel mode="setup" />
       {/if}
 
       <div class="action-row">
-        <button onclick={onSetupComplete} class="btn-primary">Start Interview →</button>
+        <button onclick={() => onSetupComplete({ companyBrief, interviewerSummaries, jdKeywords })} class="btn-primary">Start Interview →</button>
         {#if predictedQuestions.length > 0}
           <button onclick={() => onPractice(predictedQuestions)} class="btn-secondary">Practice First</button>
         {/if}
@@ -243,7 +287,15 @@
   }
   .btn-primary:hover:not(:disabled) { background: #2563eb; }
   .btn-primary:disabled { background: #1e3a5f; cursor: not-allowed; }
-  .post-setup { display: flex; flex-direction: column; gap: 1.5rem; }
+  .post-setup { display: flex; flex-direction: column; gap: 1.25rem; }
+  .tab-bar { display: flex; gap: 0.25rem; border-bottom: 1px solid #1e293b; padding-bottom: 0.5rem; }
+  .tab { padding: 0.3rem 0.9rem; background: transparent; border: 1px solid #1e293b; border-radius: 0.375rem; color: #475569; font-size: 0.8rem; cursor: pointer; transition: all 0.15s; }
+  .tab:hover { border-color: #334155; color: #94a3b8; }
+  .tab.tab-active { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+  .section-block { display: flex; flex-direction: column; gap: 0.4rem; }
+  .section-block-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #475569; }
+  .keyword-chips { display: flex; flex-wrap: wrap; gap: 0.3rem 0.4rem; }
+  .kw-chip { font-size: 0.72rem; padding: 0.15rem 0.5rem; background: #0f172a; border: 1px solid #1e293b; border-radius: 9999px; color: #60a5fa; }
   .predicted { background: #1e293b; border-radius: 0.5rem; padding: 1.25rem; }
   .predicted h3 { font-size: 0.85rem; color: #60a5fa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.75rem; }
   .questions-list { margin: 0; padding-left: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; }

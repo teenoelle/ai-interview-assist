@@ -269,3 +269,228 @@ pub async fn generate_answer_feedback(
         missed_metric,
     })
 }
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct CompanyBrief {
+    pub name: String,
+    pub what_they_do: String,
+    pub products: Vec<String>,
+    pub culture: String,
+    pub recent_news: String,
+    pub why_join: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct InterviewerSummary {
+    pub name: String,
+    pub role: String,
+    pub background: String,
+    pub tenure: String,
+    pub rapport_tip: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct SalaryTactics {
+    pub deflect: String,
+    pub anchor: String,
+    pub counter_range: String,
+    pub never_say: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct PracticeScore {
+    pub score: u8,          // 0-100
+    pub star_complete: bool,
+    pub has_metric: bool,
+    pub length_ok: bool,
+    pub coaching: String,
+    pub strong: String,
+}
+
+pub async fn generate_company_brief(
+    company_info: &str,
+    gemini_key: &str,
+    anthropic_key: Option<&str>,
+) -> CompanyBrief {
+    if company_info.trim().is_empty() {
+        return CompanyBrief {
+            name: String::new(), what_they_do: String::new(),
+            products: vec![], culture: String::new(),
+            recent_news: String::new(), why_join: String::new(),
+        };
+    }
+    let prompt = format!(
+        "Based on this company website content, extract a structured brief for a job candidate preparing for an interview.\n\nRespond in EXACTLY this format:\nNAME: [company name]\nWHAT: [1-2 sentences on what the company does]\nPRODUCTS: [product1] | [product2] | [product3]\nCULTURE: [1 sentence on work culture/values]\nNEWS: [1 sentence on recent notable news or achievements, or 'Not found']\nJOIN: [1 compelling reason why someone would want to work there]\n\n---\n{}",
+        &company_info[..company_info.len().min(5000)]
+    );
+    let text = call_ai(&prompt, gemini_key, anthropic_key, 400).await.unwrap_or_default();
+    let mut brief = CompanyBrief {
+        name: String::new(), what_they_do: String::new(),
+        products: vec![], culture: String::new(),
+        recent_news: String::new(), why_join: String::new(),
+    };
+    for line in text.lines() {
+        if let Some(v) = line.strip_prefix("NAME:") { brief.name = v.trim().to_string(); }
+        else if let Some(v) = line.strip_prefix("WHAT:") { brief.what_they_do = v.trim().to_string(); }
+        else if let Some(v) = line.strip_prefix("PRODUCTS:") {
+            brief.products = v.split('|').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+        }
+        else if let Some(v) = line.strip_prefix("CULTURE:") { brief.culture = v.trim().to_string(); }
+        else if let Some(v) = line.strip_prefix("NEWS:") { brief.recent_news = v.trim().to_string(); }
+        else if let Some(v) = line.strip_prefix("JOIN:") { brief.why_join = v.trim().to_string(); }
+    }
+    brief
+}
+
+pub async fn generate_interviewer_summary(
+    linkedin_text: &str,
+    gemini_key: &str,
+    anthropic_key: Option<&str>,
+) -> Vec<InterviewerSummary> {
+    if linkedin_text.trim().is_empty() { return vec![]; }
+    // Split by separator if multiple interviewers
+    let profiles: Vec<&str> = linkedin_text.split("---INTERVIEWER---")
+        .map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let mut results = Vec::new();
+    for profile in profiles.iter().take(3) {
+        let prompt = format!(
+            "Based on this LinkedIn profile, create a brief for a job candidate to help build rapport.\n\nRespond in EXACTLY this format:\nNAME: [person's name or 'Unknown']\nROLE: [current job title]\nBACKGROUND: [1 sentence on their career background]\nTENURE: [how long at current company, or 'Unknown']\nRAPPORT: [1 specific rapport-building tip based on their background, e.g. 'They came from engineering — mention technical details']\n\n---\n{}",
+            &profile[..profile.len().min(2000)]
+        );
+        let text = call_ai(&prompt, gemini_key, anthropic_key, 250).await.unwrap_or_default();
+        let mut s = InterviewerSummary {
+            name: "Unknown".to_string(), role: String::new(),
+            background: String::new(), tenure: String::new(), rapport_tip: String::new(),
+        };
+        for line in text.lines() {
+            if let Some(v) = line.strip_prefix("NAME:") { s.name = v.trim().to_string(); }
+            else if let Some(v) = line.strip_prefix("ROLE:") { s.role = v.trim().to_string(); }
+            else if let Some(v) = line.strip_prefix("BACKGROUND:") { s.background = v.trim().to_string(); }
+            else if let Some(v) = line.strip_prefix("TENURE:") { s.tenure = v.trim().to_string(); }
+            else if let Some(v) = line.strip_prefix("RAPPORT:") { s.rapport_tip = v.trim().to_string(); }
+        }
+        results.push(s);
+    }
+    results
+}
+
+pub async fn extract_jd_keywords(
+    job_description: &str,
+    gemini_key: &str,
+    anthropic_key: Option<&str>,
+) -> Vec<String> {
+    if job_description.trim().is_empty() { return vec![]; }
+    let prompt = format!(
+        "Extract the 12 most important keywords and skill phrases from this job description that a candidate should mention during their interview.\n\nOutput ONLY one keyword/phrase per line, no numbers, no bullets, no extra text. Focus on: technical skills, soft skills, domain knowledge, and key responsibilities.\n\n---\n{}",
+        &job_description[..job_description.len().min(3000)]
+    );
+    match call_ai(&prompt, gemini_key, anthropic_key, 300).await {
+        Ok(text) => text.lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty() && l.len() < 60)
+            .take(15)
+            .collect(),
+        Err(_) => vec![],
+    }
+}
+
+pub async fn predict_next_questions(
+    transcript_context: &str,
+    system_prompt: &str,
+    gemini_key: &str,
+    anthropic_key: Option<&str>,
+) -> Vec<String> {
+    let prompt = format!(
+        "Based on this interview conversation so far and the candidate's background, predict the 3 most likely questions the interviewer will ask next.\n\nOutput ONLY 3 questions, one per line, no numbers or bullets.\n\nCANDIDATE BACKGROUND (summary):\n{}\n\nCONVERSATION SO FAR:\n{}",
+        &system_prompt[..system_prompt.len().min(1500)],
+        &transcript_context[..transcript_context.len().min(2000)]
+    );
+    match call_ai(&prompt, gemini_key, anthropic_key, 300).await {
+        Ok(text) => text.lines()
+            .map(|l| l.trim().trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ')' || c == ' ').to_string())
+            .filter(|l| l.len() > 10)
+            .take(3)
+            .collect(),
+        Err(_) => vec![],
+    }
+}
+
+pub async fn generate_salary_tactics(
+    role_context: &str,
+    gemini_key: &str,
+    anthropic_key: Option<&str>,
+) -> SalaryTactics {
+    let prompt = format!(
+        "Generate salary negotiation tactics for a candidate interviewing for this role.\n\nRespond in EXACTLY this format:\nDEFLECT: [exact words to use to deflect salary question early — e.g. 'I'm flexible and focused on fit — can you share the budgeted range?']\nANCHOR: [exact words to anchor high when asked for a number — 1 sentence]\nCOUNTER: [suggested counter-offer approach — 1 sentence with placeholder like '15% above initial offer']\nNEVER: [the one thing never to say — e.g. 'Never give a number first if you can avoid it']\n\nROLE CONTEXT:\n{}",
+        &role_context[..role_context.len().min(800)]
+    );
+    let text = call_ai(&prompt, gemini_key, anthropic_key, 300).await.unwrap_or_default();
+    let mut t = SalaryTactics {
+        deflect: String::new(), anchor: String::new(),
+        counter_range: String::new(), never_say: String::new(),
+    };
+    for line in text.lines() {
+        if let Some(v) = line.strip_prefix("DEFLECT:") { t.deflect = v.trim().to_string(); }
+        else if let Some(v) = line.strip_prefix("ANCHOR:") { t.anchor = v.trim().to_string(); }
+        else if let Some(v) = line.strip_prefix("COUNTER:") { t.counter_range = v.trim().to_string(); }
+        else if let Some(v) = line.strip_prefix("NEVER:") { t.never_say = v.trim().to_string(); }
+    }
+    if t.deflect.is_empty() { t.deflect = "I'm flexible on compensation — can you share the range you have budgeted?".to_string(); }
+    if t.never_say.is_empty() { t.never_say = "Never give a specific number first if you can avoid it.".to_string(); }
+    t
+}
+
+pub async fn score_practice_answer(
+    question: &str,
+    answer: &str,
+    system_prompt: &str,
+    gemini_key: &str,
+    anthropic_key: Option<&str>,
+) -> PracticeScore {
+    let prompt = format!(
+        "Score this practice interview answer.\n\nQuestion: \"{}\"\nAnswer: \"{}\"\n\nCandidate background:\n{}\n\nRespond in EXACTLY this format:\nSCORE: [0-100 integer]\nSTAR: [yes/no — does the answer follow Situation/Task/Action/Result structure?]\nMETRIC: [yes/no — does it include a specific number, %, or measurable outcome?]\nLENGTH: [yes/no — is the answer an appropriate length, under 90 seconds to speak?]\nSTRONG: [1 sentence on what was done well]\nCOACH: [1-2 sentences of specific coaching to improve this answer]",
+        question, answer, &system_prompt[..system_prompt.len().min(1000)]
+    );
+    let text = call_ai(&prompt, gemini_key, anthropic_key, 300).await.unwrap_or_default();
+    let mut score = PracticeScore {
+        score: 50, star_complete: false, has_metric: false,
+        length_ok: true, coaching: String::new(), strong: String::new(),
+    };
+    for line in text.lines() {
+        let t = line.trim();
+        if let Some(v) = t.strip_prefix("SCORE:") {
+            score.score = v.trim().parse().unwrap_or(50);
+        } else if let Some(v) = t.strip_prefix("STAR:") {
+            score.star_complete = v.trim().to_lowercase().contains("yes");
+        } else if let Some(v) = t.strip_prefix("METRIC:") {
+            score.has_metric = v.trim().to_lowercase().contains("yes");
+        } else if let Some(v) = t.strip_prefix("LENGTH:") {
+            score.length_ok = v.trim().to_lowercase().contains("yes");
+        } else if let Some(v) = t.strip_prefix("STRONG:") {
+            score.strong = v.trim().to_string();
+        } else if let Some(v) = t.strip_prefix("COACH:") {
+            score.coaching = v.trim().to_string();
+        }
+    }
+    score
+}
+
+pub async fn extract_next_steps(
+    transcript_text: &str,
+    gemini_key: &str,
+    anthropic_key: Option<&str>,
+) -> Vec<String> {
+    if transcript_text.trim().is_empty() { return vec![]; }
+    let prompt = format!(
+        "From this interview transcript, extract all mentioned next steps, timelines, and follow-up actions. Include things like: when they'll get back to you, who to contact, what the hiring process looks like, any requested follow-ups.\n\nOutput one item per line, no bullets or numbers. If none found, output 'No specific next steps mentioned.'\n\n---\n{}",
+        &transcript_text[..transcript_text.len().min(4000)]
+    );
+    match call_ai(&prompt, gemini_key, anthropic_key, 300).await {
+        Ok(text) => text.lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .take(6)
+            .collect(),
+        Err(_) => vec![],
+    }
+}

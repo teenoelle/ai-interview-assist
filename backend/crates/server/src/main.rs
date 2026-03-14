@@ -136,6 +136,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/debrief", post(http_handler::handle_debrief))
         .route("/api/practice-question", post(http_handler::handle_practice_question))
         .route("/api/answer-feedback", post(http_handler::handle_answer_feedback))
+        .route("/api/next-question", post(http_handler::handle_next_question))
+        .route("/api/salary-coach", post(http_handler::handle_salary_coach))
+        .route("/api/score-practice", post(http_handler::handle_score_practice))
+        .route("/api/next-steps", post(http_handler::handle_next_steps))
         .fallback_service(ServeDir::new(&frontend_path))
         .layer(CorsLayer::permissive())
         .with_state(state);

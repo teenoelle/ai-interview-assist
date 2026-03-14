@@ -12,15 +12,27 @@
   import InterviewHistoryPanel from './components/InterviewHistoryPanel.svelte';
   import WhisperOverlay from './components/WhisperOverlay.svelte';
   import QuestionsHistoryPanel from './components/QuestionsHistoryPanel.svelte';
+  import CompanyBriefPanel from './components/CompanyBriefPanel.svelte';
+  import InterviewerProfilePanel from './components/InterviewerProfilePanel.svelte';
+  import StoryBankPanel from './components/StoryBankPanel.svelte';
+  import KeywordTrackerPanel from './components/KeywordTrackerPanel.svelte';
+  import SalaryCoachPanel from './components/SalaryCoachPanel.svelte';
+  import NextQuestionPanel from './components/NextQuestionPanel.svelte';
+  import EnergyCoachPanel from './components/EnergyCoachPanel.svelte';
   import { EventWebSocket } from './lib/websocket';
   import { countFillers, totalFillers } from './lib/filler';
   import { saveInterview } from './lib/interviewHistory';
   import { tagQuestion } from './lib/questionTagger';
   import { detectRedFlag } from './lib/redFlagDetector';
   import { derivePersonality } from './lib/personalityTracker';
+  import { loadKeywords, checkMentioned } from './lib/keywordTracker';
+  import { matchStories } from './lib/storyBank';
+  import { isSalaryQuestion } from './lib/salaryDetector';
+  import { analyzePace, detectEnergySignals } from './lib/paceCoach';
   import type { TranscriptEntry, SuggestionEntry, WsEvent } from './lib/types';
   import type { FillerCount } from './lib/filler';
   import type { MediaCapture } from './lib/capture';
+  import type { CompanyBrief, InterviewerSummary } from './lib/api';
 
   type Phase = 'setup' | 'practice' | 'checklist' | 'interview';
 
@@ -39,7 +51,37 @@
   let focusMode = $state(false);
   let showHistory = $state(false);
   let showWhisper = $state(false);
+  let showStoryBank = $state(false);
   let emotionHistory = $state<string[]>([]);
+
+  // Setup-time data
+  let companyBrief = $state<CompanyBrief | null>(null);
+  let interviewerSummaries = $state<InterviewerSummary[]>([]);
+
+  // Keyword tracker
+  let jdKeywords = $state<string[]>(loadKeywords());
+  let mentionedKeywords = $state<Set<string>>(new Set());
+
+  // Salary coach
+  let salaryTactics = $state<{ deflect: string; anchor: string; counter_range: string; never_say: string } | null>(null);
+  let loadingSalary = $state(false);
+
+  // Next question predictor
+  let nextQuestions = $state<string[]>([]);
+  let loadingNextQ = $state(false);
+
+  // Pace / energy coach
+  let recentYouTexts = $state<{ text: string; time: number }[]>([]);
+  const PACE_WINDOW_SEC = 30;
+  const paceReading = $derived(
+    analyzePace(
+      recentYouTexts.filter(t => Date.now() - t.time < PACE_WINDOW_SEC * 1000).map(t => t.text),
+      PACE_WINDOW_SEC
+    )
+  );
+  const energySignal = $derived(
+    detectEnergySignals(recentYouTexts.slice(-6).map(t => t.text))
+  );
 
   // Capture instance (for triggerFrameCapture)
   let captureInst = $state<MediaCapture | null>(null);
@@ -259,7 +301,39 @@
 
   let eventWs: EventWebSocket | null = null;
 
-  function handleSetupComplete() { phase = 'checklist'; }
+  async function fetchSalaryCoach() {
+    if (salaryTactics || loadingSalary) return;
+    loadingSalary = true;
+    try {
+      const sp = companyBrief ? `${companyBrief.name}: ${companyBrief.what_they_do}` : 'unknown role';
+      const resp = await fetch('/api/salary-coach', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role_context: sp }),
+      });
+      if (resp.ok) salaryTactics = await resp.json();
+    } catch { /* ignore */ }
+    loadingSalary = false;
+  }
+
+  async function predictNextQuestions() {
+    if (loadingNextQ) return;
+    loadingNextQ = true;
+    try {
+      const resp = await fetch('/api/next-question', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript: transcript.map(e => ({ speaker: e.speaker, text: e.text })) }),
+      });
+      if (resp.ok) { const d = await resp.json(); nextQuestions = d.questions ?? []; }
+    } catch { /* ignore */ }
+    loadingNextQ = false;
+  }
+
+  function handleSetupComplete(data?: { companyBrief?: any; interviewerSummaries?: any[]; jdKeywords?: string[] }) {
+    if (data?.companyBrief) companyBrief = data.companyBrief;
+    if (data?.interviewerSummaries) interviewerSummaries = data.interviewerSummaries;
+    if (data?.jdKeywords) { jdKeywords = data.jdKeywords; mentionedKeywords = new Set(); }
+    phase = 'checklist';
+  }
   function handleChecklistDone() { phase = 'interview'; connectWs(); }
   function handlePractice(questions: string[]) { predictedQuestions = questions; phase = 'practice'; connectWs(); }
 
@@ -280,6 +354,14 @@
           youSegments++;
           startAnswerTimer();
           youSegmentsSinceQuestion = [...youSegmentsSinceQuestion, event.text];
+          recentYouTexts = [...recentYouTexts.slice(-19), { text: event.text, time: Date.now() }];
+          // Track JD keywords mentioned
+          const newlyMentioned = checkMentioned(event.text, jdKeywords);
+          if (newlyMentioned.length > 0) {
+            const updated = new Set(mentionedKeywords);
+            newlyMentioned.forEach(k => updated.add(k));
+            mentionedKeywords = updated;
+          }
           const newCounts = countFillers(event.text);
           const merged: Record<string, number> = {};
           for (const f of allFillerCounts) merged[f.word] = f.count;
@@ -291,6 +373,7 @@
           const tone = analyzeAudioTone(event.text);
           audioEmotion = tone.emotion;
           audioReason = tone.reason;
+          if (isSalaryQuestion(event.text)) fetchSalaryCoach();
           const now = Date.now();
           if (captureInst && now - lastSentimentTrigger > 10000) {
             lastSentimentTrigger = now;
@@ -481,6 +564,7 @@
             {/if}
           </div>
 
+          <button class="history-btn" onclick={() => showStoryBank = !showStoryBank}>Stories</button>
           <button class="history-btn" onclick={() => showHistory = true}>History</button>
           <button class="debrief-btn" onclick={() => showDebrief = true}>End Interview</button>
           <CaptureButton
@@ -611,6 +695,38 @@
 
             <BodyLanguagePanel emotion={emotion} coaching={coaching} coachingWhy={coachingWhy} />
 
+            <!-- Energy / pace coach -->
+            <EnergyCoachPanel wpm={paceReading.wordsPerMinute} status={paceReading.status} tip={paceReading.tip} energySignal={energySignal} />
+
+            <!-- Salary coach (appears when salary detected) -->
+            {#if salaryTactics}
+              <SalaryCoachPanel tactics={salaryTactics} onClose={() => salaryTactics = null} />
+            {/if}
+
+            <!-- Next question predictor -->
+            <NextQuestionPanel questions={nextQuestions} loading={loadingNextQ} onPredict={predictNextQuestions} />
+
+            <!-- JD keyword tracker -->
+            {#if jdKeywords.length > 0}
+              <div class="side-section">
+                <div class="side-section-label">Keywords</div>
+                <KeywordTrackerPanel keywords={jdKeywords} {mentionedKeywords} />
+              </div>
+            {/if}
+
+            <!-- Company brief (collapsible) -->
+            {#if companyBrief}
+              <CompanyBriefPanel brief={companyBrief} />
+            {/if}
+
+            <!-- Interviewer profiles -->
+            {#if interviewerSummaries.length > 0}
+              <div class="side-section">
+                <div class="side-section-label">Interviewers</div>
+                <InterviewerProfilePanel interviewers={interviewerSummaries} />
+              </div>
+            {/if}
+
             <div class="side-stats">
               <div class="side-stat" title="Time since you started answering — aim for under 30 seconds">
                 <span class="side-label">Answer</span>
@@ -695,6 +811,15 @@
     {#if showWhisper && whisperTell}
       <WhisperOverlay tell={whisperTell} onClose={() => showWhisper = false} />
     {/if}
+    {#if showStoryBank}
+      <div class="story-bank-overlay">
+        <StoryBankPanel
+          mode="interview"
+          matchQuestion={suggestions[currentQuestionIdx]?.question ?? ''}
+          onClose={() => showStoryBank = false}
+        />
+      </div>
+    {/if}
   {/if}
 {#if showHistory}
   <InterviewHistoryPanel
@@ -718,6 +843,16 @@
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   }
   .setup-header p { color: #64748b; margin-top: 0.5rem; }
+
+  .side-section { display: flex; flex-direction: column; gap: 0.3rem; }
+  .side-section-label { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #334155; }
+
+  .story-bank-overlay {
+    position: fixed; top: 4rem; right: 1rem; width: 340px; max-height: calc(100vh - 5rem);
+    background: #0a1020; border: 1px solid #1e293b; border-radius: 0.6rem;
+    padding: 0.75rem; overflow-y: auto; z-index: 200;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
 
   .interview-layout { display: flex; flex-direction: column; height: 100vh; }
   .interview-header {

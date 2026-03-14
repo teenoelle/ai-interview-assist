@@ -9,6 +9,9 @@
   let hints = $state<Record<number, string>>({});
   let loadingHint = $state(false);
   let loadingAll = $state(false);
+  let answers = $state<Record<number, string>>({});
+  let scores = $state<Record<number, { score: number; star_complete: boolean; has_metric: boolean; length_ok: boolean; coaching: string; strong: string }>>({});
+  let scoringIdx = $state<number | null>(null);
 
   const currentQuestion = $derived(questions[currentIdx] ?? '');
 
@@ -27,6 +30,24 @@
       }
     } catch { /* ignore */ }
     loadingHint = false;
+  }
+
+  async function scoreAnswer(idx: number) {
+    const answer = answers[idx];
+    if (!answer?.trim() || scoringIdx === idx) return;
+    scoringIdx = idx;
+    try {
+      const resp = await fetch('/api/score-practice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: questions[idx], answer }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        scores = { ...scores, [idx]: data };
+      }
+    } catch { /* ignore */ }
+    scoringIdx = null;
   }
 
   async function getAllHints() {
@@ -85,6 +106,38 @@
           {@html hints[currentIdx].replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')}
         </div>
       {/if}
+      <div class="answer-section">
+        <label class="answer-label" for="answer-{currentIdx}">Your practice answer</label>
+        <textarea
+          id="answer-{currentIdx}"
+          class="answer-input"
+          rows={4}
+          bind:value={answers[currentIdx]}
+          placeholder="Type your answer here to get it scored..."
+        ></textarea>
+        <button
+          class="score-btn"
+          onclick={() => scoreAnswer(currentIdx)}
+          disabled={!answers[currentIdx]?.trim() || scoringIdx === currentIdx}
+        >
+          {scoringIdx === currentIdx ? 'Scoring...' : '⭐ Score my answer'}
+        </button>
+        {#if scores[currentIdx]}
+          {@const sc = scores[currentIdx]}
+          <div class="score-card">
+            <div class="score-top">
+              <span class="score-num" style="color: {sc.score >= 70 ? '#22c55e' : sc.score >= 50 ? '#f59e0b' : '#ef4444'}">{sc.score}/100</span>
+              <div class="score-badges">
+                <span class="badge" class:badge-on={sc.star_complete}>STAR</span>
+                <span class="badge" class:badge-on={sc.has_metric}>Metric</span>
+                <span class="badge" class:badge-on={sc.length_ok}>Length</span>
+              </div>
+            </div>
+            {#if sc.strong}<p class="score-strong">✓ {sc.strong}</p>{/if}
+            {#if sc.coaching}<p class="score-coach">{sc.coaching}</p>{/if}
+          </div>
+        {/if}
+      </div>
     </div>
 
     <div class="nav">
@@ -184,4 +237,34 @@
   .dot.active { background: #3b82f6; transform: scale(1.3); }
   .dot.hinted { background: #22c55e; }
   .empty { color: #475569; font-style: italic; text-align: center; padding: 3rem; }
+  .answer-section { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+  .answer-label { font-size: 0.75rem; color: #64748b; }
+  .answer-input {
+    width: 100%; padding: 0.6rem 0.75rem;
+    background: #1e293b; border: 1px solid #334155; border-radius: 0.375rem;
+    color: #e2e8f0; font-size: 0.875rem; resize: vertical; font-family: inherit;
+  }
+  .answer-input:focus { outline: none; border-color: #3b82f6; }
+  .score-btn {
+    align-self: flex-start; padding: 0.4rem 1rem;
+    background: transparent; border: 1px solid #7c3aed; border-radius: 0.375rem;
+    color: #a78bfa; font-size: 0.8rem; cursor: pointer; transition: all 0.15s;
+  }
+  .score-btn:hover:not(:disabled) { background: #3b0764; }
+  .score-btn:disabled { opacity: 0.5; cursor: default; }
+  .score-card {
+    background: #0a0a1a; border: 1px solid #1e293b; border-radius: 0.5rem;
+    padding: 0.75rem; display: flex; flex-direction: column; gap: 0.4rem;
+  }
+  .score-top { display: flex; align-items: center; gap: 0.75rem; }
+  .score-num { font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .score-badges { display: flex; gap: 0.3rem; }
+  .badge {
+    padding: 0.1rem 0.4rem; border-radius: 0.2rem; font-size: 0.6rem;
+    font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+    background: #1e293b; color: #334155; border: 1px solid #1e293b;
+  }
+  .badge.badge-on { background: #14532d; color: #4ade80; border-color: #14532d; }
+  .score-strong { margin: 0; font-size: 0.78rem; color: #4ade80; }
+  .score-coach { margin: 0; font-size: 0.78rem; color: #94a3b8; line-height: 1.5; font-style: italic; }
 </style>

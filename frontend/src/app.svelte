@@ -8,13 +8,20 @@
   import RateLimitPanel from './components/RateLimitPanel.svelte';
   import DebriefModal from './components/DebriefModal.svelte';
   import PracticePanel from './components/PracticePanel.svelte';
+  import PreInterviewChecklist from './components/PreInterviewChecklist.svelte';
+  import InterviewHistoryPanel from './components/InterviewHistoryPanel.svelte';
+  import WhisperOverlay from './components/WhisperOverlay.svelte';
   import { EventWebSocket } from './lib/websocket';
   import { countFillers, totalFillers } from './lib/filler';
+  import { saveInterview } from './lib/interviewHistory';
+  import { tagQuestion } from './lib/questionTagger';
+  import { detectRedFlag } from './lib/redFlagDetector';
+  import { derivePersonality } from './lib/personalityTracker';
   import type { TranscriptEntry, SuggestionEntry, WsEvent } from './lib/types';
   import type { FillerCount } from './lib/filler';
   import type { MediaCapture } from './lib/capture';
 
-  type Phase = 'setup' | 'practice' | 'interview';
+  type Phase = 'setup' | 'practice' | 'checklist' | 'interview';
 
   let phase = $state<Phase>('setup');
   let capturing = $state(false);
@@ -29,6 +36,9 @@
   let predictedQuestions = $state<string[]>([]);
   let showDebrief = $state(false);
   let focusMode = $state(false);
+  let showHistory = $state(false);
+  let showWhisper = $state(false);
+  let emotionHistory = $state<string[]>([]);
 
   // Capture instance (for triggerFrameCapture)
   let captureInst = $state<MediaCapture | null>(null);
@@ -188,9 +198,20 @@
   const ratioColor = $derived(
     youPct === 0 ? '#475569' : youPct < 65 ? '#22c55e' : '#f59e0b'
   );
+  function extractTell(suggestion: string): string {
+    for (const line of suggestion.split('\n')) {
+      const m = line.match(/^(?:Say|Tell):\s*(.+)/i);
+      if (m) return m[1].trim();
+    }
+    return suggestion.split('\n')[0]?.trim() ?? '';
+  }
   const latestSuggestion = $derived(
     suggestions.length > 0 ? suggestions[suggestions.length - 1] : null
   );
+  const whisperTell = $derived(
+    latestSuggestion?.suggestion ? extractTell(latestSuggestion.suggestion) : ''
+  );
+  const personality = $derived(derivePersonality(emotionHistory));
 
   // Rate limits
   interface RateLimitEntry { remaining: number; limit: number; history: Array<{ r: number; t: number }>; }
@@ -202,7 +223,8 @@
 
   let eventWs: EventWebSocket | null = null;
 
-  function handleSetupComplete() { phase = 'interview'; connectWs(); }
+  function handleSetupComplete() { phase = 'checklist'; }
+  function handleChecklistDone() { phase = 'interview'; connectWs(); }
   function handlePractice(questions: string[]) { predictedQuestions = questions; phase = 'practice'; connectWs(); }
 
   function connectWs() {
@@ -248,6 +270,7 @@
         if (event.reason) emotionReason = event.reason;
         if (event.coaching) coaching = event.coaching;
         if (event.coaching_why) coachingWhy = event.coaching_why;
+        emotionHistory = [...emotionHistory, event.emotion];
         break;
       case 'question_detected':
         // Evaluate previous answer before moving on
@@ -278,7 +301,13 @@
         }
         currentQuestionIdx = suggestions.length;
         youSegmentsSinceQuestion = [];
-        suggestions = [...suggestions, { question: event.question, suggestion: '', streaming: true }];
+        suggestions = [...suggestions, {
+          question: event.question,
+          suggestion: '',
+          streaming: true,
+          tag: tagQuestion(event.question),
+          redFlag: detectRedFlag(event.question) ?? undefined,
+        }];
         resetAnswerTimer();
         break;
       case 'suggestion_token':
@@ -331,6 +360,7 @@
         case '+': case '=': fontSize = Math.min(20, fontSize + 1); break;
         case '-': case '_': fontSize = Math.max(11, fontSize - 1); break;
         case 't': case 'T': if (!showVoiceMenu) ttsEnabled = !ttsEnabled; break;
+        case 'w': case 'W': showWhisper = !showWhisper; break;
       }
     }
     window.addEventListener('keydown', onKey);
@@ -350,6 +380,9 @@
       <SetupForm onSetupComplete={handleSetupComplete} onPractice={handlePractice} />
     </div>
 
+  {:else if phase === 'checklist'}
+    <PreInterviewChecklist onStart={handleChecklistDone} onSkip={handleChecklistDone} />
+
   {:else if phase === 'practice'}
     <PracticePanel
       questions={predictedQuestions}
@@ -362,7 +395,7 @@
       <header class="interview-header">
         <h1>AI Interview Assistant</h1>
         <div class="header-right">
-          <div class="shortcuts-hint">F: focus · T: voice · Esc: clear · +/−: font</div>
+          <div class="shortcuts-hint">F: focus · W: whisper · T: voice · Esc: clear · +/−: font</div>
 
           <!-- TTS controls -->
           <div class="tts-controls">
@@ -401,6 +434,7 @@
             {/if}
           </div>
 
+          <button class="history-btn" onclick={() => showHistory = true}>History</button>
           <button class="debrief-btn" onclick={() => showDebrief = true}>End Interview</button>
           <CaptureButton
             onCapture={(v) => { capturing = v; if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); } }}
@@ -472,6 +506,12 @@
                 </div>
               {/if}
               <div class="interviewer-label">Live Screen · Sentiment from interviewer's camera</div>
+            </div>
+          {/if}
+          {#if personality}
+            <div class="personality-strip" style="border-color: {personality.color}">
+              <span class="personality-label" style="color: {personality.color}">{personality.label}</span>
+              <span class="personality-desc">{personality.description}</span>
             </div>
           {/if}
           <div class="col-body col-right-body">
@@ -554,9 +594,28 @@
     {/if}
 
     {#if showDebrief}
-      <DebriefModal {transcript} {suggestions} onClose={() => showDebrief = false} />
+      <DebriefModal
+        {transcript}
+        {suggestions}
+        onClose={() => showDebrief = false}
+        onSave={(r) => saveInterview({
+          summary: r.summary,
+          strong_points: r.strong_points,
+          improvement_areas: r.improvement_areas,
+          rehearsal_questions: r.improvement_areas.map(a => `Practice answering: ${a}`),
+        })}
+      />
+    {/if}
+    {#if showWhisper && whisperTell}
+      <WhisperOverlay tell={whisperTell} onClose={() => showWhisper = false} />
     {/if}
   {/if}
+{#if showHistory}
+  <InterviewHistoryPanel
+    onClose={() => showHistory = false}
+    onRehearsal={(questions) => { predictedQuestions = questions; phase = 'practice'; connectWs(); showHistory = false; }}
+  />
+{/if}
 </main>
 
 <style>
@@ -589,6 +648,36 @@
     color: #64748b; font-size: 0.75rem; cursor: pointer; white-space: nowrap;
   }
   .debrief-btn:hover { border-color: #a78bfa; color: #a78bfa; }
+
+  .history-btn {
+    padding: 0.3rem 0.8rem; background: transparent;
+    border: 1px solid #334155; border-radius: 0.375rem;
+    color: #64748b; font-size: 0.75rem; cursor: pointer; white-space: nowrap;
+  }
+  .history-btn:hover { border-color: #60a5fa; color: #60a5fa; }
+
+  .personality-strip {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.4rem 0.75rem;
+    border-left: 3px solid;
+    background: #080d18;
+    border-bottom: 1px solid #1e293b;
+  }
+  .personality-label {
+    font-size: 0.6rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .personality-desc {
+    font-size: 0.68rem;
+    color: #64748b;
+    line-height: 1.3;
+    font-style: italic;
+  }
 
   /* TTS */
   .tts-controls { position: relative; display: flex; align-items: center; gap: 0.25rem; }

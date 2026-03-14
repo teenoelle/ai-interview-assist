@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { SuggestionEntry } from '../lib/types';
+  import { TAG_CONFIG } from '../lib/questionTagger';
 
   const { suggestions, onClear, teleprompter = false } = $props<{
     suggestions: SuggestionEntry[];
@@ -158,7 +159,19 @@
     {#if current}
       {@const parsed = parseSuggestion(current.suggestion)}
       <div class="tp-card">
-        <div class="tp-question">"{current.question}"</div>
+        <div class="tp-question-row">
+          {#if current.tag}
+            {@const tc = TAG_CONFIG[current.tag]}
+            <span class="tp-tag" style="color: {tc.color}; background: {tc.bg}">{tc.label}</span>
+          {/if}
+          <span class="tp-question">"{current.question}"</span>
+        </div>
+        {#if current.redFlag}
+          <div class="tp-redflag">
+            <span class="redflag-cat">{current.redFlag.category}</span>
+            <span class="redflag-note">{current.redFlag.coachingNote}</span>
+          </div>
+        {/if}
 
         {#if current.streaming && !current.suggestion}
           <span class="tp-loading">Generating<span class="dots">...</span></span>
@@ -239,7 +252,17 @@
             <div class="question-row">
               <span class="q-num-badge">Q{i + 1}</span>
               <p class="question-text">"{entry.question}"</p>
+              {#if entry.tag}
+                {@const tc = TAG_CONFIG[entry.tag]}
+                <span class="entry-tag" style="color: {tc.color}; background: {tc.bg}">{tc.label}</span>
+              {/if}
             </div>
+            {#if entry.redFlag}
+              <div class="entry-redflag">
+                <span class="redflag-cat">{entry.redFlag.category}</span>
+                <span class="redflag-note">{entry.redFlag.coachingNote}</span>
+              </div>
+            {/if}
             {#if entry.streaming && !entry.suggestion}
               <span class="loading">Generating<span class="dots">...</span></span>
             {:else}
@@ -561,6 +584,71 @@
     color: #1e293b;
     font-style: italic;
     font-size: 0.85rem;
+  }
+
+  /* Question tag + red flag */
+  .tp-question-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .tp-tag {
+    display: inline-block;
+    padding: 0.08rem 0.4rem;
+    border-radius: 0.2rem;
+    font-size: 0.55rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    flex-shrink: 0;
+    margin-top: 0.05rem;
+  }
+  .tp-redflag {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.4rem 0.6rem;
+    background: #1a0800;
+    border-left: 3px solid #b45309;
+    border-radius: 0.3rem;
+    flex-shrink: 0;
+  }
+  .redflag-cat {
+    font-size: 0.58rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #f59e0b;
+  }
+  .redflag-note {
+    font-size: 0.72rem;
+    color: #94a3b8;
+    line-height: 1.4;
+    font-style: italic;
+  }
+  .entry-tag {
+    display: inline-block;
+    padding: 0.05rem 0.35rem;
+    border-radius: 0.2rem;
+    font-size: 0.52rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 0.15rem;
+  }
+  .entry-redflag {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding: 0.3rem 0.5rem;
+    background: #1a0800;
+    border-left: 2px solid #b45309;
+    border-radius: 0.25rem;
+    margin-bottom: 0.1rem;
   }
 
   /* === Standard panel mode === */

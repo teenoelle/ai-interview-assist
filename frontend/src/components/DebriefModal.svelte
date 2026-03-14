@@ -1,10 +1,11 @@
 <script lang="ts">
   import type { TranscriptEntry, SuggestionEntry } from '../lib/types';
 
-  const { transcript, suggestions, onClose } = $props<{
+  const { transcript, suggestions, onClose, onSave } = $props<{
     transcript: TranscriptEntry[];
     suggestions: SuggestionEntry[];
     onClose: () => void;
+    onSave?: (result: DebriefResult) => void;
   }>();
 
   interface DebriefResult {
@@ -34,6 +35,7 @@
       });
       if (!resp.ok) throw new Error(`Debrief failed: ${resp.status}`);
       result = await resp.json();
+      onSave?.(result);
     } catch (e) {
       error = String(e);
     } finally {

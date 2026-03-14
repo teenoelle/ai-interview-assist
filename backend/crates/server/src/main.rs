@@ -5,6 +5,7 @@ use axum::{
     Router,
 };
 use tower_http::{cors::CorsLayer, services::ServeDir};
+use axum::extract::DefaultBodyLimit;
 use tracing_subscriber::EnvFilter;
 use common::config::Config;
 use common::messages::WsEvent;
@@ -142,6 +143,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/next-steps", post(http_handler::handle_next_steps))
         .fallback_service(ServeDir::new(&frontend_path))
         .layer(CorsLayer::permissive())
+        .layer(DefaultBodyLimit::max(50 * 1024 * 1024)) // 50 MB — handles large CV uploads
         .with_state(state);
 
     let addr = format!("0.0.0.0:{}", config.port);

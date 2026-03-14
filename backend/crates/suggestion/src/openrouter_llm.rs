@@ -3,8 +3,6 @@ use tokio::sync::broadcast;
 use common::messages::WsEvent;
 use crate::groq_llm::stream_openai_compat;
 
-// Free models on OpenRouter — verified available, no credits required.
-// Listed in preference order: largest/best first, smaller models as fallback.
 const FREE_MODELS: &[&str] = &[
     "meta-llama/llama-3.3-70b-instruct:free",
     "deepseek/deepseek-r1:free",
@@ -19,13 +17,13 @@ pub async fn stream_suggestions(
     user_prompt: &str,
     event_tx: broadcast::Sender<WsEvent>,
 ) -> Result<()> {
-    // Try each free model in order
     let mut last_err = anyhow::anyhow!("No OpenRouter free models available");
     for model in FREE_MODELS {
         match stream_openai_compat(
             api_key,
             "https://openrouter.ai/api/v1/chat/completions",
             model,
+            "OpenRouter",
             system_prompt,
             user_prompt,
             event_tx.clone(),

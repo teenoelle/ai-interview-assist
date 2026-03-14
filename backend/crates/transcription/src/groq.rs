@@ -1,5 +1,11 @@
 use anyhow::{anyhow, Result};
 use hound::{SampleFormat, WavSpec, WavWriter};
+use std::sync::OnceLock;
+
+static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+fn client() -> &'static reqwest::Client {
+    CLIENT.get_or_init(reqwest::Client::new)
+}
 
 pub async fn transcribe(api_key: &str, pcm: &[u8]) -> Result<String> {
     let wav_bytes = pcm_to_wav(pcm)?;
@@ -10,11 +16,12 @@ pub async fn transcribe(api_key: &str, pcm: &[u8]) -> Result<String> {
 
     let form = reqwest::multipart::Form::new()
         .part("file", part)
-        .text("model", "whisper-large-v3")
-        .text("response_format", "text");
+        .text("model", "whisper-large-v3-turbo")
+        .text("language", "en")
+        .text("response_format", "text")
+        .text("prompt", "Interview conversation. Speaker may have a non-native accent. Transcribe faithfully.");
 
-    let client = reqwest::Client::new();
-    let resp = client
+    let resp = client()
         .post("https://api.groq.com/openai/v1/audio/transcriptions")
         .bearer_auth(api_key)
         .multipart(form)
@@ -28,7 +35,6 @@ pub async fn transcribe(api_key: &str, pcm: &[u8]) -> Result<String> {
         return Err(anyhow!("Groq transcription error {}: {}", status, body));
     }
 
-    // response_format=text returns plain text, not JSON
     let text = resp.text().await?;
     Ok(text.trim().to_string())
 }

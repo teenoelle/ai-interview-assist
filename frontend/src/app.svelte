@@ -463,6 +463,14 @@
             <div class="interviewer-preview">
               <!-- svelte-ignore a11y_media_has_caption -->
               <video bind:this={screenEl} class="interviewer-video" autoplay muted playsinline></video>
+              {#if emotion}
+                <div class="interviewer-overlay">
+                  <span class="overlay-emotion">{emotion}</span>
+                  {#if coaching}
+                    <span class="overlay-coaching">{coaching}</span>
+                  {/if}
+                </div>
+              {/if}
               <div class="interviewer-label">Live Screen · Sentiment from interviewer's camera</div>
             </div>
           {/if}
@@ -699,6 +707,7 @@
   /* Interviewer screen preview */
   .interviewer-preview {
     flex-shrink: 0;
+    position: relative;
     display: flex;
     flex-direction: column;
     background: #060e1a;
@@ -710,6 +719,30 @@
     object-fit: cover;
     display: block;
     background: #0a1525;
+  }
+  .interviewer-overlay {
+    position: absolute;
+    bottom: 1.6rem; /* sits above the interviewer-label */
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.82), transparent);
+    padding: 0.75rem 0.6rem 0.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+  .overlay-emotion {
+    font-size: 0.65rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #60a5fa;
+  }
+  .overlay-coaching {
+    font-size: 0.72rem;
+    color: #cbd5e1;
+    line-height: 1.4;
+    font-style: italic;
   }
   .interviewer-label {
     font-size: 0.55rem;

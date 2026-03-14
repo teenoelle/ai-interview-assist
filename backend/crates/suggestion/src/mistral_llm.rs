@@ -13,6 +13,7 @@ pub async fn stream_suggestions(
         api_key,
         "https://api.mistral.ai/v1/chat/completions",
         "mistral-small-latest",
+        "Mistral",
         system_prompt,
         user_prompt,
         event_tx,

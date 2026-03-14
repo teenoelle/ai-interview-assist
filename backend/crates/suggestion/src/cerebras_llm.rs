@@ -13,6 +13,7 @@ pub async fn stream_suggestions(
         api_key,
         "https://api.cerebras.ai/v1/chat/completions",
         "llama3.1-8b",
+        "Cerebras",
         system_prompt,
         user_prompt,
         event_tx,

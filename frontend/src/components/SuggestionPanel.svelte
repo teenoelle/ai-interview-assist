@@ -48,8 +48,9 @@
     return text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   }
 
-  function parseSuggestion(text: string): { cue: string; tell: string; body: string; ask: string } {
+  function parseSuggestion(text: string): { affirm: string; cue: string; tell: string; body: string; ask: string } {
     const lines = text.split('\n');
+    let affirm = '';
     let tell = '';
     let cue = 'Say';
     let body = '';
@@ -60,7 +61,9 @@
     for (const line of lines) {
       const trimmed = line.trim();
       if (!pastSeparator) {
-        if (trimmed.match(/^(Tell|Say):/i)) {
+        if (trimmed.match(/^Affirm:/i)) {
+          affirm = trimmed.replace(/^Affirm:\s*/i, '').trim();
+        } else if (trimmed.match(/^(Tell|Say):/i)) {
           cue = 'Say';
           tell = trimmed.replace(/^(Tell|Say):\s*/i, '').trim();
         } else if (trimmed.match(/^Ask:/i) && !tell) {
@@ -86,7 +89,7 @@
       body = text;
     }
 
-    return { cue, tell, body, ask };
+    return { affirm, cue, tell, body, ask };
   }
 
   const totalCount = $derived(suggestions.length);
@@ -159,6 +162,12 @@
         {#if current.streaming && !current.suggestion}
           <span class="tp-loading">Generating<span class="dots">...</span></span>
         {:else}
+          {#if parsed.affirm}
+            <div class="tp-affirm-row">
+              <span class="cue-badge cue-affirm">Affirm</span>
+              <span class="tp-affirm-text">{parsed.affirm}</span>
+            </div>
+          {/if}
           <div class="tp-cue-row">
             <span class="cue-badge" class:cue-ask={parsed.cue === 'Ask'}>{parsed.cue}</span>
             <span class="tp-tell">{parsed.tell}{#if current.streaming && !parsed.body}<span class="cursor">|</span>{/if}</span>
@@ -191,7 +200,7 @@
       <div class="tp-empty">Waiting for a question...</div>
     {/if}
 
-    <span class="tp-hint">Say = speak it · Ask = ask them · bold = keywords</span>
+    <span class="tp-hint">Affirm = acknowledge their concern · Say = speak it · Ask = ask them · bold = keywords</span>
   </div>
 
 {:else}
@@ -222,6 +231,12 @@
             {#if entry.streaming && !entry.suggestion}
               <span class="loading">Generating<span class="dots">...</span></span>
             {:else}
+              {#if parsed.affirm}
+                <div class="affirm-row">
+                  <span class="cue-badge cue-affirm">Affirm</span>
+                  <span class="affirm-text">{parsed.affirm}</span>
+                </div>
+              {/if}
               <div class="cue-row">
                 <span class="cue-badge" class:cue-ask={parsed.cue === 'Ask'}>{parsed.cue}</span>
                 <span class="tell-text">{parsed.tell}{#if entry.streaming && !parsed.body}<span class="cursor">|</span>{/if}</span>
@@ -405,6 +420,26 @@
     flex-shrink: 0;
   }
   .cue-badge.cue-ask { background: #3b0764; color: #c084fc; }
+  .cue-badge.cue-affirm { background: #1a2d4a; color: #60a5fa; }
+
+  /* Teleprompter Affirm row */
+  .tp-affirm-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.35rem 0.6rem;
+    background: #070f1e;
+    border-radius: 0.4rem;
+    border-left: 2px solid #1e3a5f;
+    flex-shrink: 0;
+  }
+  .tp-affirm-text {
+    color: #60a5fa;
+    font-size: 0.82rem;
+    font-style: italic;
+    line-height: 1.4;
+    overflow-wrap: break-word;
+  }
 
   .tp-cue-row {
     display: flex;
@@ -576,6 +611,25 @@
     line-height: 1.4;
     overflow-wrap: break-word;
     word-break: break-word;
+  }
+
+  /* Standard panel Affirm row */
+  .affirm-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+    padding: 0.3rem 0.5rem;
+    background: #070f1e;
+    border-radius: 0.3rem;
+    border-left: 2px solid #1e3a5f;
+  }
+  .affirm-text {
+    color: #60a5fa;
+    font-size: 0.78rem;
+    font-style: italic;
+    line-height: 1.4;
+    flex: 1;
+    overflow-wrap: break-word;
   }
 
   .cue-row {

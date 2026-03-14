@@ -69,3 +69,40 @@ the suggestions get cut off so that i can't see the full sentence. fix this.
 
 make it more user friendly to find previous questions and answer suggestions. the previous and next questions should be easily viewed and clickable. also, if the interviewer asks a new question as i am answering a previous question, the app should add the ability to move forward or to the latest question to see suggestions for the new question. 
 
+in the interview debrief, offer a copy-able follow up email.
+
+allow me to email the interview debrief to myself.
+
+let the voice have its own volume control. 
+
+
+
+
+
+add suggestions according to what the interviewee says. if they could have answered the question better or didn't ask the follow up question, 
+
+list the follow up questions the interviewee should ask in an easily viewable list in a separate
+
+the capture only shows the interviewee's video square. it doesn't yet show the interviewer's video squares. make sure that the app overlays the video square of interviewer and that the sentiment suggestions should be based on the interviewer's body language and facial expressions in their video square.
+
+have the section for the current suggestions be a separate section from one that lets the interviewee look through the previous suggestions. let the follow up questions be viewable at all times for each question. 
+
+
+
+add a section of how the interviewee should update their body language and expressions throughout the interview, and why. 
+
+
+instead of using the star method for every answer, only use it for relevant answers, such as when the interviewer says "tell me about a time.." Otherwise, the context should generate a short 1-3 sentence longer answer in case the interviewer wants the interviewee to go into it. All sentences should be short and feel like i'm thinking of the answer on the fly. 
+
+
+
+before the suggested answer should be a suggested repsonse to the pain point in the interviewer's question about why it might be important for them to ask that question of a potential candidate. The cue can be "Affirm" or relevant.
+
+answer clock should pause or reset when meeting capture ends. show what the filler words are so the interviewee can see which filler words to stop saying. 
+
+
+
+
+
+
+

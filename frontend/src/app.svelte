@@ -371,7 +371,7 @@
 
           <button class="debrief-btn" onclick={() => showDebrief = true}>End Interview</button>
           <CaptureButton
-            onCapture={(v) => { capturing = v; if (!v) { webcamStream = null; screenStream = null; captureInst = null; } }}
+            onCapture={(v) => { capturing = v; if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); } }}
             onStreams={(screen, webcam) => { screenStream = screen; webcamStream = webcam; }}
             onReady={(cap) => { captureInst = cap; }}
           />

@@ -38,6 +38,7 @@ pub fn build_user_prompt(question: &str, transcript: &[TranscriptSegment]) -> St
         format!(
             "{}The interviewer asked a behavioral question: '{}'\n\n\
 Reply in this EXACT format — no extra text:\n\
+Affirm: [3-5 word cue acknowledging what they care about — e.g. 'ownership under pressure', 'team resilience']\n\
 Say: [3-6 word hook — the outcome or boldest action, e.g. 'led migration, cut costs 40%%']\n\
 ---\n\
 **S:** [situation cue + business impact — e.g. 'legacy system → $2M risk']\n\
@@ -52,6 +53,7 @@ CRITICAL: Every line is a memory cue, NOT a full sentence. 3-6 words max per bul
         format!(
             "{}The interviewer asked: '{}'\n\n\
 Reply in this EXACT format — no extra text:\n\
+Affirm: [3-5 word cue — the pain point or concern behind this question, e.g. 'clarity under ambiguity', 'culture alignment']\n\
 Say: [3-6 word opening cue — the strongest hook]\n\
 ---\n\
 • [3-5 word cue — first supporting point]\n\
@@ -100,6 +102,7 @@ mod tests {
         let p = build_user_prompt("Tell me about a time you led a team", &[]);
         assert!(p.contains("**S:**"));
         assert!(p.contains("**R:**"));
+        assert!(p.contains("Affirm:"));
     }
 
     #[test]
@@ -107,6 +110,7 @@ mod tests {
         let p = build_user_prompt("What are your strengths?", &[]);
         assert!(!p.contains("**S:**"));
         assert!(p.contains("Say:"));
+        assert!(p.contains("Affirm:"));
         assert!(p.contains("•"));
     }
 }

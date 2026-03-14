@@ -11,6 +11,7 @@
   import PreInterviewChecklist from './components/PreInterviewChecklist.svelte';
   import InterviewHistoryPanel from './components/InterviewHistoryPanel.svelte';
   import WhisperOverlay from './components/WhisperOverlay.svelte';
+  import QuestionsHistoryPanel from './components/QuestionsHistoryPanel.svelte';
   import { EventWebSocket } from './lib/websocket';
   import { countFillers, totalFillers } from './lib/filler';
   import { saveInterview } from './lib/interviewHistory';
@@ -60,26 +61,64 @@
 
   // Column widths (resizable, persisted)
   let leftW = $state(Number(localStorage.getItem('col-left') ?? 240));
+  let histW = $state(Number(localStorage.getItem('col-hist') ?? 180));
   let centerW = $state(Number(localStorage.getItem('col-center') ?? 320));
 
-  function startResize(col: 'left' | 'center', e: MouseEvent) {
+  // Per-panel zoom (persisted)
+  let leftZoom = $state(Number(localStorage.getItem('zoom-left') ?? 100));
+  let histZoom = $state(Number(localStorage.getItem('zoom-hist') ?? 100));
+  let centerZoom = $state(Number(localStorage.getItem('zoom-center') ?? 100));
+  let rightZoom = $state(Number(localStorage.getItem('zoom-right') ?? 100));
+
+  // Jump signal for SuggestionPanel cross-navigation from QuestionsHistoryPanel
+  let jumpSignal = $state<{ idx: number; key: number } | null>(null);
+
+  function adjustZoom(col: 'left' | 'hist' | 'center' | 'right', delta: number) {
+    if (col === 'left') {
+      leftZoom = Math.max(70, Math.min(150, leftZoom + delta));
+      localStorage.setItem('zoom-left', String(leftZoom));
+    } else if (col === 'hist') {
+      histZoom = Math.max(70, Math.min(150, histZoom + delta));
+      localStorage.setItem('zoom-hist', String(histZoom));
+    } else if (col === 'center') {
+      centerZoom = Math.max(70, Math.min(150, centerZoom + delta));
+      localStorage.setItem('zoom-center', String(centerZoom));
+    } else if (col === 'right') {
+      rightZoom = Math.max(70, Math.min(150, rightZoom + delta));
+      localStorage.setItem('zoom-right', String(rightZoom));
+    }
+  }
+
+  function startResize(col: 'left' | 'hist' | 'center', e: MouseEvent) {
     e.preventDefault();
     const startX = e.clientX;
-    const startW = col === 'left' ? leftW : centerW;
-    const min = col === 'left' ? 150 : 200;
-    const max = col === 'left' ? 450 : 550;
+    const startW = col === 'left' ? leftW : col === 'hist' ? histW : centerW;
+    const [min, max] = col === 'left' ? [130, 400] : col === 'hist' ? [120, 280] : [180, 500];
     function onMove(ev: MouseEvent) {
       const w = Math.max(min, Math.min(max, startW + ev.clientX - startX));
-      if (col === 'left') leftW = w; else centerW = w;
+      if (col === 'left') leftW = w;
+      else if (col === 'hist') histW = w;
+      else centerW = w;
     }
     function onUp() {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
       localStorage.setItem('col-left', String(leftW));
+      localStorage.setItem('col-hist', String(histW));
       localStorage.setItem('col-center', String(centerW));
     }
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+  }
+
+  function splitMultiQuestions(text: string): string[] {
+    if (!text.includes('?')) return [text];
+    const parts = text.split(/\?(?=\s+(?:[A-Z]|\b(?:also|and|what|how|why|when|where|who|can|could|would|did|do|does|is|are|was|were)\b))/);
+    const cleaned = parts
+      .map(p => p.trim())
+      .filter(p => p.length > 8)
+      .map(p => p.endsWith('?') ? p : p + '?');
+    return cleaned.length >= 2 ? cleaned : [text];
   }
 
   // TTS voice hints
@@ -91,8 +130,8 @@
   let showVoiceMenu = $state(false);
   // Silence gating: track last time anyone spoke
   let lastSpeechAt = 0; // ms timestamp
-  const TTS_SILENCE_GAP_MS = 2500; // wait this long after last speech before speaking
-  const TTS_MAX_WORDS = 12; // ~3s at 1.5x rate
+  const TTS_SILENCE_GAP_MS = 2500;
+  const TTS_MAX_WORDS = 12;
 
   function loadVoices() {
     const voices = speechSynthesis.getVoices();
@@ -111,11 +150,8 @@
 
   function speakText(text: string) {
     if (!ttsEnabled || !text) return;
-    // Don't speak if someone spoke within TTS_SILENCE_GAP_MS
     if (Date.now() - lastSpeechAt < TTS_SILENCE_GAP_MS) return;
-    // Also don't speak if user is actively answering
     if (answerStartTime !== null) return;
-    // Trim to max words
     const words = text.split(/\s+/);
     const trimmed = words.slice(0, TTS_MAX_WORDS).join(' ');
     speechSynthesis.cancel();
@@ -255,8 +291,6 @@
           const tone = analyzeAudioTone(event.text);
           audioEmotion = tone.emotion;
           audioReason = tone.reason;
-          // If we haven't captured a sentiment frame recently, trigger one now
-          // (catches interviewer turning camera on mid-interview)
           const now = Date.now();
           if (captureInst && now - lastSentimentTrigger > 10000) {
             lastSentimentTrigger = now;
@@ -272,44 +306,60 @@
         if (event.coaching_why) coachingWhy = event.coaching_why;
         emotionHistory = [...emotionHistory, event.emotion];
         break;
-      case 'question_detected':
-        // Evaluate previous answer before moving on
-        if (currentQuestionIdx >= 0 && youSegmentsSinceQuestion.length > 0) {
-          const prevIdx = currentQuestionIdx;
-          const prevSuggestion = suggestions[prevIdx];
-          if (prevSuggestion && prevSuggestion.suggestion) {
-            const answerText = youSegmentsSinceQuestion.join(' ');
-            fetch('/api/answer-feedback', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                question: prevSuggestion.question,
-                answer: answerText,
-                suggestion: prevSuggestion.suggestion,
-              }),
-            })
-              .then(r => r.ok ? r.json() : null)
-              .then(fb => {
-                if (fb) {
-                  suggestions = suggestions.map((s, i) =>
-                    i === prevIdx ? { ...s, answerFeedback: fb } : s
-                  );
-                }
+      case 'question_detected': {
+        // Mark previous question as answered/unanswered
+        if (currentQuestionIdx >= 0) {
+          const wasAnswered = youSegmentsSinceQuestion.length > 0;
+          suggestions = suggestions.map((s, i) =>
+            i === currentQuestionIdx ? { ...s, answered: wasAnswered } : s
+          );
+          // Run answer feedback for previous question if it was answered
+          if (wasAnswered) {
+            const prevSuggestion = suggestions[currentQuestionIdx];
+            if (prevSuggestion && prevSuggestion.suggestion) {
+              const prevIdx = currentQuestionIdx;
+              const answerText = youSegmentsSinceQuestion.join(' ');
+              fetch('/api/answer-feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  question: prevSuggestion.question,
+                  answer: answerText,
+                  suggestion: prevSuggestion.suggestion,
+                }),
               })
-              .catch(() => {});
+                .then(r => r.ok ? r.json() : null)
+                .then(fb => {
+                  if (fb) {
+                    suggestions = suggestions.map((s, i) =>
+                      i === prevIdx ? { ...s, answerFeedback: fb } : s
+                    );
+                  }
+                })
+                .catch(() => {});
+            }
           }
         }
-        currentQuestionIdx = suggestions.length;
+
+        const subQuestions = splitMultiQuestions(event.question);
         youSegmentsSinceQuestion = [];
-        suggestions = [...suggestions, {
-          question: event.question,
-          suggestion: '',
-          streaming: true,
-          tag: tagQuestion(event.question),
-          redFlag: detectRedFlag(event.question) ?? undefined,
-        }];
+
+        for (let qi = 0; qi < subQuestions.length; qi++) {
+          const q = subQuestions[qi];
+          const isFirst = qi === 0;
+          const newIdx = suggestions.length;
+          if (isFirst) currentQuestionIdx = newIdx;
+          suggestions = [...suggestions, {
+            question: q,
+            suggestion: isFirst ? '' : '(Additional question — will generate suggestion when you navigate here)',
+            streaming: isFirst,
+            tag: tagQuestion(q),
+            redFlag: detectRedFlag(q) ?? undefined,
+          }];
+        }
         resetAnswerTimer();
         break;
+      }
       case 'suggestion_token':
         suggestions = suggestions.map((s, i) =>
           i === suggestions.length - 1 && s.streaming ? { ...s, suggestion: s.suggestion + event.token } : s
@@ -319,7 +369,6 @@
         suggestions = suggestions.map((s, i) =>
           i === suggestions.length - 1 && s.streaming ? { ...s, suggestion: event.full_text, streaming: false } : s
         );
-        // Speak only the Say: cue line, capped at TTS_MAX_WORDS
         const sayLine = event.full_text.split('\n')[0]
           ?.replace(/^(Say|Answer|Tell|Ask):\s*/i, '')
           ?.trim();
@@ -407,12 +456,10 @@
             >{ttsEnabled ? '🔊' : '🔇'} Voice</button>
 
             {#if ttsEnabled}
-              <!-- Speed slider -->
               <label class="rate-label" title="Speech speed">
                 <span class="rate-val">{ttsRate.toFixed(1)}×</span>
                 <input type="range" min="0.7" max="2.0" step="0.1" bind:value={ttsRate} class="rate-slider" />
               </label>
-              <!-- Volume slider -->
               <label class="rate-label" title="Voice volume">
                 <span class="rate-val">{Math.round(ttsVolume * 100)}%</span>
                 <input type="range" min="0" max="1" step="0.05" bind:value={ttsVolume} class="rate-slider vol-slider" />
@@ -458,19 +505,47 @@
         <div class="status-banner">{statusMessages[statusMessages.length - 1]}</div>
       {/if}
 
-      <!-- Resizable 3-column layout -->
+      <!-- Resizable 4-column layout -->
       <div class="three-col">
         <!-- Left: Transcript -->
         <div class="col col-left" style="width: {leftW}px">
-          <div class="col-label">Transcript</div>
-          <div class="col-body">
+          <div class="col-header">
+            <span class="col-label">Transcript</span>
+            <div class="zoom-btns">
+              <button class="zoom-btn" onclick={() => adjustZoom('left', -10)} title="Decrease font size">A−</button>
+              <button class="zoom-btn" onclick={() => adjustZoom('left', +10)} title="Increase font size">A+</button>
+            </div>
+          </div>
+          <div class="col-body" style="zoom: {leftZoom/100}">
             <TranscriptPanel entries={transcript} />
           </div>
         </div>
 
-        <!-- Resize handle: left | center -->
+        <!-- Resize handle: left | hist -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="resize-handle" onmousedown={(e) => startResize('left', e)} title="Drag to resize"></div>
+
+        <!-- Questions history column -->
+        <div class="col col-hist" style="width: {histW}px">
+          <div class="col-header">
+            <span class="col-label">Questions</span>
+            <div class="zoom-btns">
+              <button class="zoom-btn" onclick={() => adjustZoom('hist', -10)} title="Decrease font size">A−</button>
+              <button class="zoom-btn" onclick={() => adjustZoom('hist', +10)} title="Increase font size">A+</button>
+            </div>
+          </div>
+          <div class="col-body" style="zoom: {histZoom/100}; padding: 0.3rem 0.4rem 0.75rem;">
+            <QuestionsHistoryPanel
+              {suggestions}
+              currentIndex={currentQuestionIdx}
+              onJump={(i) => { jumpSignal = { idx: i, key: Date.now() }; }}
+            />
+          </div>
+        </div>
+
+        <!-- Resize handle: hist | center -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="resize-handle" onmousedown={(e) => startResize('hist', e)} title="Drag to resize"></div>
 
         <!-- Center: AI Suggestions -->
         <div class="col col-center" style="width: {centerW}px">
@@ -481,8 +556,15 @@
               <div class="selfview-label">You</div>
             </div>
           {/if}
-          <div class="col-body">
-            <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} />
+          <div class="col-header" style="padding-top: 0.35rem;">
+            <span class="col-label">AI Suggestions</span>
+            <div class="zoom-btns">
+              <button class="zoom-btn" onclick={() => adjustZoom('center', -10)} title="Decrease font size">A−</button>
+              <button class="zoom-btn" onclick={() => adjustZoom('center', +10)} title="Increase font size">A+</button>
+            </div>
+          </div>
+          <div class="col-body" style="zoom: {centerZoom/100}; padding: 0.25rem 0.5rem 0.5rem;">
+            <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} {jumpSignal} />
           </div>
         </div>
 
@@ -492,29 +574,33 @@
 
         <!-- Right: Sentiment + Stats -->
         <div class="col col-right">
-          <div class="col-label">Interviewer</div>
-          {#if screenStream}
-            <div class="interviewer-preview">
-              <!-- svelte-ignore a11y_media_has_caption -->
-              <video bind:this={screenEl} class="interviewer-video" autoplay muted playsinline></video>
-              {#if emotion}
-                <div class="interviewer-overlay">
-                  <span class="overlay-emotion">{emotion}</span>
-                  {#if coaching}
-                    <span class="overlay-coaching">{coaching}</span>
-                  {/if}
-                </div>
-              {/if}
-              <div class="interviewer-label">Live Screen · Sentiment from interviewer's camera</div>
+          <div class="col-header">
+            <span class="col-label">Interviewer</span>
+            <div class="zoom-btns">
+              <button class="zoom-btn" onclick={() => adjustZoom('right', -10)} title="Decrease font size">A−</button>
+              <button class="zoom-btn" onclick={() => adjustZoom('right', +10)} title="Increase font size">A+</button>
             </div>
-          {/if}
-          {#if personality}
-            <div class="personality-strip" style="border-color: {personality.color}">
-              <span class="personality-label" style="color: {personality.color}">{personality.label}</span>
-              <span class="personality-desc">{personality.description}</span>
-            </div>
-          {/if}
-          <div class="col-body col-right-body">
+          </div>
+          <div class="col-body col-right-body" style="zoom: {rightZoom/100}">
+            {#if screenStream}
+              <div class="interviewer-preview">
+                <!-- svelte-ignore a11y_media_has_caption -->
+                <video bind:this={screenEl} class="interviewer-video" autoplay muted playsinline></video>
+                <div class="interviewer-label">Live Screen · Sentiment from interviewer's camera</div>
+                {#if emotion}
+                  <div class="interviewer-coaching">
+                    <span class="coaching-emotion">{emotion}</span>
+                    {#if coaching}<span class="coaching-note">{coaching}</span>{/if}
+                  </div>
+                {/if}
+              </div>
+            {/if}
+            {#if personality}
+              <div class="personality-strip" style="border-color: {personality.color}">
+                <span class="personality-label" style="color: {personality.color}">{personality.label}</span>
+                <span class="personality-desc">{personality.description}</span>
+              </div>
+            {/if}
             <SentimentBar
               videoEmotion={emotion}
               videoReason={emotionReason}
@@ -619,7 +705,10 @@
 </main>
 
 <style>
-  main { min-height: 100vh; }
+  main {
+    min-height: 100vh;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
 
   .setup-container { max-width: 800px; margin: 0 auto; }
   .setup-header { text-align: center; padding: 3rem 2rem 1rem; }
@@ -726,7 +815,7 @@
   .error-btn:hover { background: #7f1d1d; }
   .status-banner { padding: 0.2rem 1rem; background: #1e3a5f; color: #93c5fd; font-size: 0.8rem; flex-shrink: 0; }
 
-  /* Resizable 3-column layout */
+  /* Resizable 4-column layout */
   .three-col {
     flex: 1;
     display: flex;
@@ -743,7 +832,7 @@
   }
 
   .col-right {
-    flex: 1; /* right column takes remaining space */
+    flex: 1;
     min-width: 180px;
     background: #080d18;
   }
@@ -758,27 +847,67 @@
   }
   .resize-handle:hover { background: #1e293b; }
 
-  .col-label {
-    font-size: 0.6rem; font-weight: 700; color: #334155;
-    text-transform: uppercase; letter-spacing: 0.1em;
-    padding: 0.35rem 0.75rem 0; flex-shrink: 0;
+  /* Column header with zoom controls */
+  .col-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.35rem 0.75rem 0;
+    flex-shrink: 0;
   }
+
+  .col-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: #334155;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .zoom-btns {
+    display: flex;
+    gap: 0.15rem;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .col-header:hover .zoom-btns { opacity: 1; }
+
+  .zoom-btn {
+    padding: 0.08rem 0.28rem;
+    background: transparent;
+    border: 1px solid #1a2540;
+    border-radius: 0.2rem;
+    color: #334155;
+    font-size: 0.58rem;
+    cursor: pointer;
+    letter-spacing: -0.02em;
+    font-family: inherit;
+    line-height: 1.4;
+  }
+  .zoom-btn:hover { border-color: #334155; color: #64748b; }
+
   .col-body {
-    flex: 1; overflow: hidden;
+    flex: 1;
+    overflow: hidden;
     padding: 0.5rem 0.75rem 0.75rem;
-    display: flex; flex-direction: column;
+    display: flex;
+    flex-direction: column;
   }
 
   .col-left { background: #080d18; }
   .col-left .col-body { opacity: 0.75; }
   .col-left .col-body:hover { opacity: 1; transition: opacity 0.2s; }
 
+  .col-hist {
+    background: #060c16;
+    border-right: 1px solid #0d1525;
+  }
+
   .col-center {
     background: #07101e;
     border-right: 1px solid #0f172a;
     border-left: 1px solid #0f172a;
   }
-  .col-center .col-body { padding: 0.5rem 0.75rem; }
 
   /* Webcam self-view */
   .selfview-strip {
@@ -796,7 +925,6 @@
   /* Interviewer screen preview */
   .interviewer-preview {
     flex-shrink: 0;
-    position: relative;
     display: flex;
     flex-direction: column;
     background: #060e1a;
@@ -809,30 +937,6 @@
     display: block;
     background: #0a1525;
   }
-  .interviewer-overlay {
-    position: absolute;
-    bottom: 1.6rem; /* sits above the interviewer-label */
-    left: 0;
-    right: 0;
-    background: linear-gradient(to top, rgba(0,0,0,0.82), transparent);
-    padding: 0.75rem 0.6rem 0.4rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-  }
-  .overlay-emotion {
-    font-size: 0.65rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #60a5fa;
-  }
-  .overlay-coaching {
-    font-size: 0.72rem;
-    color: #cbd5e1;
-    line-height: 1.4;
-    font-style: italic;
-  }
   .interviewer-label {
     font-size: 0.55rem;
     color: #1e3a5f;
@@ -841,8 +945,30 @@
     padding: 0.2rem 0.5rem;
     text-align: center;
   }
+  .interviewer-coaching {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.4rem 0.6rem;
+    background: #060a14;
+    border-top: 1px solid #0f172a;
+    flex-shrink: 0;
+  }
+  .coaching-emotion {
+    font-size: 0.62rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #60a5fa;
+  }
+  .coaching-note {
+    font-size: 0.72rem;
+    color: #94a3b8;
+    line-height: 1.4;
+    font-style: italic;
+  }
 
-  .col-right-body { gap: 0.75rem; overflow-y: auto; }
+  .col-right-body { gap: 0.75rem; overflow-y: auto; padding-top: 0; }
 
   .side-stats {
     display: flex; flex-direction: column; gap: 0.1rem;

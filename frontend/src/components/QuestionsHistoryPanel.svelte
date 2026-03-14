@@ -1,0 +1,184 @@
+<script lang="ts">
+  import type { SuggestionEntry } from '../lib/types';
+  import { TAG_CONFIG } from '../lib/questionTagger';
+
+  const { suggestions, currentIndex, onJump } = $props<{
+    suggestions: SuggestionEntry[];
+    currentIndex: number;
+    onJump: (i: number) => void;
+  }>();
+
+  function shortQ(q: string, max = 55): string {
+    return q.length > max ? q.slice(0, max) + '…' : q;
+  }
+</script>
+
+<div class="qhist">
+  {#if suggestions.length === 0}
+    <p class="qhist-empty">Questions will appear here as they are detected.</p>
+  {:else}
+    <div class="qhist-list">
+      {#each suggestions as entry, i (i)}
+        <button
+          class="qhist-item"
+          class:active={i === currentIndex}
+          onclick={() => onJump(i)}
+          title={entry.question}
+        >
+          <div class="qhist-top">
+            <span class="qhist-num">Q{i + 1}</span>
+            {#if entry.tag}
+              {@const tc = TAG_CONFIG[entry.tag]}
+              <span class="qhist-tag" style="color: {tc.color}; background: {tc.bg}">{tc.label}</span>
+            {/if}
+            <span class="qhist-status-dot"
+              class:dot-answered={entry.answered === true}
+              class:dot-unanswered={entry.answered === false}
+              class:dot-active={i === currentIndex && entry.answered == null}
+              title={entry.answered === true ? 'Answered' : entry.answered === false ? 'Not answered' : i === currentIndex ? 'Current' : 'Pending'}
+            ></span>
+          </div>
+          <div class="qhist-q">{shortQ(entry.question)}</div>
+          {#if entry.redFlag}
+            <div class="qhist-redflag">⚠ {entry.redFlag.category}</div>
+          {/if}
+          {#if entry.answerFeedback}
+            <div class="qhist-feedback">
+              {#if entry.answerFeedback.missed_followup}<span class="fb-chip">No follow-up</span>{/if}
+              {#if entry.answerFeedback.missed_metric}<span class="fb-chip">No metric</span>{/if}
+            </div>
+          {/if}
+        </button>
+      {/each}
+    </div>
+  {/if}
+</div>
+
+<style>
+  .qhist {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .qhist-empty {
+    color: #334155;
+    font-style: italic;
+    font-size: 0.78em;
+    text-align: center;
+    padding: 2rem 0.75rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .qhist-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.25rem 0;
+    scrollbar-width: thin;
+    scrollbar-color: #1e293b transparent;
+  }
+
+  .qhist-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.5rem 0.6rem;
+    background: #080d18;
+    border: 1px solid #0f172a;
+    border-radius: 0.4rem;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.12s;
+    width: 100%;
+  }
+  .qhist-item:hover {
+    background: #0d1525;
+    border-color: #1e2d45;
+  }
+  .qhist-item.active {
+    background: #071a0f;
+    border-color: #166534;
+    border-left: 3px solid #4ade80;
+  }
+
+  .qhist-top {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: nowrap;
+  }
+
+  .qhist-num {
+    font-size: 0.6em;
+    font-weight: 800;
+    color: #334155;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+  }
+  .qhist-item.active .qhist-num { color: #4ade80; }
+
+  .qhist-tag {
+    font-size: 0.52em;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.05em 0.35em;
+    border-radius: 0.2em;
+    flex-shrink: 0;
+  }
+
+  .qhist-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-left: auto;
+    background: #1e293b;
+  }
+  .qhist-status-dot.dot-answered { background: #22c55e; }
+  .qhist-status-dot.dot-unanswered { background: #f59e0b; }
+  .qhist-status-dot.dot-active {
+    background: #60a5fa;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .qhist-q {
+    font-size: 0.72em;
+    color: #4d7494;
+    font-style: italic;
+    line-height: 1.35;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+  .qhist-item.active .qhist-q { color: #6ba3c4; }
+
+  .qhist-redflag {
+    font-size: 0.6em;
+    color: #b45309;
+    font-weight: 600;
+  }
+
+  .qhist-feedback {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+    margin-top: 0.1rem;
+  }
+  .fb-chip {
+    font-size: 0.55em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #fb923c;
+    background: #431407;
+    border-radius: 0.2em;
+    padding: 0.05em 0.35em;
+  }
+</style>

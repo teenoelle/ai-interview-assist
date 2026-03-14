@@ -2,10 +2,11 @@
   import type { SuggestionEntry } from '../lib/types';
   import { TAG_CONFIG } from '../lib/questionTagger';
 
-  const { suggestions, onClear, teleprompter = false } = $props<{
+  const { suggestions, onClear, teleprompter = false, jumpSignal = null } = $props<{
     suggestions: SuggestionEntry[];
     onClear: () => void;
     teleprompter?: boolean;
+    jumpSignal?: { idx: number; key: number } | null;
   }>();
 
   // -1 = pinned to latest; >= 0 = viewing specific entry
@@ -20,6 +21,13 @@
   $effect(() => {
     // When user is pinned to latest, keep lastSeenCount in sync
     if (historyIndex === -1) lastSeenCount = suggestions.length;
+  });
+
+  // Handle external jump signal from parent (QuestionsHistoryPanel)
+  $effect(() => {
+    if (jumpSignal != null) {
+      jumpTo(jumpSignal.idx);
+    }
   });
 
   // Expanded state per entry
@@ -119,6 +127,10 @@
   function shortQ(q: string, max = 28): string {
     return q.length > max ? q.slice(0, max) + '…' : q;
   }
+
+  const unansweredCount = $derived(
+    suggestions.filter((s, i) => s.answered === false && i !== currentIndex).length
+  );
 </script>
 
 {#if teleprompter}
@@ -153,6 +165,14 @@
           New question — Q{totalCount} →
         </button>
       {/if}
+    {/if}
+
+    <!-- Unanswered previous questions banner -->
+    {#if unansweredCount > 0}
+      <div class="unanswered-banner">
+        {unansweredCount} previous question{unansweredCount > 1 ? 's' : ''} not yet answered
+        — check Questions panel
+      </div>
     {/if}
 
     <!-- Main suggestion card -->
@@ -208,7 +228,7 @@
           {#if parsed.body}
             <div class="tp-expand-row">
               <button class="tp-expand-btn" onclick={() => toggleExpand(currentIndex)}>
-                {expanded[currentIndex] ? '▴ Less' : '▾ Context'}
+                {expanded[currentIndex] ? '▴ Less context' : '▾ More context'}
               </button>
             </div>
 
@@ -415,6 +435,19 @@
     animation: dotpulse 0.8s ease-in-out infinite;
   }
 
+  /* Unanswered banner */
+  .unanswered-banner {
+    padding: 0.3rem 0.75rem;
+    background: #1a0f00;
+    border: 1px solid #92400e;
+    border-radius: 0.35rem;
+    color: #f59e0b;
+    font-size: 0.7rem;
+    font-weight: 600;
+    flex-shrink: 0;
+    text-align: center;
+  }
+
   /* Main card */
   .tp-card {
     flex: 1;
@@ -494,14 +527,17 @@
 
   .tp-expand-row { flex-shrink: 0; }
   .tp-expand-btn {
-    background: transparent;
-    border: none;
-    color: #334155;
+    background: #0d1525;
+    border: 1px solid #1e2d45;
+    color: #475569;
     font-size: 0.68rem;
     cursor: pointer;
-    padding: 0;
+    padding: 0.2rem 0.6rem;
+    border-radius: 0.25rem;
+    align-self: flex-start;
+    transition: all 0.15s;
   }
-  .tp-expand-btn:hover { color: #64748b; }
+  .tp-expand-btn:hover { border-color: #334155; color: #64748b; }
 
   .tp-body {
     color: #7a9ab8;

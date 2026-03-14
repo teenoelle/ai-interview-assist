@@ -8,6 +8,7 @@
   let currentIdx = $state(0);
   let hints = $state<Record<number, string>>({});
   let loadingHint = $state(false);
+  let loadingAll = $state(false);
 
   const currentQuestion = $derived(questions[currentIdx] ?? '');
 
@@ -27,6 +28,27 @@
     } catch { /* ignore */ }
     loadingHint = false;
   }
+
+  async function getAllHints() {
+    if (loadingAll) return;
+    loadingAll = true;
+    for (let i = 0; i < questions.length; i++) {
+      if (!hints[i]) {
+        try {
+          const resp = await fetch('/api/practice-question', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question: questions[i] }),
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            hints = { ...hints, [i]: data.suggestion };
+          }
+        } catch { /* continue */ }
+      }
+    }
+    loadingAll = false;
+  }
 </script>
 
 <div class="practice">
@@ -35,7 +57,14 @@
       <h2>Practice Mode</h2>
       <p class="subtitle">Review predicted questions and prepare your answers before the interview</p>
     </div>
-    <button class="start-btn" onclick={onStartInterview}>I'm Ready — Start Interview →</button>
+    <div class="header-actions">
+      {#if questions.length > 0}
+        <button class="prep-all-btn" onclick={getAllHints} disabled={loadingAll}>
+          {loadingAll ? '⟳ Loading all...' : '⚡ Prep all questions'}
+        </button>
+      {/if}
+      <button class="start-btn" onclick={onStartInterview}>I'm Ready — Start Interview →</button>
+    </div>
   </div>
 
   {#if questions.length === 0}
@@ -45,6 +74,9 @@
 
     <div class="question-card">
       <p class="question-text">{currentQuestion}</p>
+      {#if hints[currentIdx]}
+        <div class="hint-loaded-badge">✓ Hints loaded</div>
+      {/if}
       <button class="hint-btn" onclick={getHint} disabled={loadingHint || !!hints[currentIdx]}>
         {loadingHint ? 'Loading...' : hints[currentIdx] ? 'Hints loaded' : '💡 Get AI talking points'}
       </button>
@@ -68,6 +100,7 @@
             class:active={i === currentIdx}
             class:hinted={!!hints[i]}
             onclick={() => currentIdx = i}
+            title={hints[i] ? 'Hints loaded' : `Question ${i + 1}`}
           ></button>
         {/each}
       </div>
@@ -90,18 +123,38 @@
   }
   h2 { font-size: 1.5rem; font-weight: 800; color: #f1f5f9; margin: 0 0 0.25rem; }
   .subtitle { color: #64748b; font-size: 0.875rem; margin: 0; }
+  .header-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .start-btn {
     padding: 0.6rem 1.5rem; background: #3b82f6; color: white;
     border: none; border-radius: 0.5rem; font-size: 0.9rem; font-weight: 600;
     cursor: pointer; white-space: nowrap; transition: background 0.2s;
   }
   .start-btn:hover { background: #2563eb; }
+  .prep-all-btn {
+    padding: 0.35rem 0.9rem;
+    background: transparent;
+    border: 1px solid #334155;
+    border-radius: 0.375rem;
+    color: #64748b;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .prep-all-btn:hover:not(:disabled) { border-color: #60a5fa; color: #60a5fa; }
+  .prep-all-btn:disabled { opacity: 0.5; cursor: default; }
   .progress { font-size: 0.75rem; color: #475569; text-align: center; }
   .question-card {
     background: #0f172a; border: 1px solid #1e293b; border-radius: 0.75rem;
     padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;
   }
   .question-text { font-size: 1.15rem; color: #e2e8f0; line-height: 1.6; margin: 0; font-style: italic; }
+  .hint-loaded-badge {
+    align-self: flex-start;
+    font-size: 0.72rem;
+    color: #22c55e;
+    font-weight: 600;
+  }
   .hint-btn {
     align-self: flex-start; padding: 0.4rem 1rem;
     background: transparent; border: 1px solid #3b82f6; border-radius: 0.375rem;

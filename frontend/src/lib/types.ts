@@ -42,4 +42,5 @@ export interface SuggestionEntry {
   answerFeedback?: AnswerFeedback;
   confidenceScore?: number;
   matchedKeywords?: string[];
+  answered?: boolean;
 }

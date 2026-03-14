@@ -147,7 +147,6 @@
   let youSegments = $state(0);
   let interviewerSegments = $state(0);
   let allFillerCounts = $state<FillerCount[]>([]);
-  let showFillers = $state(false);
 
   let answerInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -458,15 +457,17 @@
                   {youPct > 0 ? `${youPct}% / ${interviewerPct}%` : '—'}
                 </span>
               </div>
-              <div class="side-stat filler-stat" title="Filler word count">
-                <span class="side-label">Fillers</span>
-                <button class="filler-btn" class:has-fillers={fillerTotal > 0} onclick={() => showFillers = !showFillers}>
-                  {fillerTotal > 0 ? fillerTotal : '—'}
-                </button>
-                {#if showFillers && allFillerCounts.length > 0}
-                  <div class="filler-popup">
-                    {#each allFillerCounts as f}
-                      <span class="filler-item">"{f.word}" ×{f.count}</span>
+              <div class="filler-block" title="Filler word count — words to avoid">
+                <div class="side-stat">
+                  <span class="side-label">Fillers</span>
+                  <span class="side-value" class:filler-active={fillerTotal > 0} style="color: {fillerTotal > 0 ? '#f59e0b' : '#475569'}">
+                    {fillerTotal > 0 ? fillerTotal : '—'}
+                  </span>
+                </div>
+                {#if allFillerCounts.length > 0}
+                  <div class="filler-list">
+                    {#each allFillerCounts.sort((a, b) => b.count - a.count) as f}
+                      <span class="filler-tag">"{f.word}" <strong>×{f.count}</strong></span>
                     {/each}
                   </div>
                 {/if}
@@ -702,15 +703,22 @@
   .ws-dot { font-size: 0.8rem; }
   .ws-dot.connected { color: #22c55e; }
   .ws-dot.reconnecting { color: #f59e0b; }
-  .filler-stat { position: relative; }
-  .filler-btn { background: none; border: none; cursor: pointer; font-size: 0.75rem; font-weight: 700; color: #475569; padding: 0; }
-  .filler-btn.has-fillers { color: #f59e0b; }
-  .filler-popup {
-    position: absolute; top: 100%; right: 0; z-index: 50;
-    background: #1e293b; border: 1px solid #334155; border-radius: 0.375rem; padding: 0.5rem;
-    display: flex; flex-direction: column; gap: 0.2rem; white-space: nowrap; min-width: 120px;
+  .filler-block {
+    display: flex; flex-direction: column; gap: 0.2rem;
+    padding: 0.2rem 0.25rem;
   }
-  .filler-item { font-size: 0.72rem; color: #f59e0b; }
+  .filler-active { font-variant-numeric: tabular-nums; }
+  .filler-list {
+    display: flex; flex-wrap: wrap; gap: 0.2rem 0.35rem;
+    padding-left: 0.1rem;
+  }
+  .filler-tag {
+    font-size: 0.65rem; color: #78350f;
+    background: #1c1006; border: 1px solid #78350f;
+    border-radius: 0.25rem; padding: 0.08rem 0.35rem;
+    white-space: nowrap;
+  }
+  .filler-tag strong { color: #f59e0b; font-weight: 700; }
   .side-ratelimits { flex: 1; overflow-y: auto; min-height: 0; }
 
   /* Focus overlay */

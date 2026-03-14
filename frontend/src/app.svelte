@@ -19,6 +19,7 @@
   let capturing = $state(false);
   let transcript = $state<TranscriptEntry[]>([]);
   let emotion = $state('');
+  let emotionReason = $state('');
   let coaching = $state('');
   let suggestions = $state<SuggestionEntry[]>([]);
   let statusMessages = $state<string[]>([]);
@@ -26,6 +27,61 @@
   let predictedQuestions = $state<string[]>([]);
   let showDebrief = $state(false);
   let focusMode = $state(false);
+
+  // Webcam self-view
+  let webcamStream = $state<MediaStream | null>(null);
+  let webcamEl: HTMLVideoElement | undefined = $state();
+  $effect(() => {
+    if (webcamEl && webcamStream) {
+      webcamEl.srcObject = webcamStream;
+    }
+  });
+
+  // TTS voice hints
+  let ttsEnabled = $state(false);
+  let ttsVoices = $state<SpeechSynthesisVoice[]>([]);
+  let ttsVoiceURI = $state('');
+  let showVoiceMenu = $state(false);
+
+  function loadVoices() {
+    const voices = speechSynthesis.getVoices();
+    if (voices.length > 0) {
+      ttsVoices = voices;
+      if (!ttsVoiceURI) ttsVoiceURI = voices[0]?.voiceURI ?? '';
+    }
+  }
+  $effect(() => {
+    loadVoices();
+    speechSynthesis.addEventListener('voiceschanged', loadVoices);
+    return () => speechSynthesis.removeEventListener('voiceschanged', loadVoices);
+  });
+
+  function speakText(text: string) {
+    if (!ttsEnabled || !text) return;
+    speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(text);
+    const voice = ttsVoices.find(v => v.voiceURI === ttsVoiceURI);
+    if (voice) utt.voice = voice;
+    utt.rate = 1.1;
+    speechSynthesis.speak(utt);
+  }
+
+  // Audio sentiment (client-side, free — based on interviewer text)
+  let audioEmotion = $state('');
+  let audioReason = $state('');
+
+  function analyzeAudioTone(text: string): { emotion: string; reason: string } {
+    const lower = text.toLowerCase();
+    const excited = ['excellent', 'impressive', 'love that', 'great answer', 'fantastic', 'brilliant', 'perfect'].some(w => lower.includes(w));
+    const skeptical = ['however,', 'but ', "i'm not sure", "don't think", 'concern', 'challenging', 'struggle', 'worry'].some(w => lower.includes(w));
+    const closing = ['thank you for', "we'll be in touch", 'next steps', 'any questions for us', 'do you have any questions'].some(w => lower.includes(w));
+    const curious = (lower.includes('?') || ['interesting', 'tell me more', 'curious', 'explain'].some(w => lower.includes(w)));
+    if (excited) return { emotion: 'enthusiastic', reason: 'positive affirming language' };
+    if (skeptical) return { emotion: 'skeptical', reason: 'qualifying/hedging language' };
+    if (closing) return { emotion: 'wrapping up', reason: 'closing language detected' };
+    if (curious) return { emotion: 'curious', reason: 'inquiry or question language' };
+    return { emotion: 'neutral', reason: 'neutral conversational tone' };
+  }
 
   // Font size
   let fontSize = $state(Number(localStorage.getItem('font-size') ?? 14));
@@ -70,10 +126,11 @@
   );
   const interviewerPct = $derived(youPct > 0 ? 100 - youPct : 0);
   const fillerTotal = $derived(totalFillers(allFillerCounts));
+  // Thresholds: green <15s, amber 15-30s, red >30s
   const timerColor = $derived(
     answerMs === 0 ? '#475569' :
-    answerMs < 90000 ? '#22c55e' :
-    answerMs < 150000 ? '#f59e0b' : '#ef4444'
+    answerMs < 15000 ? '#22c55e' :
+    answerMs < 30000 ? '#f59e0b' : '#ef4444'
   );
   const ratioColor = $derived(
     youPct === 0 ? '#475569' : youPct < 65 ? '#22c55e' : '#f59e0b'
@@ -127,11 +184,16 @@
         } else if (event.speaker === 'Interviewer') {
           interviewerSegments++;
           resetAnswerTimer();
+          // Update audio sentiment from transcript text
+          const tone = analyzeAudioTone(event.text);
+          audioEmotion = tone.emotion;
+          audioReason = tone.reason;
         }
         break;
       }
       case 'sentiment':
         emotion = event.emotion;
+        if (event.reason) emotionReason = event.reason;
         if (event.coaching) coaching = event.coaching;
         break;
       case 'question_detected':
@@ -143,11 +205,18 @@
           i === suggestions.length - 1 && s.streaming ? { ...s, suggestion: s.suggestion + event.token } : s
         );
         break;
-      case 'suggestion_complete':
+      case 'suggestion_complete': {
         suggestions = suggestions.map((s, i) =>
           i === suggestions.length - 1 && s.streaming ? { ...s, suggestion: event.full_text, streaming: false } : s
         );
+        // TTS: speak the Tell: line (first line of suggestion)
+        const tellLine = event.full_text.split('\n')[0]
+          ?.replace(/^Tell:\s*/i, '')
+          ?.replace(/^Ask:\s*/i, '')
+          ?.trim();
+        if (tellLine) speakText(tellLine);
         break;
+      }
       case 'status':
         statusMessages = [...statusMessages.slice(-4), event.message];
         break;
@@ -182,6 +251,9 @@
           break;
         case '+': case '=': fontSize = Math.min(20, fontSize + 1); break;
         case '-': case '_': fontSize = Math.max(11, fontSize - 1); break;
+        case 't': case 'T':
+          if (!showVoiceMenu) { ttsEnabled = !ttsEnabled; }
+          break;
       }
     }
     window.addEventListener('keydown', onKey);
@@ -213,9 +285,44 @@
       <header class="interview-header">
         <h1>AI Interview Assistant</h1>
         <div class="header-right">
-          <div class="shortcuts-hint">F: focus &nbsp;· &nbsp;Esc: clear &nbsp;· &nbsp;+/−: font</div>
+          <div class="shortcuts-hint">F: focus · T: voice · Esc: clear · +/−: font</div>
+
+          <!-- TTS toggle -->
+          <div class="tts-controls">
+            <button
+              class="tts-btn"
+              class:tts-on={ttsEnabled}
+              onclick={() => ttsEnabled = !ttsEnabled}
+              title="Toggle voice hints (T)"
+            >
+              {ttsEnabled ? '🔊' : '🔇'} Voice
+            </button>
+            {#if ttsEnabled}
+              <button
+                class="voice-pick-btn"
+                onclick={() => showVoiceMenu = !showVoiceMenu}
+                title="Choose voice"
+              >▾</button>
+            {/if}
+            {#if showVoiceMenu}
+              <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+              <div class="voice-menu" role="menu" onmouseleave={() => showVoiceMenu = false}>
+                {#each ttsVoices as v}
+                  <button
+                    class="voice-option"
+                    class:selected={v.voiceURI === ttsVoiceURI}
+                    onclick={() => { ttsVoiceURI = v.voiceURI; showVoiceMenu = false; }}
+                  >{v.name} ({v.lang})</button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+
           <button class="debrief-btn" onclick={() => showDebrief = true}>End Interview</button>
-          <CaptureButton onCapture={(v) => { capturing = v; }} />
+          <CaptureButton
+            onCapture={(v) => { capturing = v; if (!v) webcamStream = null; }}
+            onStreams={(_, webcam) => { webcamStream = webcam; }}
+          />
         </div>
       </header>
 
@@ -243,8 +350,21 @@
           </div>
         </div>
 
-        <!-- Center: AI Suggestions (teleprompter — directly under webcam) -->
+        <!-- Center: AI Suggestions + self-view webcam at top -->
         <div class="col col-center">
+          {#if webcamStream}
+            <div class="selfview-strip">
+              <!-- svelte-ignore a11y_media_has_caption -->
+              <video
+                bind:this={webcamEl}
+                class="selfview"
+                autoplay
+                muted
+                playsinline
+              ></video>
+              <div class="selfview-label">You</div>
+            </div>
+          {/if}
           <div class="col-body">
             <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} />
           </div>
@@ -254,10 +374,16 @@
         <div class="col col-right">
           <div class="col-label">Interviewer</div>
           <div class="col-body col-right-body">
-            <SentimentBar {emotion} {coaching} />
+            <SentimentBar
+              videoEmotion={emotion}
+              videoReason={emotionReason}
+              {coaching}
+              {audioEmotion}
+              {audioReason}
+            />
 
             <div class="side-stats">
-              <div class="side-stat" title="Time since you started your current answer">
+              <div class="side-stat" title="Time since you started answering — aim for under 30 seconds">
                 <span class="side-label">Answer</span>
                 <span class="side-value" style="color: {timerColor}">
                   {answerMs > 0 ? fmtTime(answerMs) : '—'}
@@ -305,7 +431,7 @@
       </div>
     </div>
 
-    <!-- Focus mode overlay (F key) — suggestion fills screen near webcam -->
+    <!-- Focus mode overlay (F key) -->
     {#if focusMode}
       <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
       <div class="focus-overlay" onclick={() => focusMode = false}>
@@ -325,7 +451,7 @@
             <div class="focus-empty">Waiting for a question...</div>
           {/if}
         </div>
-        <div class="focus-hint">glance at bold keywords &nbsp;· &nbsp;F or click outside to exit</div>
+        <div class="focus-hint">glance at bold keywords · F or click outside to exit</div>
       </div>
     {/if}
 
@@ -370,6 +496,33 @@
   }
   .debrief-btn:hover { border-color: #a78bfa; color: #a78bfa; }
 
+  /* TTS controls */
+  .tts-controls { position: relative; display: flex; align-items: center; gap: 0.2rem; }
+  .tts-btn {
+    padding: 0.25rem 0.6rem; background: transparent;
+    border: 1px solid #334155; border-radius: 0.375rem;
+    color: #64748b; font-size: 0.72rem; cursor: pointer; white-space: nowrap;
+  }
+  .tts-btn.tts-on { border-color: #22c55e; color: #22c55e; }
+  .tts-btn:hover { border-color: #94a3b8; }
+  .voice-pick-btn {
+    padding: 0.2rem 0.35rem; background: transparent;
+    border: 1px solid #334155; border-radius: 0.25rem;
+    color: #64748b; font-size: 0.75rem; cursor: pointer;
+  }
+  .voice-menu {
+    position: absolute; top: calc(100% + 4px); right: 0; z-index: 200;
+    background: #1e293b; border: 1px solid #334155; border-radius: 0.375rem;
+    min-width: 200px; max-height: 250px; overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  .voice-option {
+    padding: 0.3rem 0.75rem; background: transparent; border: none;
+    color: #94a3b8; font-size: 0.72rem; cursor: pointer; text-align: left;
+  }
+  .voice-option:hover { background: #334155; color: #e2e8f0; }
+  .voice-option.selected { color: #60a5fa; }
+
   .error-banner {
     display: flex; align-items: flex-start; gap: 0.75rem;
     padding: 0.5rem 1rem; background: #450a0a; color: #fca5a5; font-size: 0.8rem; flex-shrink: 0;
@@ -386,11 +539,11 @@
     padding: 0.2rem 1rem; background: #1e3a5f; color: #93c5fd; font-size: 0.8rem; flex-shrink: 0;
   }
 
-  /* 3-column layout */
+  /* 3-column layout — narrower center for less eye travel */
   .three-col {
     flex: 1;
     display: grid;
-    grid-template-columns: 22% 1fr 26%;
+    grid-template-columns: 22% 320px 1fr;
     gap: 0;
     overflow: hidden;
     background: #070c14;
@@ -423,18 +576,45 @@
     flex-direction: column;
   }
 
-  /* Left column: transcript — slightly dimmer */
+  /* Left column: transcript */
   .col-left { background: #080d18; }
   .col-left .col-body { opacity: 0.75; }
   .col-left .col-body:hover { opacity: 1; transition: opacity 0.2s; }
 
-  /* Center column: suggestions — bright focal point */
+  /* Center column: suggestions */
   .col-center {
     background: #07101e;
     border-right: 1px solid #1e293b;
     border-left: 1px solid #1e293b;
+    flex-shrink: 0;
   }
-  .col-center .col-body { padding: 0.75rem 1rem; }
+  .col-center .col-body { padding: 0.5rem 0.75rem; }
+
+  /* Webcam self-view strip */
+  .selfview-strip {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.75rem;
+    border-bottom: 1px solid #1e293b;
+    background: #060e1a;
+    flex-shrink: 0;
+  }
+  .selfview {
+    width: 80px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 0.375rem;
+    border: 1px solid #1e293b;
+    background: #0f172a;
+    transform: scaleX(-1); /* mirror for self-view */
+  }
+  .selfview-label {
+    font-size: 0.6rem;
+    color: #334155;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
 
   /* Right column: stats */
   .col-right { background: #080d18; }

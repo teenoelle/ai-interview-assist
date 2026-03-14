@@ -35,15 +35,16 @@ async fn main() -> anyhow::Result<()> {
 
     let active = |k: &Option<String>| if k.is_some() { "yes" } else { "no" };
     tracing::info!(
-        "Providers — Gemini: yes | Anthropic: {} | Groq: {} | OpenRouter: {} | Cerebras: {} | Mistral: {}",
+        "Providers — Gemini: yes | Anthropic: {} | Groq: {} | OpenRouter: {} | Cerebras: {} | Mistral: {} | Qwen: {}",
         active(&config.anthropic_api_key),
         active(&config.groq_api_key),
         active(&config.openrouter_api_key),
         active(&config.cerebras_api_key),
         active(&config.mistral_api_key),
+        active(&config.qwen_api_key),
     );
     tracing::info!(
-        "Suggestion order: {} OpenRouter → Cerebras → Mistral → Groq → Gemini",
+        "Suggestion order: {} OpenRouter → Qwen → Cerebras → Mistral → Groq → Gemini",
         if config.anthropic_api_key.is_some() { "Claude →" } else { "" }
     );
     tracing::info!("Transcription order: Groq Whisper → Gemini (both streams)");
@@ -70,6 +71,7 @@ async fn main() -> anyhow::Result<()> {
         openrouter_key: config.openrouter_api_key.clone(),
         mistral_key: config.mistral_api_key.clone(),
         cerebras_key: config.cerebras_api_key.clone(),
+        qwen_key: config.qwen_api_key.clone(),
         rate_limiter: rate_limiter.clone(),
     };
 
@@ -114,6 +116,7 @@ async fn main() -> anyhow::Result<()> {
         config.openrouter_api_key.clone(),
         config.mistral_api_key.clone(),
         config.cerebras_api_key.clone(),
+        config.qwen_api_key.clone(),
         rate_limiter.clone(),
     ));
 

@@ -2,7 +2,11 @@
   import { MediaCapture } from '../lib/capture';
   import AudioMeter from './AudioMeter.svelte';
 
-  const { onCapture } = $props<{ onCapture: (active: boolean) => void }>();
+  type StreamsReadyCallback = (screen: MediaStream, webcam: MediaStream | null) => void;
+  const { onCapture, onStreams } = $props<{
+    onCapture: (active: boolean) => void;
+    onStreams?: StreamsReadyCallback;
+  }>();
 
   let capture: MediaCapture | null = $state(null);
   let active = $state(false);
@@ -25,11 +29,19 @@
       try {
         capture = new MediaCapture();
         capture.onLevel((mic, sys) => { micLevel = mic; systemLevel = sys; });
+        if (onStreams) capture.onStreamsReady(onStreams);
         await capture.start();
         active = true;
         onCapture(true);
-      } catch (e) {
-        error = String(e);
+      } catch (e: unknown) {
+        const msg = String(e);
+        if (msg.includes('Permission denied') || msg.includes('NotAllowedError')) {
+          error = 'Screen share permission denied. Click "Capture Meeting", select Entire Screen, and check "Share system audio" for Zoom/Teams.';
+        } else if (msg.includes('NotFoundError')) {
+          error = 'No screen or microphone found. Check your devices and try again.';
+        } else {
+          error = msg;
+        }
         capture = null;
       }
     }

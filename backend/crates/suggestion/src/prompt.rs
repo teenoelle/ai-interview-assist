@@ -36,12 +36,29 @@ pub fn build_user_prompt(question: &str, transcript: &[TranscriptSegment]) -> St
 
     if is_behavioral(question) {
         format!(
-            "{}The interviewer asked a behavioral question: '{}'\n\nProvide a STAR-format answer using ONLY the candidate's documented experience:\n\n**S — Situation:** [set the scene in 1 sentence]\n**T — Task:** [your specific responsibility in 1 sentence]\n**A — Action:** [exactly what you did — 1-2 sentences]\n**R — Result:** [measurable outcome in 1 sentence]\n\nOnly include facts from the candidate's actual documented background. If no matching experience exists, say so clearly.",
+            "{}The interviewer asked a behavioral question: '{}'\n\n\
+Reply in this EXACT format — no extra text:\n\
+Tell: [one sentence STAR summary — what to say first, 15 words max]\n\
+---\n\
+**S:** [Situation, 1 sentence]\n\
+**T:** [Task/responsibility, 1 sentence]\n\
+**A:** [Actions taken, 1-2 sentences with **bold** keywords]\n\
+**R:** [Measurable result, 1 sentence]\n\
+Ask: [one optional clarifying question the candidate could ask, or omit this line]\n\n\
+Use ONLY the candidate's documented experience. If no match, say so honestly in the Tell line.",
             ctx_prefix, question
         )
     } else {
         format!(
-            "{}The interviewer just asked: '{}'\n\nProvide 3 talking points using ONLY the candidate's documented background above. Use the scannable format from the instructions. If no relevant experience exists, say so honestly.",
+            "{}The interviewer asked: '{}'\n\n\
+Reply in this EXACT format — no extra text:\n\
+Tell: [one sentence of the strongest thing to say first, 15 words max]\n\
+---\n\
+• **[Keyword]** — [1 short sentence elaboration]\n\
+• **[Keyword]** — [1 short sentence elaboration]\n\
+• **[Keyword]** — [1 short sentence elaboration]\n\
+Ask: [one optional follow-up question the candidate could ask, or omit this line]\n\n\
+Use ONLY the candidate's documented background. Keep bullets under 12 words each.",
             ctx_prefix, question
         )
     }
@@ -82,13 +99,13 @@ mod tests {
     fn behavioral_question_triggers_star_format() {
         let p = build_user_prompt("Tell me about a time you led a team", &[]);
         assert!(p.contains("STAR"));
-        assert!(p.contains("**S —"));
+        assert!(p.contains("**S:**"));
     }
 
     #[test]
     fn non_behavioral_uses_bullet_format() {
         let p = build_user_prompt("What are your strengths?", &[]);
-        assert!(!p.contains("**S —"));
-        assert!(p.contains("talking points"));
+        assert!(!p.contains("**S:**"));
+        assert!(p.contains("Tell:"));
     }
 }

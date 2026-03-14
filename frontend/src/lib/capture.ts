@@ -2,9 +2,12 @@ import { AudioWebSocket, VideoWebSocket } from './websocket';
 
 export type LevelCallback = (micLevel: number, systemLevel: number) => void;
 
+export type StreamsCallback = (screen: MediaStream, webcam: MediaStream | null) => void;
+
 export class MediaCapture {
   private systemStream: MediaStream | null = null;
   private micStream: MediaStream | null = null;
+  private webcamStream: MediaStream | null = null;
   private systemAudioCtx: AudioContext | null = null;
   private micAudioCtx: AudioContext | null = null;
   private systemAudioWs: AudioWebSocket;
@@ -17,6 +20,7 @@ export class MediaCapture {
   private _micLevel = 0;
   private _systemLevel = 0;
   private _levelCallback: LevelCallback | null = null;
+  private _streamsCallback: StreamsCallback | null = null;
 
   public micActive = false;
 
@@ -27,6 +31,7 @@ export class MediaCapture {
   }
 
   onLevel(cb: LevelCallback) { this._levelCallback = cb; }
+  onStreamsReady(cb: StreamsCallback) { this._streamsCallback = cb; }
 
   get paused() { return this._paused; }
   pause()  { this._paused = true;  }
@@ -35,7 +40,7 @@ export class MediaCapture {
 
   async start(): Promise<void> {
     this.systemStream = await navigator.mediaDevices.getDisplayMedia({
-      video: { frameRate: 1 } as MediaTrackConstraints,
+      video: { frameRate: 1, displaySurface: 'monitor' } as MediaTrackConstraints,
       audio: true,
     });
 
@@ -44,6 +49,12 @@ export class MediaCapture {
       this.micActive = true;
     } catch {
       console.warn('Microphone access denied — using single-stream mode.');
+    }
+
+    try {
+      this.webcamStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    } catch {
+      console.warn('Webcam access denied — self-view disabled.');
     }
 
     this.systemAudioWs.connect();
@@ -55,6 +66,10 @@ export class MediaCapture {
     await this.startSystemAudioCapture();
     if (this.micActive) await this.startMicCapture();
     this.startVideoCapture();
+    // Notify caller with both streams for display
+    if (this._streamsCallback) {
+      this._streamsCallback(this.systemStream!, this.webcamStream);
+    }
   }
 
   private async startSystemAudioCapture() {
@@ -130,11 +145,13 @@ export class MediaCapture {
     this.micAudioCtx?.close();
     this.systemStream?.getTracks().forEach((t) => t.stop());
     this.micStream?.getTracks().forEach((t) => t.stop());
+    this.webcamStream?.getTracks().forEach((t) => t.stop());
     this.systemAudioWs.disconnect();
     this.micAudioWs.disconnect();
     this.videoWs.disconnect();
     this.systemStream = null;
     this.micStream = null;
+    this.webcamStream = null;
     this.micActive = false;
     this._paused = false;
   }

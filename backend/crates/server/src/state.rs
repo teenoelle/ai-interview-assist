@@ -19,5 +19,6 @@ pub struct AppState {
     pub openrouter_key: Option<String>,
     pub mistral_key: Option<String>,
     pub cerebras_key: Option<String>,
+    pub qwen_key: Option<String>,
     pub rate_limiter: RateLimiter,
 }

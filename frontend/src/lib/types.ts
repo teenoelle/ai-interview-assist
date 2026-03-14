@@ -1,6 +1,6 @@
 export type WsEvent =
   | { type: 'transcript'; text: string; timestamp_ms: number; speaker: string }
-  | { type: 'sentiment'; emotion: string; coaching?: string }
+  | { type: 'sentiment'; emotion: string; reason?: string; coaching?: string }
   | { type: 'question_detected'; question: string }
   | { type: 'suggestion_token'; token: string }
   | { type: 'suggestion_complete'; full_text: string }

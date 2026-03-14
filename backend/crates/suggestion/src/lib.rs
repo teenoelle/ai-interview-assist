@@ -5,6 +5,7 @@ pub mod openrouter_llm;
 pub mod mistral_llm;
 pub mod cerebras_llm;
 pub mod claude_llm;
+pub mod qwen_llm;
 pub mod prompt;
 
 use std::sync::Arc;
@@ -32,6 +33,7 @@ async fn suggest_with_fallback(
     openrouter_key: Option<&str>,
     mistral_key: Option<&str>,
     cerebras_key: Option<&str>,
+    qwen_key: Option<&str>,
     system_prompt: &str,
     user_prompt: &str,
     rate_limiter: &RateLimiter,
@@ -51,28 +53,35 @@ async fn suggest_with_fallback(
             event_tx, ());
     }
 
-    // 3. Cerebras — fast free Llama, generous free tier
+    // 3. Qwen (DashScope) — generous free tier for qwen-turbo
+    if let Some(key) = qwen_key {
+        try_provider!("Qwen",
+            qwen_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
+            event_tx, ());
+    }
+
+    // 4. Cerebras — fast free Llama, generous free tier
     if let Some(key) = cerebras_key {
         try_provider!("Cerebras",
             cerebras_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
             event_tx, ());
     }
 
-    // 4. Mistral — free tier mistral-small
+    // 5. Mistral — free tier mistral-small
     if let Some(key) = mistral_key {
         try_provider!("Mistral",
             mistral_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
             event_tx, ());
     }
 
-    // 5. Groq — 1,000 req/day LLM limit; saved here since Whisper uses a separate quota
+    // 6. Groq — 1,000 req/day LLM limit; saved here since Whisper uses a separate quota
     if let Some(key) = groq_key {
         try_provider!("Groq",
             groq_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
             event_tx, ());
     }
 
-    // 6. Gemini — absolute last resort, keep credits for sentiment analysis
+    // 7. Gemini — absolute last resort, keep credits for sentiment analysis
     rate_limiter.acquire().await;
     match gemini_llm::stream_suggestions(gemini_key, system_prompt, user_prompt, event_tx).await {
         Ok(()) => return Ok(()),
@@ -94,6 +103,7 @@ pub async fn run_agent(
     openrouter_key: Option<String>,
     mistral_key: Option<String>,
     cerebras_key: Option<String>,
+    qwen_key: Option<String>,
     rate_limiter: RateLimiter,
 ) {
     loop {
@@ -105,6 +115,7 @@ pub async fn run_agent(
                 let orkey = openrouter_key.clone();
                 let mkey = mistral_key.clone();
                 let ckey = cerebras_key.clone();
+                let qkey = qwen_key.clone();
                 let etx = event_tx.clone();
                 let sp = system_prompt.read().await.clone();
                 let tr = transcript.read().await.clone();
@@ -121,6 +132,7 @@ pub async fn run_agent(
                         orkey.as_deref(),
                         mkey.as_deref(),
                         ckey.as_deref(),
+                        qkey.as_deref(),
                         &sp,
                         &user_prompt,
                         &rl,

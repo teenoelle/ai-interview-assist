@@ -1,14 +1,14 @@
 // Ring buffer for PCM audio chunks
 // PCM format: 16-bit signed LE, 16kHz, mono
 // Samples per second = 16000, 2 bytes per sample
-// 8 seconds max = 16000 * 8 * 2 = 256000 bytes
-// 3 seconds min = 16000 * 3 * 2 = 96000 bytes
+// 4 seconds min = 16000 * 4 * 2 = 128000 bytes  (reduced from 8s for faster suggestions)
+// 15 seconds max = 16000 * 15 * 2 = 480000 bytes
 
 const SAMPLE_RATE: usize = 16000;
 const BYTES_PER_SAMPLE: usize = 2;
-pub(crate) const MIN_SEGMENT_BYTES: usize = SAMPLE_RATE * 8 * BYTES_PER_SAMPLE;
-pub(crate) const MAX_SEGMENT_BYTES: usize = SAMPLE_RATE * 20 * BYTES_PER_SAMPLE;
-pub(crate) const SILENCE_THRESHOLD_BYTES: usize = SAMPLE_RATE * 2 * BYTES_PER_SAMPLE;
+pub(crate) const MIN_SEGMENT_BYTES: usize = SAMPLE_RATE * 4 * BYTES_PER_SAMPLE;
+pub(crate) const MAX_SEGMENT_BYTES: usize = SAMPLE_RATE * 15 * BYTES_PER_SAMPLE;
+pub(crate) const SILENCE_THRESHOLD_BYTES: usize = SAMPLE_RATE * 1 * BYTES_PER_SAMPLE;
 
 pub struct RingBuffer {
     data: Vec<u8>,

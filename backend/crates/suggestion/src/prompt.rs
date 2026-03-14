@@ -38,26 +38,27 @@ pub fn build_user_prompt(question: &str, transcript: &[TranscriptSegment]) -> St
         format!(
             "{}The interviewer asked a behavioral question: '{}'\n\n\
 Reply in this EXACT format — no extra text:\n\
-Say: [opening sentence — hook with the core outcome or action, conversational, 15 words max]\n\
+Say: [3-6 word hook — the outcome or boldest action, e.g. 'led migration, cut costs 40%%']\n\
 ---\n\
-**S:** [Situation — one short sentence, feels like you're recalling it naturally]\n\
-**T:** [Task — one short sentence, what you were responsible for]\n\
-**A:** [Actions — 1-2 short sentences, use **bold** on 1-2 key verbs or decisions]\n\
-**R:** [Result — one short sentence with a specific outcome or number if possible]\n\
-Ask: [one optional natural follow-up question, or omit this line]\n\n\
-Use ONLY documented experience. Write short declarative sentences — no corporate jargon. If no clear match exists, say so honestly in the Say line.",
+**S:** [3-5 word situation cue]\n\
+**T:** [3-5 word task/ownership cue]\n\
+**A:** [3-6 word action cue with one **bold** keyword]\n\
+**R:** [3-5 word result cue, include number if possible]\n\
+Ask: [3-6 word optional follow-up question cue, or omit]\n\n\
+CRITICAL: Every line is a memory cue, NOT a full sentence. 3-6 words max per bullet. Candidate will expand verbally. Use ONLY documented experience.",
             ctx_prefix, question
         )
     } else {
         format!(
             "{}The interviewer asked: '{}'\n\n\
 Reply in this EXACT format — no extra text:\n\
-Say: [the single strongest thing to open with — direct, confident, 12 words max]\n\
+Say: [3-6 word opening cue — the strongest hook]\n\
 ---\n\
-[Sentence 2: one natural elaboration — feels like thinking aloud, under 15 words]\n\
-[Sentence 3: one concrete detail or example — short, spontaneous, under 15 words. Omit if not needed.]\n\
-Ask: [one optional follow-up question to invite dialogue, or omit this line]\n\n\
-Rules: Use ONLY documented background. Every sentence under 15 words. No bullets. No jargon. Write like you are genuinely recalling — short, confident, natural.",
+• [3-5 word cue — first supporting point]\n\
+• [3-5 word cue — second supporting point or example]\n\
+• [3-5 word cue — optional third point, omit if weak]\n\
+Ask: [3-6 word optional follow-up question cue, or omit]\n\n\
+CRITICAL: Every line is a memory cue, NOT a full sentence. 3-6 words max. No verbs that make it a full sentence. Candidate reads the cue and speaks naturally. Use ONLY documented background.",
             ctx_prefix, question
         )
     }
@@ -102,10 +103,10 @@ mod tests {
     }
 
     #[test]
-    fn non_behavioral_uses_prose_format() {
+    fn non_behavioral_uses_bullet_cues() {
         let p = build_user_prompt("What are your strengths?", &[]);
         assert!(!p.contains("**S:**"));
         assert!(p.contains("Say:"));
-        assert!(!p.contains("•"));
+        assert!(p.contains("•"));
     }
 }

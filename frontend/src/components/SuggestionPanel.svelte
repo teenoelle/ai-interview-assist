@@ -488,7 +488,7 @@
     flex-shrink: 0;
   }
   .cue-badge.cue-ask { background: #3b0764; color: #c084fc; }
-  .cue-badge.cue-affirm { background: #1a2d4a; color: #60a5fa; }
+  .cue-badge.cue-affirm { background: #134e4a; color: #2dd4bf; }
 
   /* Teleprompter Affirm row */
   .tp-affirm-row {
@@ -496,13 +496,13 @@
     align-items: flex-start;
     gap: 0.5rem;
     padding: 0.35rem 0.6rem;
-    background: #070f1e;
+    background: #071a18;
     border-radius: 0.4rem;
-    border-left: 2px solid #1e3a5f;
+    border-left: 2px solid #0d4a44;
     flex-shrink: 0;
   }
   .tp-affirm-text {
-    color: #60a5fa;
+    color: #2dd4bf;
     font-size: 0.82rem;
     font-style: italic;
     line-height: 1.4;
@@ -787,12 +787,12 @@
     align-items: flex-start;
     gap: 0.4rem;
     padding: 0.3rem 0.5rem;
-    background: #070f1e;
+    background: #071a18;
     border-radius: 0.3rem;
-    border-left: 2px solid #1e3a5f;
+    border-left: 2px solid #0d4a44;
   }
   .affirm-text {
-    color: #60a5fa;
+    color: #2dd4bf;
     font-size: 0.78rem;
     font-style: italic;
     line-height: 1.4;

@@ -950,8 +950,8 @@
     flex-direction: column;
     gap: 0.15rem;
     padding: 0.4rem 0.6rem;
-    background: #060a14;
-    border-top: 1px solid #0f172a;
+    background: #150e00;
+    border-top: 1px solid #2a1a00;
     flex-shrink: 0;
   }
   .coaching-emotion {
@@ -959,7 +959,7 @@
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.07em;
-    color: #60a5fa;
+    color: #f59e0b;
   }
   .coaching-note {
     font-size: 0.72rem;

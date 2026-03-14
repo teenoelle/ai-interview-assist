@@ -13,7 +13,9 @@
   let cvFile: File | null = $state(null);
   let extraFile: File | null = $state(null);
   let loading = $state(false);
+  let loadingStep = $state('');
   let error = $state('');
+  let formEl: HTMLDivElement | undefined = $state();
   let systemPromptPreview = $state('');
   let predictedQuestions = $state<string[]>([]);
   let companyBrief = $state<CompanyBrief | null>(null);
@@ -43,6 +45,8 @@
   async function handleSubmit() {
     loading = true;
     error = '';
+    loadingStep = companyUrl.trim() ? 'Crawling company website…' : 'Analysing your background…';
+    formEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     try {
       const formData = new FormData();
       formData.append('job_description', jobDescription);
@@ -59,6 +63,7 @@
       if (cvFile) formData.append('cv_file', cvFile);
       if (extraFile) formData.append('extra_file', extraFile);
 
+      loadingStep = 'Generating your coaching profile…';
       const result = await submitSetup(formData);
       systemPromptPreview = result.system_prompt_preview;
       predictedQuestions = result.predicted_questions ?? [];
@@ -69,8 +74,10 @@
       setupDone = true;
     } catch (e) {
       error = String(e);
+      formEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } finally {
       loading = false;
+      loadingStep = '';
     }
   }
 
@@ -85,7 +92,7 @@
   }
 </script>
 
-<div class="setup-form">
+<div class="setup-form" bind:this={formEl}>
   <h2>Interview Setup</h2>
   <p class="subtitle">Fill in your context before the interview begins</p>
 
@@ -95,6 +102,10 @@
 
   {#if setupDone}
     <div class="post-setup">
+      <div class="setup-success">
+        ✓ Setup complete — review your brief below, then start the interview
+      </div>
+
       <!-- Tab bar -->
       <div class="tab-bar">
         <button class="tab" class:tab-active={activeTab === 'overview'} onclick={() => activeTab = 'overview'}>Overview</button>
@@ -234,13 +245,21 @@
     </div>
 
     <button onclick={handleSubmit} disabled={loading} class="btn-primary">
-      {loading ? 'Processing...' : 'Start Session'}
+      {loading ? (loadingStep || 'Processing…') : 'Start Session'}
     </button>
+    {#if loading}
+      <p class="loading-note">This can take 30–60 seconds if a company URL was provided.</p>
+    {/if}
   {/if}
 </div>
 
 <style>
-  .setup-form { max-width: 720px; margin: 0 auto; padding: 2rem; }
+  .setup-form { max-width: 720px; margin: 0 auto; padding: 2rem; scroll-margin-top: 1rem; }
+  .setup-success {
+    padding: 0.75rem 1rem; background: #052e16; border: 1px solid #166534;
+    border-radius: 0.5rem; color: #4ade80; font-size: 0.875rem; font-weight: 500;
+  }
+  .loading-note { margin-top: 0.5rem; color: #64748b; font-size: 0.8rem; }
   h2 { font-size: 1.75rem; margin-bottom: 0.5rem; color: #f1f5f9; }
   .subtitle { color: #94a3b8; margin-bottom: 2rem; }
   .field { margin-bottom: 1.5rem; }

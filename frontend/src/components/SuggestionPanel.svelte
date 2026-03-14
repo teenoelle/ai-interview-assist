@@ -48,13 +48,13 @@
     return text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   }
 
-  function parseSuggestion(text: string): { affirm: string; cue: string; tell: string; body: string; ask: string } {
+  function parseSuggestion(text: string): { affirm: string; cue: string; tell: string; body: string; asks: string[] } {
     const lines = text.split('\n');
     let affirm = '';
     let tell = '';
     let cue = 'Say';
     let body = '';
-    let ask = '';
+    const asks: string[] = [];
     const bodyLines: string[] = [];
     let pastSeparator = false;
 
@@ -74,7 +74,8 @@
         }
       } else {
         if (trimmed.match(/^Ask:/i)) {
-          ask = trimmed.replace(/^Ask:\s*/i, '').trim();
+          const a = trimmed.replace(/^Ask:\s*/i, '').trim();
+          if (a) asks.push(a);
         } else {
           bodyLines.push(line);
         }
@@ -89,7 +90,7 @@
       body = text;
     }
 
-    return { affirm, cue, tell, body, ask };
+    return { affirm, cue, tell, body, asks };
   }
 
   const totalCount = $derived(suggestions.length);
@@ -173,10 +174,21 @@
             <span class="tp-tell">{parsed.tell}{#if current.streaming && !parsed.body}<span class="cursor">|</span>{/if}</span>
           </div>
 
-          {#if parsed.ask}
+          {#each parsed.asks as ask}
             <div class="tp-ask-row tp-ask-always">
               <span class="cue-badge cue-ask">Ask</span>
-              <span class="tp-ask-text">{parsed.ask}</span>
+              <span class="tp-ask-text">{ask}</span>
+            </div>
+          {/each}
+          {#if current.answerFeedback}
+            <div class="tp-feedback">
+              {#if current.answerFeedback.missed_followup}
+                <span class="fb-badge fb-orange">Forgot follow-up</span>
+              {/if}
+              {#if current.answerFeedback.missed_metric}
+                <span class="fb-badge fb-orange">Add a metric</span>
+              {/if}
+              <p class="fb-coaching">{current.answerFeedback.coaching}</p>
             </div>
           {/if}
 
@@ -200,7 +212,7 @@
       <div class="tp-empty">Waiting for a question...</div>
     {/if}
 
-    <span class="tp-hint">Affirm = acknowledge their concern · Say = speak it · Ask = ask them · bold = keywords</span>
+    <span class="tp-hint">Affirm = acknowledge concern · Say = speak · Ask = questions to ask them</span>
   </div>
 
 {:else}
@@ -249,12 +261,12 @@
                   <div class="body-text">
                     {@html renderBold(parsed.body)}
                     {#if entry.streaming}<span class="cursor">|</span>{/if}
-                    {#if parsed.ask}
+                  {#each parsed.asks as ask}
                       <div class="ask-row">
                         <span class="cue-badge cue-ask">Ask</span>
-                        <span>{parsed.ask}</span>
+                        <span>{ask}</span>
                       </div>
-                    {/if}
+                    {/each}
                   </div>
                 {/if}
               {/if}
@@ -494,6 +506,38 @@
     margin-top: 0.25rem;
   }
   .tp-ask-text { color: #7a9ab8; font-size: 0.82rem; font-style: italic; overflow-wrap: break-word; }
+
+  /* Answer feedback */
+  .tp-feedback {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.35rem;
+    padding: 0.5rem 0.7rem;
+    background: #0d0d1a;
+    border: 1px solid #2a1a3a;
+    border-left: 3px solid #7c3aed;
+    border-radius: 0.4rem;
+    margin-top: 0.25rem;
+  }
+  .fb-badge {
+    padding: 0.1rem 0.45rem;
+    border-radius: 0.25rem;
+    font-size: 0.58rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+  }
+  .fb-orange { background: #431407; color: #fb923c; }
+  .fb-coaching {
+    width: 100%;
+    margin: 0;
+    font-size: 0.75rem;
+    color: #94a3b8;
+    line-height: 1.5;
+    font-style: italic;
+  }
 
   .tp-hint {
     font-size: 0.58rem;

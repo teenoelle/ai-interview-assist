@@ -168,4 +168,8 @@ export class MediaCapture {
   }
 
   get active() { return this.systemStream !== null; }
+
+  get hasSystemAudio(): boolean {
+    return (this.systemStream?.getAudioTracks().length ?? 0) > 0;
+  }
 }

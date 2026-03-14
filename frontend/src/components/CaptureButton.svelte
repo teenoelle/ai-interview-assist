@@ -1,8 +1,6 @@
 <script lang="ts">
   import { MediaCapture } from '../lib/capture';
   import AudioMeter from './AudioMeter.svelte';
-
-  import type { MediaCapture } from '../lib/capture';
   type StreamsReadyCallback = (screen: MediaStream, webcam: MediaStream | null) => void;
   const { onCapture, onStreams, onReady } = $props<{
     onCapture: (active: boolean) => void;
@@ -36,6 +34,10 @@
         active = true;
         onCapture(true);
         onReady?.(capture);
+        // Warn if no system audio was captured (user didn't tick the checkbox)
+        if (!capture.hasSystemAudio) {
+          error = 'No system audio captured — interviewer audio won\'t be transcribed. Stop, reshare your screen, and tick "Share system audio" in the browser dialog. For Zoom/Teams desktop, share your Entire Screen.';
+        }
       } catch (e: unknown) {
         const msg = String(e);
         if (msg.includes('Permission denied') || msg.includes('NotAllowedError')) {

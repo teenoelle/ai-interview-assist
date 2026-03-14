@@ -135,6 +135,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/setup/finalize", post(http_handler::handle_setup_finalize))
         .route("/api/debrief", post(http_handler::handle_debrief))
         .route("/api/practice-question", post(http_handler::handle_practice_question))
+        .route("/api/answer-feedback", post(http_handler::handle_answer_feedback))
         .fallback_service(ServeDir::new(&frontend_path))
         .layer(CorsLayer::permissive())
         .with_state(state);

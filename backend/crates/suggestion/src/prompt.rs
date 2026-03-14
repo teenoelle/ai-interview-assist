@@ -45,7 +45,8 @@ Say: [3-6 word hook — the outcome or boldest action, e.g. 'led migration, cut 
 **T:** [3-5 word task/ownership cue]\n\
 **A:** [3-6 word action cue with one **bold** keyword]\n\
 **R:** [3-5 word result cue, include number if possible]\n\
-Ask: [3-6 word optional follow-up question cue, or omit]\n\n\
+Ask: [3-6 word follow-up cue for candidate to ask interviewer — e.g. 'how does team handle incidents?']\n\
+Ask: [3-6 word second follow-up cue, or omit if none]\n\n\
 CRITICAL: Every line is a memory cue, NOT a full sentence. 3-6 words max per bullet. Candidate will expand verbally. Use ONLY documented experience.",
             ctx_prefix, question
         )
@@ -59,7 +60,8 @@ Say: [3-6 word opening cue — the strongest hook]\n\
 • [3-5 word cue — first supporting point]\n\
 • [3-5 word cue — second supporting point or example]\n\
 • [3-5 word cue — optional third point, omit if weak]\n\
-Ask: [3-6 word optional follow-up question cue, or omit]\n\n\
+Ask: [3-6 word follow-up cue for candidate to ask interviewer]\n\
+Ask: [3-6 word second follow-up cue, or omit if none]\n\n\
 CRITICAL: Every line is a memory cue, NOT a full sentence. 3-6 words max. No verbs that make it a full sentence. Candidate reads the cue and speaks naturally. Use ONLY documented background.",
             ctx_prefix, question
         )

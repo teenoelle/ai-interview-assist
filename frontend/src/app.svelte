@@ -148,6 +148,10 @@
   let interviewerSegments = $state(0);
   let allFillerCounts = $state<FillerCount[]>([]);
 
+  // Answer feedback tracking
+  let currentQuestionIdx = $state(-1);
+  let youSegmentsSinceQuestion = $state<string[]>([]);
+
   let answerInterval: ReturnType<typeof setInterval> | null = null;
 
   function startAnswerTimer() {
@@ -217,6 +221,7 @@
           lastSpeechAt = Date.now();
           youSegments++;
           startAnswerTimer();
+          youSegmentsSinceQuestion = [...youSegmentsSinceQuestion, event.text];
           const newCounts = countFillers(event.text);
           const merged: Record<string, number> = {};
           for (const f of allFillerCounts) merged[f.word] = f.count;
@@ -245,6 +250,34 @@
         if (event.coaching_why) coachingWhy = event.coaching_why;
         break;
       case 'question_detected':
+        // Evaluate previous answer before moving on
+        if (currentQuestionIdx >= 0 && youSegmentsSinceQuestion.length > 0) {
+          const prevIdx = currentQuestionIdx;
+          const prevSuggestion = suggestions[prevIdx];
+          if (prevSuggestion && prevSuggestion.suggestion) {
+            const answerText = youSegmentsSinceQuestion.join(' ');
+            fetch('/api/answer-feedback', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                question: prevSuggestion.question,
+                answer: answerText,
+                suggestion: prevSuggestion.suggestion,
+              }),
+            })
+              .then(r => r.ok ? r.json() : null)
+              .then(fb => {
+                if (fb) {
+                  suggestions = suggestions.map((s, i) =>
+                    i === prevIdx ? { ...s, answerFeedback: fb } : s
+                  );
+                }
+              })
+              .catch(() => {});
+          }
+        }
+        currentQuestionIdx = suggestions.length;
+        youSegmentsSinceQuestion = [];
         suggestions = [...suggestions, { question: event.question, suggestion: '', streaming: true }];
         resetAnswerTimer();
         break;

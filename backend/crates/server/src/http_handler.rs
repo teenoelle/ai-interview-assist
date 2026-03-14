@@ -230,3 +230,26 @@ pub async fn handle_practice_question(
 
     Ok(Json(PracticeQuestionResponse { suggestion }))
 }
+
+#[derive(serde::Deserialize)]
+pub struct AnswerFeedbackRequest {
+    pub question: String,
+    pub answer: String,
+    pub suggestion: String,
+}
+
+pub async fn handle_answer_feedback(
+    State(state): State<AppState>,
+    Json(req): Json<AnswerFeedbackRequest>,
+) -> Result<Json<context::ai_helper::AnswerFeedbackResult>, (StatusCode, String)> {
+    context::ai_helper::generate_answer_feedback(
+        &req.question,
+        &req.answer,
+        &req.suggestion,
+        &state.gemini_key,
+        state.anthropic_key.as_deref(),
+    )
+    .await
+    .map(Json)
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}

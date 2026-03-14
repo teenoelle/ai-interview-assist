@@ -225,3 +225,47 @@ fn parse_debrief(text: &str) -> DebriefResult {
         followup_email_draft: email_draft,
     }
 }
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct AnswerFeedbackResult {
+    pub coaching: String,
+    pub missed_followup: bool,
+    pub missed_metric: bool,
+}
+
+/// Evaluate what the candidate said against the question and suggestion.
+pub async fn generate_answer_feedback(
+    question: &str,
+    candidate_answer: &str,
+    suggestion: &str,
+    gemini_key: &str,
+    anthropic_key: Option<&str>,
+) -> Result<AnswerFeedbackResult> {
+    let prompt = format!(
+        "The interviewer asked: \"{}\"\n\nThe AI suggested the candidate say:\n{}\n\nThe candidate actually said: \"{}\"\n\nAnalyze the candidate's answer. Respond in EXACTLY this format:\n\nCOACHING: [1-2 sentence coaching note — be specific, reference what they said or missed]\nMISSED_FOLLOWUP: [yes/no — did they forget to ask a follow-up question to the interviewer?]\nMISSED_METRIC: [yes/no — did they fail to mention a specific number, metric, or measurable outcome?]",
+        question, suggestion, candidate_answer
+    );
+
+    let text = call_ai(&prompt, gemini_key, anthropic_key, 200).await?;
+
+    let mut coaching = String::new();
+    let mut missed_followup = false;
+    let mut missed_metric = false;
+
+    for line in text.lines() {
+        let t = line.trim();
+        if let Some(rest) = t.strip_prefix("COACHING:") {
+            coaching = rest.trim().to_string();
+        } else if let Some(rest) = t.strip_prefix("MISSED_FOLLOWUP:") {
+            missed_followup = rest.trim().to_lowercase().contains("yes");
+        } else if let Some(rest) = t.strip_prefix("MISSED_METRIC:") {
+            missed_metric = rest.trim().to_lowercase().contains("yes");
+        }
+    }
+
+    Ok(AnswerFeedbackResult {
+        coaching: if coaching.is_empty() { "Good answer.".to_string() } else { coaching },
+        missed_followup,
+        missed_metric,
+    })
+}

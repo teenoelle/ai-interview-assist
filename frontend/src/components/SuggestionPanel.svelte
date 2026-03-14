@@ -164,6 +164,13 @@
             <span class="tp-tell">{parsed.tell}{#if current.streaming && !parsed.body}<span class="cursor">|</span>{/if}</span>
           </div>
 
+          {#if parsed.ask}
+            <div class="tp-ask-row tp-ask-always">
+              <span class="cue-badge cue-ask">Ask</span>
+              <span class="tp-ask-text">{parsed.ask}</span>
+            </div>
+          {/if}
+
           {#if parsed.body}
             <div class="tp-expand-row">
               <button class="tp-expand-btn" onclick={() => toggleExpand(currentIndex)}>
@@ -175,12 +182,6 @@
               <div class="tp-body">
                 {@html renderBold(parsed.body)}
                 {#if current.streaming}<span class="cursor">|</span>{/if}
-                {#if parsed.ask}
-                  <div class="tp-ask-row">
-                    <span class="cue-badge cue-ask">Ask</span>
-                    <span class="tp-ask-text">{parsed.ask}</span>
-                  </div>
-                {/if}
               </div>
             {/if}
           {/if}
@@ -449,6 +450,13 @@
     align-items: flex-start;
     gap: 0.4rem;
     margin-top: 0.5rem;
+  }
+  .tp-ask-always {
+    padding: 0.4rem 0.6rem;
+    background: #160a2a;
+    border-radius: 0.4rem;
+    border-left: 2px solid #7c3aed;
+    margin-top: 0.25rem;
   }
   .tp-ask-text { color: #7a9ab8; font-size: 0.82rem; font-style: italic; overflow-wrap: break-word; }
 

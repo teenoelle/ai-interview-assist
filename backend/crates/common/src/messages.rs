@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WsEvent {
     Transcript { text: String, timestamp_ms: u64, speaker: String },
-    Sentiment { emotion: String, reason: Option<String>, coaching: Option<String> },
+    Sentiment { emotion: String, reason: Option<String>, coaching: Option<String>, coaching_why: Option<String> },
     QuestionDetected { question: String },
     SuggestionToken { token: String },
     SuggestionComplete { full_text: String },

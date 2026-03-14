@@ -27,7 +27,7 @@ pub async fn run_agent(
                     if let Some(key) = &akey {
                         match claude_vision::analyze_sentiment(key, &jpeg_bytes).await {
                             Ok(result) => {
-                                let _ = etx.send(WsEvent::Sentiment { emotion: result.emotion, reason: result.reason, coaching: result.coaching });
+                                let _ = etx.send(WsEvent::Sentiment { emotion: result.emotion, reason: result.reason, coaching: result.coaching, coaching_why: result.coaching_why });
                                 // Broadcast rate limit info so the frontend can display it
                                 if let (Some(remaining), Some(limit)) =
                                     (result.requests_remaining, result.requests_limit)
@@ -63,7 +63,7 @@ pub async fn run_agent(
 
                     match result {
                         Ok(result) => {
-                            let _ = etx.send(WsEvent::Sentiment { emotion: result.emotion, reason: result.reason, coaching: result.coaching });
+                            let _ = etx.send(WsEvent::Sentiment { emotion: result.emotion, reason: result.reason, coaching: result.coaching, coaching_why: result.coaching_why });
                         }
                         Err(e) => {
                             tracing::error!("Sentiment error: {}", e);

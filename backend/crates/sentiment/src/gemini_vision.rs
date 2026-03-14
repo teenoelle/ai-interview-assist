@@ -10,6 +10,7 @@ pub struct SentimentResult {
     pub emotion: String,
     pub reason: Option<String>,
     pub coaching: Option<String>,
+    pub coaching_why: Option<String>,
 }
 
 pub async fn analyze_sentiment(api_key: &str, jpeg_bytes: &[u8]) -> Result<SentimentResult> {
@@ -19,7 +20,7 @@ pub async fn analyze_sentiment(api_key: &str, jpeg_bytes: &[u8]) -> Result<Senti
         "contents": [{
             "parts": [
                 { "inlineData": { "mimeType": "image/jpeg", "data": b64 } },
-                { "text": "This is a screenshot of a video interview call. Focus on the interviewer (not the self-preview thumbnail). Analyze their facial expression, body language, and engagement level.\n\nRespond in exactly this format (three lines, nothing else):\nEMOTION: <one word: engaged, curious, neutral, skeptical, confused, bored, pleased>\nREASON: <brief visual cue — 5-8 words, e.g. 'leaning forward, nodding frequently'>\nCOACHING: <one specific action the candidate should take right now>\n\nExample:\nEMOTION: skeptical\nREASON: arms crossed, raised eyebrow\nCOACHING: Add a concrete number or specific example to back up your last point." }
+                { "text": "This is a screenshot of a video interview call. Focus on the interviewer (not the self-preview thumbnail). Analyze their facial expression, body language, and engagement level.\n\nRespond in exactly this format (four lines, nothing else):\nEMOTION: <one word: engaged, curious, neutral, skeptical, confused, bored, pleased>\nREASON: <brief visual cue — 5-8 words, e.g. 'leaning forward, nodding frequently'>\nCOACHING: <one specific body language or expression adjustment the candidate should make RIGHT NOW>\nCOACHING_WHY: <one sentence — why this adjustment will help in this specific moment>\n\nExample:\nEMOTION: skeptical\nREASON: arms crossed, raised eyebrow\nCOACHING: Lean forward slightly and nod while making your next point\nCOACHING_WHY: Mirroring openness signals you welcome scrutiny and builds rapport with a doubting interviewer." }
             ]
         }]
     });
@@ -50,14 +51,15 @@ pub async fn analyze_sentiment(api_key: &str, jpeg_bytes: &[u8]) -> Result<Senti
         .trim()
         .to_string();
 
-    let (emotion, reason, coaching) = parse_sentiment_response(&raw);
-    Ok(SentimentResult { emotion, reason, coaching })
+    let (emotion, reason, coaching, coaching_why) = parse_sentiment_response(&raw);
+    Ok(SentimentResult { emotion, reason, coaching, coaching_why })
 }
 
-fn parse_sentiment_response(raw: &str) -> (String, Option<String>, Option<String>) {
+fn parse_sentiment_response(raw: &str) -> (String, Option<String>, Option<String>, Option<String>) {
     let mut emotion = "neutral".to_string();
     let mut reason: Option<String> = None;
     let mut coaching: Option<String> = None;
+    let mut coaching_why: Option<String> = None;
 
     for line in raw.lines() {
         let line = line.trim();
@@ -72,11 +74,14 @@ fn parse_sentiment_response(raw: &str) -> (String, Option<String>, Option<String
         } else if let Some(rest) = line.strip_prefix("REASON:") {
             let r = rest.trim().to_string();
             if !r.is_empty() { reason = Some(r); }
+        } else if let Some(rest) = line.strip_prefix("COACHING_WHY:") {
+            let w = rest.trim().to_string();
+            if !w.is_empty() { coaching_why = Some(w); }
         } else if let Some(rest) = line.strip_prefix("COACHING:") {
             let tip = rest.trim().to_string();
             if !tip.is_empty() { coaching = Some(tip); }
         }
     }
 
-    (emotion, reason, coaching)
+    (emotion, reason, coaching, coaching_why)
 }

@@ -38,27 +38,26 @@ pub fn build_user_prompt(question: &str, transcript: &[TranscriptSegment]) -> St
         format!(
             "{}The interviewer asked a behavioral question: '{}'\n\n\
 Reply in this EXACT format — no extra text:\n\
-Tell: [one sentence STAR summary — what to say first, 15 words max]\n\
+Say: [opening sentence — hook with the core outcome or action, conversational, 15 words max]\n\
 ---\n\
-**S:** [Situation, 1 sentence]\n\
-**T:** [Task/responsibility, 1 sentence]\n\
-**A:** [Actions taken, 1-2 sentences with **bold** keywords]\n\
-**R:** [Measurable result, 1 sentence]\n\
-Ask: [one optional clarifying question the candidate could ask, or omit this line]\n\n\
-Use ONLY the candidate's documented experience. If no match, say so honestly in the Tell line.",
+**S:** [Situation — one short sentence, feels like you're recalling it naturally]\n\
+**T:** [Task — one short sentence, what you were responsible for]\n\
+**A:** [Actions — 1-2 short sentences, use **bold** on 1-2 key verbs or decisions]\n\
+**R:** [Result — one short sentence with a specific outcome or number if possible]\n\
+Ask: [one optional natural follow-up question, or omit this line]\n\n\
+Use ONLY documented experience. Write short declarative sentences — no corporate jargon. If no clear match exists, say so honestly in the Say line.",
             ctx_prefix, question
         )
     } else {
         format!(
             "{}The interviewer asked: '{}'\n\n\
 Reply in this EXACT format — no extra text:\n\
-Tell: [one sentence of the strongest thing to say first, 15 words max]\n\
+Say: [the single strongest thing to open with — direct, confident, 12 words max]\n\
 ---\n\
-• **[Keyword]** — [1 short sentence elaboration]\n\
-• **[Keyword]** — [1 short sentence elaboration]\n\
-• **[Keyword]** — [1 short sentence elaboration]\n\
-Ask: [one optional follow-up question the candidate could ask, or omit this line]\n\n\
-Use ONLY the candidate's documented background. Keep bullets under 12 words each.",
+[Sentence 2: one natural elaboration — feels like thinking aloud, under 15 words]\n\
+[Sentence 3: one concrete detail or example — short, spontaneous, under 15 words. Omit if not needed.]\n\
+Ask: [one optional follow-up question to invite dialogue, or omit this line]\n\n\
+Rules: Use ONLY documented background. Every sentence under 15 words. No bullets. No jargon. Write like you are genuinely recalling — short, confident, natural.",
             ctx_prefix, question
         )
     }
@@ -98,14 +97,15 @@ mod tests {
     #[test]
     fn behavioral_question_triggers_star_format() {
         let p = build_user_prompt("Tell me about a time you led a team", &[]);
-        assert!(p.contains("STAR"));
         assert!(p.contains("**S:**"));
+        assert!(p.contains("**R:**"));
     }
 
     #[test]
-    fn non_behavioral_uses_bullet_format() {
+    fn non_behavioral_uses_prose_format() {
         let p = build_user_prompt("What are your strengths?", &[]);
         assert!(!p.contains("**S:**"));
-        assert!(p.contains("Tell:"));
+        assert!(p.contains("Say:"));
+        assert!(!p.contains("•"));
     }
 }

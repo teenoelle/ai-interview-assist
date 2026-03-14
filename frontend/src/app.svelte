@@ -3,6 +3,7 @@
   import CaptureButton from './components/CaptureButton.svelte';
   import TranscriptPanel from './components/TranscriptPanel.svelte';
   import SentimentBar from './components/SentimentBar.svelte';
+  import BodyLanguagePanel from './components/BodyLanguagePanel.svelte';
   import SuggestionPanel from './components/SuggestionPanel.svelte';
   import RateLimitPanel from './components/RateLimitPanel.svelte';
   import DebriefModal from './components/DebriefModal.svelte';
@@ -21,6 +22,7 @@
   let emotion = $state('');
   let emotionReason = $state('');
   let coaching = $state('');
+  let coachingWhy = $state('');
   let suggestions = $state<SuggestionEntry[]>([]);
   let statusMessages = $state<string[]>([]);
   let errorMessages = $state<string[]>([]);
@@ -37,6 +39,13 @@
   let webcamEl: HTMLVideoElement | undefined = $state();
   $effect(() => {
     if (webcamEl && webcamStream) webcamEl.srcObject = webcamStream;
+  });
+
+  // Screen share preview (shows interviewer's video in Zoom/Teams)
+  let screenStream = $state<MediaStream | null>(null);
+  let screenEl: HTMLVideoElement | undefined = $state();
+  $effect(() => {
+    if (screenEl && screenStream) screenEl.srcObject = screenStream;
   });
 
   // Column widths (resizable, persisted)
@@ -205,8 +214,8 @@
       case 'transcript': {
         const entry = { text: event.text, timestamp_ms: event.timestamp_ms, speaker: event.speaker };
         transcript = [...transcript, entry];
-        lastSpeechAt = Date.now();
         if (event.speaker === 'You') {
+          lastSpeechAt = Date.now();
           youSegments++;
           startAnswerTimer();
           const newCounts = countFillers(event.text);
@@ -234,6 +243,7 @@
         emotion = event.emotion;
         if (event.reason) emotionReason = event.reason;
         if (event.coaching) coaching = event.coaching;
+        if (event.coaching_why) coachingWhy = event.coaching_why;
         break;
       case 'question_detected':
         suggestions = [...suggestions, { question: event.question, suggestion: '', streaming: true }];
@@ -361,8 +371,8 @@
 
           <button class="debrief-btn" onclick={() => showDebrief = true}>End Interview</button>
           <CaptureButton
-            onCapture={(v) => { capturing = v; if (!v) { webcamStream = null; captureInst = null; } }}
-            onStreams={(_, webcam) => { webcamStream = webcam; }}
+            onCapture={(v) => { capturing = v; if (!v) { webcamStream = null; screenStream = null; captureInst = null; } }}
+            onStreams={(screen, webcam) => { screenStream = screen; webcamStream = webcam; }}
             onReady={(cap) => { captureInst = cap; }}
           />
         </div>
@@ -417,6 +427,13 @@
         <!-- Right: Sentiment + Stats -->
         <div class="col col-right">
           <div class="col-label">Interviewer</div>
+          {#if screenStream}
+            <div class="interviewer-preview">
+              <!-- svelte-ignore a11y_media_has_caption -->
+              <video bind:this={screenEl} class="interviewer-video" autoplay muted playsinline></video>
+              <div class="interviewer-label">Live Screen · Sentiment from interviewer's camera</div>
+            </div>
+          {/if}
           <div class="col-body col-right-body">
             <SentimentBar
               videoEmotion={emotion}
@@ -425,6 +442,8 @@
               {audioEmotion}
               {audioReason}
             />
+
+            <BodyLanguagePanel emotion={emotion} coaching={coaching} coachingWhy={coachingWhy} />
 
             <div class="side-stats">
               <div class="side-stat" title="Time since you started answering — aim for under 30 seconds">
@@ -642,6 +661,30 @@
     background: #0f172a; transform: scaleX(-1);
   }
   .selfview-label { font-size: 0.6rem; color: #334155; text-transform: uppercase; letter-spacing: 0.08em; }
+
+  /* Interviewer screen preview */
+  .interviewer-preview {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: #060e1a;
+    border-bottom: 1px solid #1e293b;
+  }
+  .interviewer-video {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    display: block;
+    background: #0a1525;
+  }
+  .interviewer-label {
+    font-size: 0.55rem;
+    color: #1e3a5f;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    padding: 0.2rem 0.5rem;
+    text-align: center;
+  }
 
   .col-right-body { gap: 0.75rem; overflow-y: auto; }
 

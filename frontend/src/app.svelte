@@ -8,7 +8,6 @@
   import RateLimitPanel from './components/RateLimitPanel.svelte';
   import DebriefModal from './components/DebriefModal.svelte';
   import PracticePanel from './components/PracticePanel.svelte';
-  import PreInterviewChecklist from './components/PreInterviewChecklist.svelte';
   import InterviewHistoryPanel from './components/InterviewHistoryPanel.svelte';
   import WhisperOverlay from './components/WhisperOverlay.svelte';
   import QuestionsHistoryPanel from './components/QuestionsHistoryPanel.svelte';
@@ -34,7 +33,7 @@
   import type { MediaCapture } from './lib/capture';
   import type { CompanyBrief, InterviewerSummary } from './lib/api';
 
-  type Phase = 'setup' | 'practice' | 'checklist' | 'interview';
+  type Phase = 'setup' | 'practice' | 'interview';
 
   let phase = $state<Phase>('setup');
   let capturing = $state(false);
@@ -332,9 +331,9 @@
     if (data?.companyBrief) companyBrief = data.companyBrief;
     if (data?.interviewerSummaries) interviewerSummaries = data.interviewerSummaries;
     if (data?.jdKeywords) { jdKeywords = data.jdKeywords; mentionedKeywords = new Set(); }
-    phase = 'checklist';
+    phase = 'interview';
+    connectWs();
   }
-  function handleChecklistDone() { phase = 'interview'; connectWs(); }
   function handlePractice(questions: string[]) { predictedQuestions = questions; phase = 'practice'; connectWs(); }
 
   function connectWs() {
@@ -511,9 +510,6 @@
       </header>
       <SetupForm onSetupComplete={handleSetupComplete} onPractice={handlePractice} />
     </div>
-
-  {:else if phase === 'checklist'}
-    <PreInterviewChecklist onStart={handleChecklistDone} onSkip={handleChecklistDone} />
 
   {:else if phase === 'practice'}
     <PracticePanel

@@ -1,6 +1,13 @@
 use common::messages::SetupPayload;
 use crate::linkedin::InterviewerProfile;
 
+fn trunc(s: &str, chars: usize) -> &str {
+    match s.char_indices().nth(chars) {
+        Some((i, _)) => &s[..i],
+        None => s,
+    }
+}
+
 pub fn build_system_prompt(
     payload: &SetupPayload,
     company_info: &str,
@@ -23,22 +30,14 @@ pub fn build_system_prompt(
 
     if !payload.cv_text.is_empty() {
         prompt.push_str("## Candidate CV / Resume\n");
-        let cv_preview = if payload.cv_text.len() > 20000 {
-            &payload.cv_text[..20000]
-        } else {
-            &payload.cv_text
-        };
+        let cv_preview = trunc(&payload.cv_text, 20000);
         prompt.push_str(cv_preview);
         prompt.push_str("\n\n");
     }
 
     if !payload.interviewee_linkedin.is_empty() {
         prompt.push_str("## Candidate LinkedIn Profile\n");
-        let li_preview = if payload.interviewee_linkedin.len() > 5000 {
-            &payload.interviewee_linkedin[..5000]
-        } else {
-            &payload.interviewee_linkedin
-        };
+        let li_preview = trunc(&payload.interviewee_linkedin, 5000);
         prompt.push_str(li_preview);
         prompt.push_str("\n\n");
     }
@@ -51,11 +50,7 @@ pub fn build_system_prompt(
 
     if !company_info.is_empty() {
         prompt.push_str("## Company Information\n");
-        let company_preview = if company_info.len() > 15000 {
-            &company_info[..15000]
-        } else {
-            company_info
-        };
+        let company_preview = trunc(company_info, 15000);
         prompt.push_str(company_preview);
         prompt.push_str("\n\n");
     }
@@ -79,7 +74,7 @@ pub fn build_system_prompt(
             if !p.role.is_empty() { prompt.push_str(&format!("Role: {}\n", p.role)); }
             if !p.company.is_empty() { prompt.push_str(&format!("Company: {}\n", p.company)); }
             if !p.background.is_empty() {
-                let bg = if p.background.len() > 1500 { &p.background[..1500] } else { &p.background };
+                let bg = trunc(&p.background, 1500);
                 prompt.push_str("Background:\n");
                 prompt.push_str(bg);
                 prompt.push('\n');

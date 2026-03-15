@@ -1,6 +1,15 @@
 use anyhow::Result;
 use serde_json::{json, Value};
 
+/// Safely truncate a UTF-8 string to at most `chars` characters.
+/// Prevents panics when slicing strings containing multi-byte Unicode characters.
+fn trunc(s: &str, chars: usize) -> &str {
+    match s.char_indices().nth(chars) {
+        Some((i, _)) => &s[..i],
+        None => s,
+    }
+}
+
 /// Call Claude (if key available) or Gemini to get a plain text response.
 pub async fn call_ai(
     prompt: &str,
@@ -111,7 +120,7 @@ pub async fn predict_questions(
 ) -> Vec<String> {
     let prompt = format!(
         "Based on the candidate background and job description below, list exactly 8 likely interview questions the interviewer might ask. Output one question per line, numbered 1-8. Mix behavioral, technical, and culture-fit questions. Focus on areas where the candidate's experience intersects with the role requirements.\n\n{}",
-        &system_prompt[..system_prompt.len().min(4000)]
+        trunc(&system_prompt, 4000)
     );
 
     match call_ai(&prompt, gemini_key, anthropic_key, 600).await {
@@ -153,8 +162,8 @@ pub async fn generate_debrief(
 ) -> Result<DebriefResult> {
     let prompt = format!(
         "You are analyzing a completed job interview. Based on the transcript and AI suggestions below, write a concise debrief.\n\nRespond in EXACTLY this format (use these exact section headers):\n\nSUMMARY:\n[2-3 sentence overall assessment]\n\nSTRONG:\n• [specific thing done well]\n• [specific thing done well]\n\nIMPROVE:\n• [specific area to improve]\n• [specific area to improve]\n\nFOLLOWUP:\n• [point to include in thank-you email]\n• [point to include in thank-you email]\n\nEMAIL:\n[Complete thank-you email, ready to copy and send. Include: Subject line on the first line starting with 'Subject: ', then a blank line, then a proper greeting, 2-3 warm paragraphs referencing specific topics from the interview, a forward-looking close, and a sign-off. Use [Your Name] and [Interviewer Name] as placeholders.]\n\n---\nTRANSCRIPT:\n{}\n\nAI SUGGESTIONS PROVIDED:\n{}",
-        &transcript_text[..transcript_text.len().min(4000)],
-        &suggestions_text[..suggestions_text.len().min(2000)]
+        trunc(&transcript_text, 4000),
+        trunc(&suggestions_text, 2000)
     );
 
     let text = call_ai(&prompt, gemini_key, anthropic_key, 1400).await?;
@@ -322,7 +331,7 @@ pub async fn generate_company_brief(
     }
     let prompt = format!(
         "Based on this company website content, extract a structured brief for a job candidate preparing for an interview.\n\nRespond in EXACTLY this format:\nNAME: [company name]\nWHAT: [1-2 sentences on what the company does]\nPRODUCTS: [product1] | [product2] | [product3]\nCULTURE: [1 sentence on work culture/values]\nNEWS: [1 sentence on recent notable news or achievements, or 'Not found']\nJOIN: [1 compelling reason why someone would want to work there]\n\n---\n{}",
-        &company_info[..company_info.len().min(5000)]
+        trunc(&company_info, 5000)
     );
     let text = call_ai(&prompt, gemini_key, anthropic_key, 400).await.unwrap_or_default();
     let mut brief = CompanyBrief {
@@ -356,7 +365,7 @@ pub async fn generate_interviewer_summary(
     for profile in profiles.iter().take(3) {
         let prompt = format!(
             "Based on this LinkedIn profile, create a brief for a job candidate to help build rapport.\n\nRespond in EXACTLY this format:\nNAME: [person's name or 'Unknown']\nROLE: [current job title]\nBACKGROUND: [1 sentence on their career background]\nTENURE: [how long at current company, or 'Unknown']\nRAPPORT: [1 specific rapport-building tip based on their background, e.g. 'They came from engineering — mention technical details']\n\n---\n{}",
-            &profile[..profile.len().min(2000)]
+            trunc(&profile, 2000)
         );
         let text = call_ai(&prompt, gemini_key, anthropic_key, 250).await.unwrap_or_default();
         let mut s = InterviewerSummary {
@@ -383,7 +392,7 @@ pub async fn extract_jd_keywords(
     if job_description.trim().is_empty() { return vec![]; }
     let prompt = format!(
         "Extract the 12 most important keywords and skill phrases from this job description that a candidate should mention during their interview.\n\nOutput ONLY one keyword/phrase per line, no numbers, no bullets, no extra text. Focus on: technical skills, soft skills, domain knowledge, and key responsibilities.\n\n---\n{}",
-        &job_description[..job_description.len().min(3000)]
+        trunc(&job_description, 3000)
     );
     match call_ai(&prompt, gemini_key, anthropic_key, 300).await {
         Ok(text) => text.lines()
@@ -403,8 +412,8 @@ pub async fn predict_next_questions(
 ) -> Vec<String> {
     let prompt = format!(
         "Based on this interview conversation so far and the candidate's background, predict the 3 most likely questions the interviewer will ask next.\n\nOutput ONLY 3 questions, one per line, no numbers or bullets.\n\nCANDIDATE BACKGROUND (summary):\n{}\n\nCONVERSATION SO FAR:\n{}",
-        &system_prompt[..system_prompt.len().min(1500)],
-        &transcript_context[..transcript_context.len().min(2000)]
+        trunc(&system_prompt, 1500),
+        trunc(&transcript_context, 2000)
     );
     match call_ai(&prompt, gemini_key, anthropic_key, 300).await {
         Ok(text) => text.lines()
@@ -423,7 +432,7 @@ pub async fn generate_salary_tactics(
 ) -> SalaryTactics {
     let prompt = format!(
         "Generate salary negotiation tactics for a candidate interviewing for this role.\n\nRespond in EXACTLY this format:\nDEFLECT: [exact words to use to deflect salary question early — e.g. 'I'm flexible and focused on fit — can you share the budgeted range?']\nANCHOR: [exact words to anchor high when asked for a number — 1 sentence]\nCOUNTER: [suggested counter-offer approach — 1 sentence with placeholder like '15% above initial offer']\nNEVER: [the one thing never to say — e.g. 'Never give a number first if you can avoid it']\n\nROLE CONTEXT:\n{}",
-        &role_context[..role_context.len().min(800)]
+        trunc(&role_context, 800)
     );
     let text = call_ai(&prompt, gemini_key, anthropic_key, 300).await.unwrap_or_default();
     let mut t = SalaryTactics {
@@ -450,7 +459,7 @@ pub async fn score_practice_answer(
 ) -> PracticeScore {
     let prompt = format!(
         "Score this practice interview answer.\n\nQuestion: \"{}\"\nAnswer: \"{}\"\n\nCandidate background:\n{}\n\nRespond in EXACTLY this format:\nSCORE: [0-100 integer]\nSTAR: [yes/no — does the answer follow Situation/Task/Action/Result structure?]\nMETRIC: [yes/no — does it include a specific number, %, or measurable outcome?]\nLENGTH: [yes/no — is the answer an appropriate length, under 90 seconds to speak?]\nSTRONG: [1 sentence on what was done well]\nCOACH: [1-2 sentences of specific coaching to improve this answer]",
-        question, answer, &system_prompt[..system_prompt.len().min(1000)]
+        question, answer, trunc(&system_prompt, 1000)
     );
     let text = call_ai(&prompt, gemini_key, anthropic_key, 300).await.unwrap_or_default();
     let mut score = PracticeScore {
@@ -484,7 +493,7 @@ pub async fn extract_next_steps(
     if transcript_text.trim().is_empty() { return vec![]; }
     let prompt = format!(
         "From this interview transcript, extract all mentioned next steps, timelines, and follow-up actions. Include things like: when they'll get back to you, who to contact, what the hiring process looks like, any requested follow-ups.\n\nOutput one item per line, no bullets or numbers. If none found, output 'No specific next steps mentioned.'\n\n---\n{}",
-        &transcript_text[..transcript_text.len().min(4000)]
+        trunc(&transcript_text, 4000)
     );
     match call_ai(&prompt, gemini_key, anthropic_key, 300).await {
         Ok(text) => text.lines()

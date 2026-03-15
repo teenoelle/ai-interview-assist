@@ -102,7 +102,8 @@ pub async fn handle_setup_finalize(
     }
 
     let preview = if system_prompt.len() > 500 {
-        format!("{}...", &system_prompt[..500])
+        let end = system_prompt.char_indices().map(|(i, _)| i).nth(500).unwrap_or(system_prompt.len());
+        format!("{}...", &system_prompt[..end])
     } else {
         system_prompt.clone()
     };

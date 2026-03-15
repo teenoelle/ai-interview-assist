@@ -125,9 +125,15 @@ pub async fn crawl_website(start_url: &str, max_pages: usize) -> Result<String> 
         }
     }
 
-    // Truncate to reasonable size (100KB)
+    // Truncate to reasonable size (100KB) — use char boundary to avoid UTF-8 panic
     if collected_text.len() > 100_000 {
-        collected_text.truncate(100_000);
+        let safe_end = collected_text
+            .char_indices()
+            .map(|(i, _)| i)
+            .take_while(|&i| i <= 100_000)
+            .last()
+            .unwrap_or(0);
+        collected_text.truncate(safe_end);
         collected_text.push_str("\n\n[Content truncated]");
     }
 

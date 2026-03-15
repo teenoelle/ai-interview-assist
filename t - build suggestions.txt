@@ -101,7 +101,11 @@ before the suggested answer should be a suggested repsonse to the pain point in 
 answer clock should pause or reset when meeting capture ends. show what the filler words are so the interviewee can see which filler words to stop saying. 
 
 
+let's try anthropic prompt caching to lower latency. also, add a way to test the voices when choosing among them.
 
+
+
+add a section in setup to add the interviewee's linkedin profile so that the app can learn more about them in case it comes up in the interview.
 
 
 

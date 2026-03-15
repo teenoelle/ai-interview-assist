@@ -24,10 +24,26 @@
   let setupDone = $state(false);
   let activeTab = $state<'overview' | 'stories'>('overview');
 
-  const { onSetupComplete, onPractice } = $props<{
+  const props = $props<{
     onSetupComplete: (data?: { companyBrief?: any; interviewerSummaries?: any[]; jdKeywords?: string[] }) => void;
     onPractice: (questions: string[]) => void;
   }>();
+
+  function startInterview() {
+    try {
+      props.onSetupComplete({ companyBrief, interviewerSummaries, jdKeywords });
+    } catch (e) {
+      error = 'Error starting interview: ' + String(e);
+    }
+  }
+
+  function startPractice() {
+    try {
+      props.onPractice(predictedQuestions);
+    } catch (e) {
+      error = 'Error starting practice: ' + String(e);
+    }
+  }
 
   function addInterviewer() {
     interviewers = [...interviewers, ''];
@@ -156,9 +172,9 @@
       {/if}
 
       <div class="action-row">
-        <button onclick={() => onSetupComplete({ companyBrief, interviewerSummaries, jdKeywords })} class="btn-primary">Start Interview →</button>
+        <button onclick={startInterview} class="btn-primary">Start Interview →</button>
         {#if predictedQuestions.length > 0}
-          <button onclick={() => onPractice(predictedQuestions)} class="btn-secondary">Practice First</button>
+          <button onclick={startPractice} class="btn-secondary">Practice First</button>
         {/if}
       </div>
     </div>

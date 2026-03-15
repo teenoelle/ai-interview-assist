@@ -46,7 +46,6 @@
     loading = true;
     error = '';
     loadingStep = companyUrl.trim() ? 'Crawling company website…' : 'Analysing your background…';
-    formEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     try {
       const formData = new FormData();
       formData.append('job_description', jobDescription);

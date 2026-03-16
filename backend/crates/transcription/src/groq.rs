@@ -11,7 +11,7 @@ pub async fn transcribe(api_key: &str, pcm: &[u8]) -> Result<String> {
     transcribe_openai_asr(
         "https://api.groq.com/openai/v1/audio/transcriptions",
         api_key,
-        "whisper-large-v3-turbo",
+        "whisper-large-v3",
         pcm,
     )
     .await

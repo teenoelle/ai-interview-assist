@@ -1209,7 +1209,7 @@
                   >
                     <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;transform:translate({iVid.panX}px,{iVid.panY}px) scale({iVid.zoom});transform-origin:center;pointer-events:none;">
                       {#if cropRect}
-                        <div class="face-crop-wrap" style="{interviewerVidH ? `height:100%;width:auto;max-width:100%` : `width:100%;aspect-ratio:${cropRect.w * videoNaturalAR / cropRect.h}`};overflow:hidden;position:relative;">
+                        <div class="face-crop-wrap" style="aspect-ratio:{cropRect.w * videoNaturalAR / cropRect.h};{interviewerVidH ? 'height:100%;width:auto;max-width:100%' : 'width:100%'};overflow:hidden;position:relative;">
                           <!-- svelte-ignore a11y_media_has_caption -->
                           <video bind:this={screenEl} autoplay muted playsinline
                             style="position:absolute;width:{100/cropRect.w}%;height:auto;transform:translate({-cropRect.x*100}%,{-cropRect.y*100}%);"

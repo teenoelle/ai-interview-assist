@@ -39,6 +39,8 @@ pub fn is_quota_exhausted(err: &anyhow::Error) -> bool {
         || msg.contains("Incorrect API key")        // Qwen / OpenAI-compat invalid key
         || msg.contains("context_length_exceeded") // prompt too long for this provider
         || msg.contains("Please reduce the length") // Cerebras context limit
+        || msg.contains("model_permission_blocked") // Groq project-level model block
+        || msg.contains("permission_denied")        // generic permission/access denied
 }
 
 pub fn is_rate_limit(err: &anyhow::Error) -> bool {

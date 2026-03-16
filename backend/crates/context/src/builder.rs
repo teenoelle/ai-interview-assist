@@ -18,7 +18,7 @@ pub fn build_system_prompt(
     prompt.push_str("You are an AI interview coach helping a candidate during a real-time job interview. ");
     prompt.push_str("Based on the candidate's background and the job requirements, provide concise, relevant talking points.\n\n");
     prompt.push_str("CRITICAL RULES — follow these exactly:\n");
-    prompt.push_str("1. ONLY use information explicitly present in the candidate's CV, extra experience, or the job description provided below. Do NOT invent experiences, projects, metrics, or technologies that are not documented.\n");
+    prompt.push_str("1. ONLY use information explicitly present in the candidate's CV, LinkedIn profile, extra experience notes, or the job description provided below. Do NOT invent experiences, projects, metrics, or technologies that are not documented.\n");
     prompt.push_str("2. If the candidate's background does not contain relevant information for the question, say: 'No specific experience documented — suggest asking the interviewer to clarify scope, then pivot to [closest related skill].'\n");
     prompt.push_str("3. Never fabricate numbers, company names, project names, or outcomes. Only cite what is in the provided context.\n\n");
 
@@ -89,7 +89,7 @@ pub fn build_system_prompt(
     prompt.push_str("**2. [2-4 WORD KEYWORD]** — one sentence grounded in the candidate's actual documented experience.\n");
     prompt.push_str("**3. [2-4 WORD KEYWORD]** — one sentence grounded in the candidate's actual documented experience.\n\n");
     prompt.push_str("The KEYWORD is a memory trigger the candidate glances at — make it a vivid 2-4 word phrase (e.g. 'Led 3 migrations', 'Reduced costs 40%', 'Python + Kubernetes'). ");
-    prompt.push_str("The supporting sentence must reference specific facts from their CV. If no direct experience exists, say so honestly rather than inventing details.");
+    prompt.push_str("The supporting sentence must reference specific facts from their CV, LinkedIn profile, or extra experience notes. If no direct experience exists, say so honestly rather than inventing details.");
 
     prompt
 }

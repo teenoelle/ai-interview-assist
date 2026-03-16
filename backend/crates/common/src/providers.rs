@@ -34,6 +34,7 @@ pub fn is_quota_exhausted(err: &anyhow::Error) -> bool {
         || msg.contains("rate_limit_exceeded") // Groq
         || msg.contains("No credits")          // OpenRouter
         || msg.contains("insufficient_quota")  // OpenAI-compat
+        || msg.contains("credit balance is too low") // Anthropic billing
         || msg.contains("context_length_exceeded") // prompt too long for this provider
         || msg.contains("Please reduce the length") // Cerebras context limit
 }

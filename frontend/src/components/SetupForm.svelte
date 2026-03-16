@@ -184,9 +184,7 @@
 
       <div class="action-row">
         <button onclick={startInterview} class="btn-primary">Start Interview →</button>
-        {#if predictedQuestions.length > 0}
-          <button onclick={startPractice} class="btn-secondary">Practice First</button>
-        {/if}
+        <button onclick={startPractice} class="btn-secondary">Practice First</button>
       </div>
     </div>
   {:else}

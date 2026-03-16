@@ -300,7 +300,10 @@
   </div>
 
   {#if questions.length === 0}
-    <div class="empty">No predicted questions available. Check your job description and try again.</div>
+    <div class="empty">
+      <p>No predicted questions were generated — this can happen if the AI quota was hit during setup, or if no job description / CV was provided.</p>
+      <p>Go back to Setup, add your job description and CV, then re-submit to generate questions. Or click <strong>I'm Ready — Start Interview →</strong> to skip practice.</p>
+    </div>
   {:else}
     <div class="progress">Question {currentIdx + 1} of {questions.length}</div>
 

@@ -35,6 +35,8 @@ pub fn is_quota_exhausted(err: &anyhow::Error) -> bool {
         || msg.contains("No credits")          // OpenRouter
         || msg.contains("insufficient_quota")  // OpenAI-compat
         || msg.contains("credit balance is too low") // Anthropic billing
+        || msg.contains("invalid_api_key")          // Qwen / OpenAI-compat invalid key
+        || msg.contains("Incorrect API key")        // Qwen / OpenAI-compat invalid key
         || msg.contains("context_length_exceeded") // prompt too long for this provider
         || msg.contains("Please reduce the length") // Cerebras context limit
 }

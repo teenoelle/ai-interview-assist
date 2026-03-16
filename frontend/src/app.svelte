@@ -117,6 +117,46 @@
   let pickerPendingRect = $state<{x:number;y:number;w:number;h:number}|null>(null);
   let pickerVideoEl: HTMLVideoElement | undefined = $state();
   let focusVideoEl: HTMLVideoElement | undefined = $state();
+  let vidZoomShellEl = $state<HTMLElement | undefined>();
+
+  // Video overlay resize (persisted)
+  let interviewerVidH = $state(Number(localStorage.getItem(SK.interviewerVidH) || '0') || 0);
+  let selfviewW = $state(Number(localStorage.getItem(SK.selfviewW) || '80') || 80);
+  let iVidResizing = false, iVidResizeStartY = 0, iVidResizeStartH = 0;
+  let selfviewResizing = false, selfviewResizeStartX = 0, selfviewResizeStartW = 0;
+
+  function iVidResizeDown(e: PointerEvent) {
+    iVidResizing = true;
+    iVidResizeStartY = e.clientY;
+    iVidResizeStartH = interviewerVidH || vidZoomShellEl?.getBoundingClientRect().height || 200;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    e.preventDefault(); e.stopPropagation();
+  }
+  function iVidResizeMove(e: PointerEvent) {
+    if (!iVidResizing) return;
+    interviewerVidH = Math.max(60, iVidResizeStartH + (e.clientY - iVidResizeStartY));
+  }
+  function iVidResizeUp() {
+    if (!iVidResizing) return;
+    iVidResizing = false;
+    localStorage.setItem(SK.interviewerVidH, String(interviewerVidH));
+  }
+  function selfviewResizeDown(e: PointerEvent) {
+    selfviewResizing = true;
+    selfviewResizeStartX = e.clientX;
+    selfviewResizeStartW = selfviewW;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    e.preventDefault(); e.stopPropagation();
+  }
+  function selfviewResizeMove(e: PointerEvent) {
+    if (!selfviewResizing) return;
+    selfviewW = Math.max(60, selfviewResizeStartW + (e.clientX - selfviewResizeStartX));
+  }
+  function selfviewResizeUp() {
+    if (!selfviewResizing) return;
+    selfviewResizing = false;
+    localStorage.setItem(SK.selfviewW, String(selfviewW));
+  }
 
   $effect(() => {
     const el = screenEl;
@@ -1158,12 +1198,13 @@
                 <div class="interviewer-strip">
                   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
                   <div class="vid-zoom-shell"
+                    bind:this={vidZoomShellEl}
                     onwheel={(e) => vidWheel(iVid, e)}
                     onpointerdown={(e) => vidDown(iVid, iPan, e)}
                     onpointermove={(e) => vidMove(iVid, iPan, e)}
                     onpointerup={() => vidUp(iPan)}
                     ondblclick={() => vidReset(iVid)}
-                    style="cursor:{iVid.zoom > 1 ? 'grab' : 'default'}"
+                    style="cursor:{iVid.zoom > 1 ? 'grab' : 'default'}{interviewerVidH ? `;height:${interviewerVidH}px` : ''}"
                     title="Scroll to zoom · drag to pan · double-click to reset"
                   >
                     <div style="width:100%;height:100%;transform:translate({iVid.panX}px,{iVid.panY}px) scale({iVid.zoom});transform-origin:center;pointer-events:none;">
@@ -1188,6 +1229,13 @@
                       <button class="face-pick-btn" onclick={clearFaceCrop}>Full screen</button>
                     {/if}
                   </div>
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <div class="vid-resize-handle"
+                    onpointerdown={iVidResizeDown}
+                    onpointermove={iVidResizeMove}
+                    onpointerup={iVidResizeUp}
+                    onpointercancel={iVidResizeUp}
+                  ></div>
                 </div>
               {/if}
               <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1230,20 +1278,29 @@
               {#if !collapsedCols.has('right')}
                 {#if webcamStream}
                   <div class="selfview-strip">
-                    <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_media_has_caption -->
-                    <div class="selfview-zoom-shell"
-                      class:selfview-zoomed={sVid.zoom > 1}
-                      onwheel={(e) => vidWheel(sVid, e)}
-                      onpointerdown={(e) => vidDown(sVid, sPan, e)}
-                      onpointermove={(e) => vidMove(sVid, sPan, e)}
-                      onpointerup={() => vidUp(sPan)}
-                      ondblclick={() => vidReset(sVid)}
-                      style="cursor:{sVid.zoom > 1 ? 'grab' : 'default'}"
-                      title="Scroll to zoom · drag to pan · double-click to reset"
-                    >
-                      <video bind:this={webcamEl} class="selfview" autoplay muted playsinline
-                        style="transform: translate({sVid.panX}px, {sVid.panY}px) scale({sVid.zoom}) scaleX(-1); transform-origin: center;"
-                      ></video>
+                    <div class="selfview-vid-wrap">
+                      <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_media_has_caption -->
+                      <div class="selfview-zoom-shell"
+                        class:selfview-zoomed={sVid.zoom > 1}
+                        onwheel={(e) => vidWheel(sVid, e)}
+                        onpointerdown={(e) => vidDown(sVid, sPan, e)}
+                        onpointermove={(e) => vidMove(sVid, sPan, e)}
+                        onpointerup={() => vidUp(sPan)}
+                        ondblclick={() => vidReset(sVid)}
+                        style="width:{selfviewW}px;height:{Math.round(selfviewW*3/4)}px;cursor:{sVid.zoom > 1 ? 'grab' : 'default'}"
+                        title="Scroll to zoom · drag to pan · double-click to reset"
+                      >
+                        <video bind:this={webcamEl} class="selfview" autoplay muted playsinline
+                          style="transform: translate({sVid.panX}px, {sVid.panY}px) scale({sVid.zoom}) scaleX(-1); transform-origin: center;"
+                        ></video>
+                      </div>
+                      <!-- svelte-ignore a11y_no_static_element_interactions -->
+                      <div class="selfview-resize-corner"
+                        onpointerdown={selfviewResizeDown}
+                        onpointermove={selfviewResizeMove}
+                        onpointerup={selfviewResizeUp}
+                        onpointercancel={selfviewResizeUp}
+                      ></div>
                     </div>
                     <div class="selfview-label">You</div>
                   </div>
@@ -2062,12 +2119,11 @@
     background: #060e1a;
   }
   /* Selfview zoom shell */
+  .selfview-vid-wrap { position: relative; flex-shrink: 0; }
   .selfview-zoom-shell {
     overflow: hidden;
-    width: 80px; height: 60px;
     border-radius: 0.375rem;
     border: 1px solid #1e293b;
-    flex-shrink: 0;
   }
   .selfview-zoom-shell.selfview-zoomed {
     overflow: visible;
@@ -2075,6 +2131,17 @@
     position: relative;
     border-color: #3b82f6;
   }
+  .selfview-resize-corner {
+    position: absolute; bottom: 0; right: 0;
+    width: 14px; height: 14px; cursor: nwse-resize; touch-action: none;
+  }
+  .selfview-resize-corner::after {
+    content: ''; position: absolute; bottom: 2px; right: 2px;
+    width: 8px; height: 8px;
+    border-right: 2px solid #334155; border-bottom: 2px solid #334155;
+    border-radius: 1px;
+  }
+  .selfview-resize-corner:hover::after { border-color: #60a5fa; }
   .face-pick-row {
     display: flex; gap: 0.3rem; padding: 0.2rem 0.5rem;
     background: #060e1a;
@@ -2085,6 +2152,15 @@
     color: #475569; font-size: var(--fs-xs); cursor: pointer;
   }
   .face-pick-btn:hover { border-color: #60a5fa; color: #60a5fa; }
+
+  /* Interviewer strip bottom resize handle */
+  .vid-resize-handle {
+    height: 5px; cursor: ns-resize; background: transparent;
+    border-top: 1px solid #1e293b; flex-shrink: 0; touch-action: none;
+  }
+  .vid-resize-handle:hover, .vid-resize-handle:active {
+    border-top-color: #3b82f6; background: rgba(59,130,246,0.08);
+  }
 
   /* Crop picker modal */
   .crop-picker-bg {
@@ -2139,8 +2215,9 @@
     background: #060e1a; flex-shrink: 0;
   }
   .selfview {
-    width: 80px; height: 60px; object-fit: cover;
+    width: 100%; height: 100%; object-fit: cover;
     border-radius: 0.375rem; background: #0f172a;
+    display: block;
   }
   .selfview-label { font-size: var(--fs-xs); color: #334155; text-transform: uppercase; letter-spacing: 0.08em; }
 

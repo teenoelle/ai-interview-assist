@@ -24,6 +24,8 @@ export const SK = {
   ttsVolume: 'tts-volume',
   fontSize: 'font-size',
   cropRect: 'crop-rect',
+  interviewerVidH: 'interviewer-vid-h',
+  selfviewW: 'selfview-w',
 } as const;
 
 interface SectionSlot { panel: string; id: string; }

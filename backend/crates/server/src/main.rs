@@ -51,7 +51,10 @@ async fn main() -> anyhow::Result<()> {
         if config.anthropic_api_key.is_some() { "Claude →" } else { "" },
         config.ollama_model,
     );
-    tracing::info!("Transcription order: Groq Whisper → Gemini (both streams)");
+    tracing::info!(
+        "Transcription order: {} Groq Whisper → Gemini (both streams)",
+        config.whisper_url.as_deref().map(|u| format!("Local Whisper ({u}) →")).unwrap_or_default()
+    );
     tracing::info!(
         "Sentiment: {} → Ollama Vision ({}) → Gemini Vision",
         if config.anthropic_api_key.is_some() { "Claude Haiku" } else { "Ollama Vision" },
@@ -87,6 +90,8 @@ async fn main() -> anyhow::Result<()> {
         state.transcript.clone(),
         config.gemini_api_key.clone(),
         config.groq_api_key.clone(),
+        config.whisper_url.clone(),
+        config.whisper_model.clone(),
         rate_limiter.clone(),
     ));
 
@@ -98,6 +103,8 @@ async fn main() -> anyhow::Result<()> {
         state.transcript.clone(),
         config.gemini_api_key.clone(),
         config.groq_api_key.clone(),
+        config.whisper_url.clone(),
+        config.whisper_model.clone(),
         config.diarize_url.clone(),
         rate_limiter.clone(),
     ));

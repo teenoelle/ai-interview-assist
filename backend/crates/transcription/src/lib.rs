@@ -16,10 +16,21 @@ use std::time::{SystemTime, UNIX_EPOCH};
 async fn transcribe_with_fallback(
     gemini_key: &str,
     groq_key: Option<&str>,
+    whisper_url: Option<&str>,
+    whisper_model: &str,
     pcm: &[u8],
     rate_limiter: &RateLimiter,
 ) -> Result<String, anyhow::Error> {
-    // 1. Groq Whisper — fast, free, separate quota from LLM
+    // 1. Local Whisper — completely free, no quota; silently skip if not running
+    if let Some(url) = whisper_url {
+        let endpoint = format!("{}/v1/audio/transcriptions", url.trim_end_matches('/'));
+        match groq::transcribe_openai_asr(&endpoint, "", whisper_model, pcm).await {
+            Ok(text) => return Ok(text),
+            Err(e) => tracing::warn!("Local Whisper unavailable, trying Groq: {}", e),
+        }
+    }
+
+    // 2. Groq Whisper — fast, free, separate quota from LLM
     if let Some(key) = groq_key {
         match groq::transcribe(key, pcm).await {
             Ok(text) => return Ok(text),
@@ -30,7 +41,7 @@ async fn transcribe_with_fallback(
         }
     }
 
-    // 2. Gemini — fallback; conserves vision quota for sentiment
+    // 3. Gemini — fallback; conserves vision quota for sentiment
     let result = with_retry(rate_limiter, || {
         let k = gemini_key.to_string();
         let p = pcm.to_vec();
@@ -259,6 +270,8 @@ pub async fn run_mic_agent(
     transcript: Arc<RwLock<Vec<TranscriptSegment>>>,
     gemini_key: String,
     groq_key: Option<String>,
+    whisper_url: Option<String>,
+    whisper_model: String,
     rate_limiter: RateLimiter,
 ) {
     let mut ring_buf = buffer::RingBuffer::new();
@@ -273,12 +286,14 @@ pub async fn run_mic_agent(
 
                     let gkey = gemini_key.clone();
                     let grkey = groq_key.clone();
+                    let wurl = whisper_url.clone();
+                    let wmodel = whisper_model.clone();
                     let etx = event_tx.clone();
                     let tr = transcript.clone();
                     let rl = rate_limiter.clone();
 
                     tokio::spawn(async move {
-                        match transcribe_with_fallback(&gkey, grkey.as_deref(), &pcm, &rl).await {
+                        match transcribe_with_fallback(&gkey, grkey.as_deref(), wurl.as_deref(), &wmodel, &pcm, &rl).await {
                             Ok(text) if !text.trim().is_empty() => {
                                 let ts = SystemTime::now()
                                     .duration_since(UNIX_EPOCH)
@@ -325,6 +340,8 @@ pub async fn run_agent(
     transcript: Arc<RwLock<Vec<TranscriptSegment>>>,
     gemini_key: String,
     groq_key: Option<String>,
+    whisper_url: Option<String>,
+    whisper_model: String,
     diarize_url: Option<String>,
     rate_limiter: RateLimiter,
 ) {
@@ -346,6 +363,8 @@ pub async fn run_agent(
 
                     let gkey = gemini_key.clone();
                     let grkey = groq_key.clone();
+                    let wurl = whisper_url.clone();
+                    let wmodel = whisper_model.clone();
                     let durl = diarize_url.clone();
                     let qtx = question_tx.clone();
                     let etx = event_tx.clone();
@@ -361,7 +380,7 @@ pub async fn run_agent(
 
                         // Run transcription and diarization concurrently
                         let (transcription_result, diarization_result) = tokio::join!(
-                            transcribe_with_fallback(&gkey, grkey.as_deref(), &segment_pcm, &rl),
+                            transcribe_with_fallback(&gkey, grkey.as_deref(), wurl.as_deref(), &wmodel, &segment_pcm, &rl),
                             async {
                                 match (durl.as_deref(), wav_for_diarize) {
                                     (Some(url), Some(wav)) => {

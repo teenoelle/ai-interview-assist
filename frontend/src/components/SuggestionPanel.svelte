@@ -225,24 +225,19 @@
                   {#each cues as cue}
                     {@const isOpen = !!openCues[cue.text]}
                     <div class="tp-cue-block" class:tp-cue-open={isOpen}>
-                      <button class="tp-cue-toggle" onclick={() => toggleCueOpen(cue.text)}>
+                      <button class="tp-cue-toggle" onclick={() => { const opening = !isOpen; toggleCueOpen(cue.text); if (opening) expandCue(current.question, cue.text); }}>
                         <span class="cue-label-sm">{cue.label}</span>
                         <span class="tp-cue-preview">{isOpen ? '' : cue.text.slice(0, 36) + (cue.text.length > 36 ? '…' : '')}</span>
                         <span class="tp-cue-chevron">{isOpen ? '▾' : '▸'}</span>
                       </button>
                       {#if isOpen}
                         <div class="tp-cue-body">
-                          {#each splitBullets(cue.text) as line}
-                            <div class="tp-cue-line">· {line}</div>
-                          {/each}
-                          <button class="tp-cue-speak-btn" onclick={() => expandCue(current.question, cue.text)}
-                            title="Generate a spoken sentence">
-                            {expandedCues[cue.text]?.sentence ? '▴ hide sentence' : '▾ speak as sentence'}
-                          </button>
                           {#if expandedCues[cue.text]?.loading}
                             <div class="cue-sentence cue-loading">…</div>
                           {:else if expandedCues[cue.text]?.sentence}
                             <div class="cue-sentence">{expandedCues[cue.text].sentence}</div>
+                          {:else}
+                            <div class="cue-sentence cue-loading">Loading…</div>
                           {/if}
                         </div>
                       {/if}
@@ -268,25 +263,26 @@
           <!-- ASK section -->
           {#if parsed.asks.length > 0}
             <div class="tp-sec tp-sec-ask">
-              <div class="tp-ask-header">
+              <div class="tp-sec-row">
                 <span class="cue-badge cue-ask">Ask</span>
-                <span class="tp-ask-hint">tap for alternatives</span>
               </div>
-              {#each parsed.asks as ask, i}
-                <button class="tp-ask-item" onclick={() => toggleAsk(`${i}`)}>
-                  <span class="tp-ask-chevron">{openAsks[`${i}`] ? '▾' : '▸'}</span>
-                  <span class="tp-ask-main">{openAsks[`${i}`] ? ask.main : shortAsk(ask.main)}</span>
-                </button>
-                {#if openAsks[`${i}`]}
-                  {#if ask.alts.length > 0}
-                    <div class="tp-ask-alts">
-                      {#each ask.alts as alt}
-                        <div class="tp-ask-alt">↳ {alt}</div>
-                      {/each}
-                    </div>
-                  {/if}
-                {/if}
-              {/each}
+              <div class="tp-cues">
+                {#each parsed.asks as ask, i}
+                  {@const isAskOpen = !!openAsks[`${i}`]}
+                  <div class="tp-cue-block tp-cue-block-ask" class:tp-cue-open={isAskOpen}>
+                    <button class="tp-cue-toggle" onclick={() => toggleAsk(`${i}`)}>
+                      <span class="cue-label-sm cue-label-ask">Q{i + 1}</span>
+                      <span class="tp-cue-preview tp-ask-preview">{isAskOpen ? '' : shortAsk(ask)}</span>
+                      <span class="tp-cue-chevron">{isAskOpen ? '▾' : '▸'}</span>
+                    </button>
+                    {#if isAskOpen}
+                      <div class="tp-cue-body">
+                        <div class="ask-sentence">{ask}</div>
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
             </div>
           {/if}
         {/if}
@@ -375,24 +371,26 @@
               <!-- ASK -->
               {#if parsed.asks.length > 0}
                 <div class="e-sec e-sec-ask">
-                  <div class="e-ask-header">
+                  <div class="e-sec-row">
                     <span class="cue-badge cue-ask">Ask</span>
                   </div>
-                  {#each parsed.asks as ask, ai}
-                    <button class="e-ask-item" onclick={() => toggleAsk(`${i}-${ai}`)}>
-                      <span class="e-ask-chevron">{openAsks[`${i}-${ai}`] ? '▾' : '▸'}</span>
-                      <span class="ask-text">{openAsks[`${i}-${ai}`] ? ask.main : shortAsk(ask.main)}</span>
-                    </button>
-                    {#if openAsks[`${i}-${ai}`]}
-                      {#if ask.alts.length > 0}
-                        <div class="e-ask-alts">
-                          {#each ask.alts as alt}
-                            <div class="e-ask-alt">↳ {alt}</div>
-                          {/each}
-                        </div>
-                      {/if}
-                    {/if}
-                  {/each}
+                  <div class="tp-cues">
+                    {#each parsed.asks as ask, ai}
+                      {@const isAskOpen = !!openAsks[`${i}-${ai}`]}
+                      <div class="tp-cue-block tp-cue-block-ask" class:tp-cue-open={isAskOpen}>
+                        <button class="tp-cue-toggle" onclick={() => toggleAsk(`${i}-${ai}`)}>
+                          <span class="cue-label-sm cue-label-ask">Q{ai + 1}</span>
+                          <span class="tp-cue-preview tp-ask-preview">{isAskOpen ? '' : shortAsk(ask)}</span>
+                          <span class="tp-cue-chevron">{isAskOpen ? '▾' : '▸'}</span>
+                        </button>
+                        {#if isAskOpen}
+                          <div class="tp-cue-body">
+                            <div class="ask-sentence">{ask}</div>
+                          </div>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
                 </div>
               {/if}
             {/if}
@@ -547,6 +545,8 @@
     overflow: hidden; background: #040b06;
   }
   .tp-cue-block.tp-cue-open { border-color: #14532d; }
+  .tp-cue-block-ask { border-color: #2d1200; background: #060300; }
+  .tp-cue-block-ask.tp-cue-open { border-color: #78350f; }
   .tp-cue-toggle {
     display: flex; align-items: center; gap: 0.4rem;
     width: 100%; padding: 0.28rem 0.5rem;
@@ -572,12 +572,6 @@
     color: #86efac; font-size: var(--fs-lg); line-height: 1.45;
     padding-left: 0.15rem; overflow-wrap: break-word;
   }
-  .tp-cue-speak-btn {
-    margin-top: 0.2rem; background: none; border: none;
-    color: #166534; font-size: var(--fs-xs); cursor: pointer;
-    padding: 0; text-align: left;
-  }
-  .tp-cue-speak-btn:hover { color: #22c55e; }
   .cue-sentence {
     padding: 0.3rem 0.4rem;
     background: #07101e; border-left: 2px solid #3b82f6;
@@ -586,33 +580,12 @@
   }
   .cue-loading { color: #334155; }
 
-  /* Ask section items */
-  .tp-ask-header {
-    display: flex; align-items: center; gap: 0.5rem;
-  }
-  .tp-ask-hint {
-    font-size: var(--fs-xs); color: #4a2500; font-style: italic;
-  }
-  .tp-ask-item {
-    display: flex; align-items: flex-start; gap: 0.4rem;
-    width: 100%; background: none; border: none; cursor: pointer;
-    text-align: left; padding: 0.2rem 0;
-  }
-  .tp-ask-item:hover .tp-ask-main { color: #fde68a; }
-  .tp-ask-chevron { color: #92400e; font-size: var(--fs-sm); flex-shrink: 0; margin-top: 0.15rem; }
-  .tp-ask-main {
-    flex: 1; color: #ffffff; font-size: var(--fs-lg);
-    overflow-wrap: break-word; line-height: 1.4;
-    transition: color 0.15s;
-  }
-  .tp-ask-alts {
-    display: flex; flex-direction: column; gap: 0.2rem;
-    padding: 0.2rem 0 0.1rem 1.1rem;
-    border-left: 1px solid #3d1a02;
-  }
-  .tp-ask-alt {
-    color: #fbbf24; font-size: var(--fs-base); line-height: 1.4;
-    font-style: italic; overflow-wrap: break-word;
+  /* Ask cue-block theming (amber) */
+  .cue-label-ask { color: #fbbf24 !important; }
+  .tp-ask-preview { color: #7c4a1a !important; }
+  .ask-sentence {
+    color: #fde68a; font-size: var(--fs-lg); line-height: 1.5;
+    overflow-wrap: break-word; padding: 0.1rem 0;
   }
 
   .tp-hint {
@@ -762,25 +735,7 @@
   :global(.body-text strong) { color: #b8cce4; font-weight: 700; }
 
   .e-ask-header { display: flex; align-items: center; }
-  .e-ask-item {
-    display: flex; align-items: flex-start; gap: 0.35rem;
-    width: 100%; background: none; border: none; cursor: pointer;
-    text-align: left; padding: 0.15rem 0;
-  }
-  .e-ask-item:hover .ask-text { color: #fde68a; }
-  .e-ask-chevron { color: #92400e; font-size: var(--fs-sm); flex-shrink: 0; margin-top: 0.1rem; }
-  .ask-text {
-    flex: 1; color: #ffffff; font-size: var(--fs-lg);
-    overflow-wrap: break-word; line-height: 1.4; transition: color 0.15s;
-  }
-  .e-ask-alts {
-    display: flex; flex-direction: column; gap: 0.15rem;
-    padding: 0.15rem 0 0.05rem 1rem; border-left: 1px solid #3d1a02;
-  }
-  .e-ask-alt {
-    color: #fbbf24; font-size: var(--fs-base); line-height: 1.4;
-    font-style: italic; overflow-wrap: break-word;
-  }
+  .e-ask-header { display: flex; align-items: center; }
 
   .loading { color: #60a5fa; font-style: italic; font-size: var(--fs-base); }
   .empty {

@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 pub struct Config {
     pub gemini_api_key: String,
     pub groq_api_key: Option<String>,
+    pub groq_api_key_2: Option<String>,
     pub openrouter_api_key: Option<String>,
     pub mistral_api_key: Option<String>,
     pub cerebras_api_key: Option<String>,
@@ -24,6 +25,7 @@ impl Config {
         let gemini_api_key = std::env::var("GEMINI_API_KEY")
             .context("GEMINI_API_KEY must be set in .env or environment")?;
         let groq_api_key = std::env::var("GROQ_API_KEY").ok();
+        let groq_api_key_2 = std::env::var("GROQ_API_KEY_2").ok();
         let openrouter_api_key = std::env::var("OPENROUTER_API_KEY").ok();
         let mistral_api_key = std::env::var("MISTRAL_API_KEY").ok();
         let cerebras_api_key = std::env::var("CEREBRAS_API_KEY").ok();
@@ -53,6 +55,6 @@ impl Config {
             .unwrap_or_else(|_| "3000".to_string())
             .parse::<u16>()
             .context("PORT must be a valid number")?;
-        Ok(Self { gemini_api_key, groq_api_key, openrouter_api_key, mistral_api_key, cerebras_api_key, anthropic_api_key, qwen_api_key, whisper_url, whisper_model, ollama_url, ollama_model, ollama_vision_model, diarize_url, port })
+        Ok(Self { gemini_api_key, groq_api_key, groq_api_key_2, openrouter_api_key, mistral_api_key, cerebras_api_key, anthropic_api_key, qwen_api_key, whisper_url, whisper_model, ollama_url, ollama_model, ollama_vision_model, diarize_url, port })
     }
 }

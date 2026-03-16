@@ -36,9 +36,10 @@ async fn main() -> anyhow::Result<()> {
 
     let active = |k: &Option<String>| if k.is_some() { "yes" } else { "no" };
     tracing::info!(
-        "Providers — Gemini: yes | Anthropic: {} | Groq: {} | OpenRouter: {} | Cerebras: {} | Mistral: {} | Qwen: {} | Ollama: {} ({})",
+        "Providers — Gemini: yes | Anthropic: {} | Groq: {}{} | OpenRouter: {} | Cerebras: {} | Mistral: {} | Qwen: {} | Ollama: {} ({})",
         active(&config.anthropic_api_key),
         active(&config.groq_api_key),
+        if config.groq_api_key_2.is_some() { "+key2" } else { "" },
         active(&config.openrouter_api_key),
         active(&config.cerebras_api_key),
         active(&config.mistral_api_key),
@@ -90,6 +91,7 @@ async fn main() -> anyhow::Result<()> {
         state.transcript.clone(),
         config.gemini_api_key.clone(),
         config.groq_api_key.clone(),
+        config.groq_api_key_2.clone(),
         config.whisper_url.clone(),
         config.whisper_model.clone(),
         rate_limiter.clone(),
@@ -103,6 +105,7 @@ async fn main() -> anyhow::Result<()> {
         state.transcript.clone(),
         config.gemini_api_key.clone(),
         config.groq_api_key.clone(),
+        config.groq_api_key_2.clone(),
         config.whisper_url.clone(),
         config.whisper_model.clone(),
         config.diarize_url.clone(),
@@ -127,6 +130,7 @@ async fn main() -> anyhow::Result<()> {
         config.gemini_api_key.clone(),
         config.anthropic_api_key.clone(),
         config.groq_api_key.clone(),
+        config.groq_api_key_2.clone(),
         config.openrouter_api_key.clone(),
         config.mistral_api_key.clone(),
         config.cerebras_api_key.clone(),

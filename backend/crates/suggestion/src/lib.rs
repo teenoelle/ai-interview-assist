@@ -31,6 +31,7 @@ async fn suggest_with_fallback(
     gemini_key: &str,
     anthropic_key: Option<&str>,
     groq_key: Option<&str>,
+    groq_key_2: Option<&str>,
     openrouter_key: Option<&str>,
     mistral_key: Option<&str>,
     cerebras_key: Option<&str>,
@@ -77,9 +78,16 @@ async fn suggest_with_fallback(
             event_tx, ());
     }
 
-    // 6. Groq — 1,000 req/day LLM limit; saved here since Whisper uses a separate quota
+    // 6. Groq key 1 — 1,000 req/day LLM limit; saved here since Whisper uses a separate quota
     if let Some(key) = groq_key {
-        try_provider!("Groq",
+        try_provider!("Groq key 1",
+            groq_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
+            event_tx, ());
+    }
+
+    // 6b. Groq key 2 — higher-limit secondary key
+    if let Some(key) = groq_key_2 {
+        try_provider!("Groq key 2",
             groq_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
             event_tx, ());
     }
@@ -109,6 +117,7 @@ pub async fn run_agent(
     gemini_key: String,
     anthropic_key: Option<String>,
     groq_key: Option<String>,
+    groq_key_2: Option<String>,
     openrouter_key: Option<String>,
     mistral_key: Option<String>,
     cerebras_key: Option<String>,
@@ -123,6 +132,7 @@ pub async fn run_agent(
                 let gkey = gemini_key.clone();
                 let akey = anthropic_key.clone();
                 let grkey = groq_key.clone();
+                let grkey2 = groq_key_2.clone();
                 let orkey = openrouter_key.clone();
                 let mkey = mistral_key.clone();
                 let ckey = cerebras_key.clone();
@@ -142,6 +152,7 @@ pub async fn run_agent(
                         &gkey,
                         akey.as_deref(),
                         grkey.as_deref(),
+                        grkey2.as_deref(),
                         orkey.as_deref(),
                         mkey.as_deref(),
                         ckey.as_deref(),

@@ -45,9 +45,9 @@ Answer: [max 12 words — boldest outcome first, e.g. 'I cut infrastructure cost
 Context: [3-5 word cue]\n\
 Action: [3-5 word cue]\n\
 Result: [3-5 word cue]\n\
-Ask: [full spoken question 8-14 words]\n\
-Ask: [full spoken question 8-14 words, different topic]\n\n\
-RULES: Acknowledge empathizes with their concern. Affirm bridges to your answer. Answer is the boldest outcome, strictly under 12 words. Cues are 3-5 word fragments only. Each Ask is a FULL SENTENCE question (8-14 words).Use ONLY real documented experience. Output nothing else.",
+Ask: [2-4 word topic, e.g. 'Team culture'] | [full question 8-14 words]\n\
+Ask: [2-4 word topic, different angle] | [full question 8-14 words]\n\n\
+RULES: Acknowledge empathizes with their concern. Affirm bridges to your answer. Answer is the boldest outcome, strictly under 12 words. Cues are 3-5 word fragments only. Each Ask has a short topic (2-4 words) then pipe then full question (8-14 words).Use ONLY real documented experience. Output nothing else.",
             ctx_prefix, question
         )
     } else {
@@ -60,9 +60,9 @@ Answer: [max 12 words — strongest direct answer, e.g. 'I turn complex data int
 ---\n\
 Point: [3-5 word cue — first supporting point]\n\
 Point: [3-5 word cue — second supporting point]\n\
-Ask: [full spoken question 8-14 words]\n\
-Ask: [full spoken question 8-14 words, different topic]\n\n\
-RULES: Acknowledge empathizes with their concern. Affirm bridges to your answer. Answer is the strongest reply, strictly under 12 words. Cues are 3-5 word fragments only. Each Ask is a FULL SENTENCE question (8-14 words).Use ONLY real documented background. Output nothing else.",
+Ask: [2-4 word topic, e.g. 'Team culture'] | [full question 8-14 words]\n\
+Ask: [2-4 word topic, different angle] | [full question 8-14 words]\n\n\
+RULES: Acknowledge empathizes with their concern. Affirm bridges to your answer. Answer is the strongest reply, strictly under 12 words. Cues are 3-5 word fragments only. Each Ask has a short topic (2-4 words) then pipe then full question (8-14 words).Use ONLY real documented background. Output nothing else.",
             ctx_prefix, question
         )
     }

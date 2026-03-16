@@ -5,13 +5,13 @@ export interface ParsedSuggestion {
   tell: string;    // main spoken line
   body: string;    // raw body text after --- (joined lines)
   cues: string[];  // body lines as individual stripped strings
-  asks: string[];
+  asks: { topic: string; question: string }[];
 }
 
 export function parseSuggestion(text: string): ParsedSuggestion {
   const lines = text.split('\n');
   let acknowledge = '', affirm = '', tell = '', cue = 'Answer';
-  const asks: string[] = [], cues: string[] = [], bodyLines: string[] = [];
+  const asks: { topic: string; question: string }[] = [], cues: string[] = [], bodyLines: string[] = [];
   let pastSeparator = false;
   // Strip markdown bold markers e.g. **Affirm:** → Affirm:
   const clean = (s: string) => s.replace(/^\*+([^*]+)\*+\s*/, '$1 ').trim();
@@ -27,8 +27,11 @@ export function parseSuggestion(text: string): ParsedSuggestion {
       else if (c.match(/^Ask:/i) && !tell) { cue = 'Ask'; tell = c.replace(/^Ask:\s*/i, '').trim(); }
     } else {
       if (c.match(/^Ask:/i)) {
-        const a = c.replace(/^Ask:\s*/i, '').trim();
-        if (a) asks.push(a);
+        const raw = c.replace(/^Ask:\s*/i, '').trim();
+        const parts = raw.split(/\s*\|\s*/);
+        const topic = parts[0]?.trim() ?? '';
+        const question = parts[1]?.trim() ?? topic;
+        if (topic) asks.push({ topic, question });
       } else if (t) {
         bodyLines.push(line);
         const stripped = t.replace(/^[#\-*•]+\s*/, '').trim();

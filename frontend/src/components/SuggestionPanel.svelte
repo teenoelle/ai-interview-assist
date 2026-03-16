@@ -227,7 +227,7 @@
                     <div class="tp-cue-block" class:tp-cue-open={isOpen}>
                       <button class="tp-cue-toggle" onclick={() => { const opening = !isOpen; toggleCueOpen(cue.text); if (opening) expandCue(current.question, cue.text); }}>
                         <span class="cue-label-sm">{cue.label}</span>
-                        <span class="tp-cue-preview">{isOpen ? '' : cue.text.slice(0, 36) + (cue.text.length > 36 ? '…' : '')}</span>
+                        <span class="tp-cue-preview">{cue.text}</span>
                         <span class="tp-cue-chevron">{isOpen ? '▾' : '▸'}</span>
                       </button>
                       {#if isOpen}
@@ -272,12 +272,12 @@
                   <div class="tp-cue-block tp-cue-block-ask" class:tp-cue-open={isAskOpen}>
                     <button class="tp-cue-toggle" onclick={() => toggleAsk(`${i}`)}>
                       <span class="cue-label-sm cue-label-ask">Q{i + 1}</span>
-                      <span class="tp-cue-preview tp-ask-preview">{isAskOpen ? '' : shortAsk(ask)}</span>
+                      <span class="tp-cue-preview tp-ask-preview">{ask.topic}</span>
                       <span class="tp-cue-chevron">{isAskOpen ? '▾' : '▸'}</span>
                     </button>
                     {#if isAskOpen}
                       <div class="tp-cue-body">
-                        <div class="ask-sentence">{ask}</div>
+                        <div class="ask-sentence">{ask.question}</div>
                       </div>
                     {/if}
                   </div>
@@ -380,12 +380,12 @@
                       <div class="tp-cue-block tp-cue-block-ask" class:tp-cue-open={isAskOpen}>
                         <button class="tp-cue-toggle" onclick={() => toggleAsk(`${i}-${ai}`)}>
                           <span class="cue-label-sm cue-label-ask">Q{ai + 1}</span>
-                          <span class="tp-cue-preview tp-ask-preview">{isAskOpen ? '' : shortAsk(ask)}</span>
+                          <span class="tp-cue-preview tp-ask-preview">{ask.topic}</span>
                           <span class="tp-cue-chevron">{isAskOpen ? '▾' : '▸'}</span>
                         </button>
                         {#if isAskOpen}
                           <div class="tp-cue-body">
-                            <div class="ask-sentence">{ask}</div>
+                            <div class="ask-sentence">{ask.question}</div>
                           </div>
                         {/if}
                       </div>
@@ -582,7 +582,12 @@
 
   /* Ask cue-block theming (amber) */
   .cue-label-ask { color: #fbbf24 !important; }
-  .tp-ask-preview { color: #7c4a1a !important; }
+  .tp-ask-preview {
+    color: #7c4a1a !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: unset !important;
+  }
   .ask-sentence {
     color: #fde68a; font-size: var(--fs-lg); line-height: 1.5;
     overflow-wrap: break-word; padding: 0.1rem 0;

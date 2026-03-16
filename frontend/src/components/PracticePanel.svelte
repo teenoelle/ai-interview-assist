@@ -353,7 +353,7 @@
                 {#if ai > 0}<div class="h-ask-or">or</div>{/if}
                 <div class="h-ask-row">
                   <span class="h-cue-badge h-cue-ask">Ask</span>
-                  <span class="h-speak-text">{ask}</span>
+                  <span class="h-speak-text">{ask.question}</span>
                 </div>
               {/each}
             </div>

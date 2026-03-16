@@ -36,22 +36,26 @@ async fn main() -> anyhow::Result<()> {
 
     let active = |k: &Option<String>| if k.is_some() { "yes" } else { "no" };
     tracing::info!(
-        "Providers — Gemini: yes | Anthropic: {} | Groq: {} | OpenRouter: {} | Cerebras: {} | Mistral: {} | Qwen: {}",
+        "Providers — Gemini: yes | Anthropic: {} | Groq: {} | OpenRouter: {} | Cerebras: {} | Mistral: {} | Qwen: {} | Ollama: {} ({})",
         active(&config.anthropic_api_key),
         active(&config.groq_api_key),
         active(&config.openrouter_api_key),
         active(&config.cerebras_api_key),
         active(&config.mistral_api_key),
         active(&config.qwen_api_key),
+        config.ollama_url,
+        config.ollama_model,
     );
     tracing::info!(
-        "Suggestion order: {} OpenRouter → Qwen → Cerebras → Mistral → Groq → Gemini",
-        if config.anthropic_api_key.is_some() { "Claude →" } else { "" }
+        "Suggestion order: {} OpenRouter → Qwen → Cerebras → Mistral → Groq → Ollama ({}) → Gemini",
+        if config.anthropic_api_key.is_some() { "Claude →" } else { "" },
+        config.ollama_model,
     );
     tracing::info!("Transcription order: Groq Whisper → Gemini (both streams)");
     tracing::info!(
-        "Sentiment: {} → Gemini Vision fallback",
-        if config.anthropic_api_key.is_some() { "Claude Haiku (primary)" } else { "Gemini Vision only" }
+        "Sentiment: {} → Ollama Vision ({}) → Gemini Vision",
+        if config.anthropic_api_key.is_some() { "Claude Haiku" } else { "Ollama Vision" },
+        config.ollama_vision_model,
     );
     tracing::info!(
         "Speaker diarization: {}",
@@ -103,6 +107,8 @@ async fn main() -> anyhow::Result<()> {
         state.event_tx.clone(),
         config.gemini_api_key.clone(),
         config.anthropic_api_key.clone(),
+        config.ollama_url.clone(),
+        config.ollama_vision_model.clone(),
         rate_limiter.clone(),
     ));
 
@@ -118,6 +124,8 @@ async fn main() -> anyhow::Result<()> {
         config.mistral_api_key.clone(),
         config.cerebras_api_key.clone(),
         config.qwen_api_key.clone(),
+        config.ollama_url.clone(),
+        config.ollama_model.clone(),
         rate_limiter.clone(),
     ));
 

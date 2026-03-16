@@ -6,6 +6,7 @@ pub mod mistral_llm;
 pub mod cerebras_llm;
 pub mod claude_llm;
 pub mod qwen_llm;
+pub mod ollama_llm;
 pub mod prompt;
 
 use std::sync::Arc;
@@ -34,6 +35,8 @@ async fn suggest_with_fallback(
     mistral_key: Option<&str>,
     cerebras_key: Option<&str>,
     qwen_key: Option<&str>,
+    ollama_url: &str,
+    ollama_model: &str,
     system_prompt: &str,
     user_prompt: &str,
     rate_limiter: &RateLimiter,
@@ -81,7 +84,13 @@ async fn suggest_with_fallback(
             event_tx, ());
     }
 
-    // 7. Gemini — absolute last resort, keep credits for sentiment analysis
+    // 7. Ollama — local model, always free, no rate limit; silently skip if not running
+    match ollama_llm::stream_suggestions(ollama_url, ollama_model, system_prompt, user_prompt, event_tx.clone()).await {
+        Ok(()) => return Ok(()),
+        Err(e) => tracing::warn!("Ollama suggestions unavailable, trying Gemini: {}", e),
+    }
+
+    // 8. Gemini — absolute last resort, keep credits for sentiment analysis
     rate_limiter.acquire().await;
     match gemini_llm::stream_suggestions(gemini_key, system_prompt, user_prompt, event_tx).await {
         Ok(()) => return Ok(()),
@@ -104,6 +113,8 @@ pub async fn run_agent(
     mistral_key: Option<String>,
     cerebras_key: Option<String>,
     qwen_key: Option<String>,
+    ollama_url: String,
+    ollama_model: String,
     rate_limiter: RateLimiter,
 ) {
     loop {
@@ -116,6 +127,8 @@ pub async fn run_agent(
                 let mkey = mistral_key.clone();
                 let ckey = cerebras_key.clone();
                 let qkey = qwen_key.clone();
+                let ourl = ollama_url.clone();
+                let omodel = ollama_model.clone();
                 let etx = event_tx.clone();
                 let sp = system_prompt.read().await.clone();
                 let tr = transcript.read().await.clone();
@@ -133,6 +146,8 @@ pub async fn run_agent(
                         mkey.as_deref(),
                         ckey.as_deref(),
                         qkey.as_deref(),
+                        &ourl,
+                        &omodel,
                         &sp,
                         &user_prompt,
                         &rl,

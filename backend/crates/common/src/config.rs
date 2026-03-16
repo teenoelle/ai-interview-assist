@@ -9,6 +9,9 @@ pub struct Config {
     pub cerebras_api_key: Option<String>,
     pub anthropic_api_key: Option<String>,
     pub qwen_api_key: Option<String>,
+    pub ollama_url: String,
+    pub ollama_model: String,
+    pub ollama_vision_model: String,
     pub diarize_url: Option<String>,
     pub port: u16,
 }
@@ -24,6 +27,12 @@ impl Config {
         let cerebras_api_key = std::env::var("CEREBRAS_API_KEY").ok();
         let anthropic_api_key = std::env::var("ANTHROPIC_API_KEY").ok();
         let qwen_api_key = std::env::var("QWEN_API_KEY").ok();
+        let ollama_url = std::env::var("OLLAMA_URL")
+            .unwrap_or_else(|_| "http://localhost:11434".to_string());
+        let ollama_model = std::env::var("OLLAMA_MODEL")
+            .unwrap_or_else(|_| "llama3.2".to_string());
+        let ollama_vision_model = std::env::var("OLLAMA_VISION_MODEL")
+            .unwrap_or_else(|_| "llava".to_string());
         // Diarization sidecar — optional; defaults to localhost:8001 if HF_TOKEN is set
         let diarize_url = if std::env::var("HF_TOKEN").is_ok() {
             Some(
@@ -37,6 +46,6 @@ impl Config {
             .unwrap_or_else(|_| "3000".to_string())
             .parse::<u16>()
             .context("PORT must be a valid number")?;
-        Ok(Self { gemini_api_key, groq_api_key, openrouter_api_key, mistral_api_key, cerebras_api_key, anthropic_api_key, qwen_api_key, diarize_url, port })
+        Ok(Self { gemini_api_key, groq_api_key, openrouter_api_key, mistral_api_key, cerebras_api_key, anthropic_api_key, qwen_api_key, ollama_url, ollama_model, ollama_vision_model, diarize_url, port })
     }
 }

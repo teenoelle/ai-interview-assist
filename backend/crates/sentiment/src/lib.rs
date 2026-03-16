@@ -1,5 +1,6 @@
 pub mod gemini_vision;
 pub mod claude_vision;
+pub mod ollama_vision;
 
 use tokio::sync::{broadcast, mpsc};
 use common::messages::WsEvent;
@@ -11,6 +12,8 @@ pub async fn run_agent(
     event_tx: broadcast::Sender<WsEvent>,
     gemini_key: String,
     anthropic_key: Option<String>,
+    ollama_url: String,
+    ollama_vision_model: String,
     rate_limiter: RateLimiter,
 ) {
     loop {
@@ -18,6 +21,8 @@ pub async fn run_agent(
             Some(jpeg_bytes) => {
                 let gkey = gemini_key.clone();
                 let akey = anthropic_key.clone();
+                let ourl = ollama_url.clone();
+                let ovmodel = ollama_vision_model.clone();
                 let etx = event_tx.clone();
                 let rl = rate_limiter.clone();
 
@@ -53,7 +58,16 @@ pub async fn run_agent(
                         }
                     }
 
-                    // 2. Gemini — fallback
+                    // 2. Ollama vision (llava) — local free fallback, silently skip if not running
+                    match ollama_vision::analyze_sentiment(&ourl, &ovmodel, &jpeg_bytes).await {
+                        Ok(result) => {
+                            let _ = etx.send(WsEvent::Sentiment { emotion: result.emotion, reason: result.reason, coaching: result.coaching, coaching_why: result.coaching_why });
+                            return;
+                        }
+                        Err(e) => tracing::warn!("Ollama vision unavailable, trying Gemini: {}", e),
+                    }
+
+                    // 3. Gemini — last resort
                     let result = with_retry(&rl, || {
                         let k = gkey.clone();
                         let jpg = jpeg_bytes.clone();

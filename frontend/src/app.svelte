@@ -97,14 +97,14 @@
   let webcamStream = $state<MediaStream | null>(null);
   let webcamEl: HTMLVideoElement | undefined = $state();
   $effect(() => {
-    if (webcamEl) webcamEl.srcObject = webcamStream ?? null;
+    if (webcamEl) { webcamEl.srcObject = webcamStream ?? null; if (webcamStream) webcamEl.play().catch(() => {}); }
   });
 
   // Screen share preview (shows interviewer's video in Zoom/Teams)
   let screenStream = $state<MediaStream | null>(null);
   let screenEl: HTMLVideoElement | undefined = $state();
   $effect(() => {
-    if (screenEl) screenEl.srcObject = screenStream ?? null;
+    if (screenEl) { screenEl.srcObject = screenStream ?? null; if (screenStream) screenEl.play().catch(() => {}); }
   });
 
   // Interviewer face crop (persisted)
@@ -165,8 +165,8 @@
     if (el.readyState >= 1 && el.videoWidth) { onMeta(); return; }
     el.addEventListener('loadedmetadata', onMeta, { once: true });
   });
-  $effect(() => { if (pickerVideoEl) pickerVideoEl.srcObject = screenStream ?? null; });
-  $effect(() => { if (focusVideoEl) focusVideoEl.srcObject = screenStream ?? null; });
+  $effect(() => { if (pickerVideoEl) { pickerVideoEl.srcObject = screenStream ?? null; if (screenStream) pickerVideoEl.play().catch(() => {}); } });
+  $effect(() => { if (focusVideoEl) { focusVideoEl.srcObject = screenStream ?? null; if (screenStream) focusVideoEl.play().catch(() => {}); } });
 
   // Column widths (resizable, persisted)
   let leftW = $state(Number(localStorage.getItem(SK.colLeft) ?? 240));
@@ -2166,24 +2166,27 @@
   .crop-picker-bg {
     position: fixed; inset: 0; background: rgba(0,0,0,0.88);
     z-index: 2000; display: flex; align-items: center; justify-content: center;
+    padding: 1rem; box-sizing: border-box;
   }
   .crop-picker-dialog {
     width: 82vw; max-width: 1200px; background: #0a1525;
     border: 1px solid #1e3a5f; border-radius: 0.75rem;
     display: flex; flex-direction: column; gap: 0.6rem; padding: 0.9rem;
+    max-height: calc(100vh - 2rem); overflow: hidden;
   }
   .crop-picker-header {
     display: flex; align-items: center; justify-content: space-between;
-    font-size: var(--fs-sm); color: #94a3b8;
+    font-size: var(--fs-sm); color: #94a3b8; flex-shrink: 0;
   }
   .crop-picker-close {
     background: transparent; border: none; color: #475569;
-    font-size: var(--fs-base); cursor: pointer; padding: 0.1rem 0.3rem; line-height: 1;
+    font-size: var(--fs-base); cursor: pointer; padding: 0.3rem 0.5rem; line-height: 1;
   }
   .crop-picker-close:hover { color: #f87171; }
   .crop-picker-vwrap {
     position: relative; width: 100%; user-select: none; cursor: crosshair;
-    overflow: hidden; background: #060e1a; flex-shrink: 0;
+    overflow: hidden; background: #060e1a;
+    flex: 1 1 auto; min-height: 0;
   }
   .crop-picker-vid { width: 100%; height: 100%; object-fit: fill; display: block; }
   .crop-picker-sel {
@@ -2191,7 +2194,7 @@
     background: rgba(96,165,250,0.15); pointer-events: none;
   }
   .crop-picker-footer {
-    display: flex; align-items: center; gap: 0.5rem;
+    display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0;
   }
   .crop-picker-hint { flex: 1; font-size: var(--fs-xs); color: #334155; font-style: italic; }
   .crop-apply-btn {

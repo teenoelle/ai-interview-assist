@@ -1207,9 +1207,9 @@
                     style="cursor:{iVid.zoom > 1 ? 'grab' : 'default'}{interviewerVidH ? `;height:${interviewerVidH}px` : ''}"
                     title="Scroll to zoom · drag to pan · double-click to reset"
                   >
-                    <div style="width:100%;height:100%;transform:translate({iVid.panX}px,{iVid.panY}px) scale({iVid.zoom});transform-origin:center;pointer-events:none;">
+                    <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;transform:translate({iVid.panX}px,{iVid.panY}px) scale({iVid.zoom});transform-origin:center;pointer-events:none;">
                       {#if cropRect}
-                        <div class="face-crop-wrap" style="aspect-ratio:{cropRect.w * videoNaturalAR / cropRect.h};overflow:hidden;position:relative;width:100%;">
+                        <div class="face-crop-wrap" style="{interviewerVidH ? `height:100%;width:auto;max-width:100%` : `width:100%;aspect-ratio:${cropRect.w * videoNaturalAR / cropRect.h}`};overflow:hidden;position:relative;">
                           <!-- svelte-ignore a11y_media_has_caption -->
                           <video bind:this={screenEl} autoplay muted playsinline
                             style="position:absolute;width:{100/cropRect.w}%;height:auto;transform:translate({-cropRect.x*100}%,{-cropRect.y*100}%);"
@@ -1217,7 +1217,9 @@
                         </div>
                       {:else}
                         <!-- svelte-ignore a11y_media_has_caption -->
-                        <video bind:this={screenEl} class="interviewer-strip-vid" autoplay muted playsinline></video>
+                        <video bind:this={screenEl} autoplay muted playsinline
+                          style="{interviewerVidH ? 'width:100%;height:100%;object-fit:contain;' : 'width:100%;aspect-ratio:16/9;object-fit:cover;'} display:block;background:#0a1525;"
+                        ></video>
                       {/if}
                     </div>
                   </div>

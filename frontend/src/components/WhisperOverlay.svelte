@@ -56,8 +56,8 @@
   .drag-handle:active { cursor: grabbing; }
   .whisper-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ade80; flex-shrink: 0; animation: wpulse 2s ease-in-out infinite; }
   @keyframes wpulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-  .whisper-label { font-size: 0.55rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #4ade80; flex: 1; }
-  .whisper-close { margin-left: auto; background: none; border: none; color: #334155; font-size: 0.65rem; cursor: pointer; padding: 0 0.1rem; }
+  .whisper-label { font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #4ade80; flex: 1; }
+  .whisper-close { margin-left: auto; background: none; border: none; color: #334155; font-size: var(--fs-sm); cursor: pointer; padding: 0 0.1rem; }
   .whisper-close:hover { color: #64748b; }
-  .whisper-text { padding: 0.5rem 0.65rem; font-size: 0.9rem; font-weight: 600; color: #e2e8f0; line-height: 1.4; }
+  .whisper-text { padding: 0.5rem 0.65rem; font-size: var(--fs-base); font-weight: 600; color: #e2e8f0; line-height: 1.4; }
 </style>

@@ -73,12 +73,12 @@
   }
   .grip {
     color: #334155;
-    font-size: 0.85rem;
+    font-size: var(--fs-base);
     letter-spacing: -2px;
     line-height: 1;
   }
   .panel-title {
-    font-size: 0.7rem;
+    font-size: var(--fs-sm);
     font-weight: 600;
     color: #64748b;
     text-transform: uppercase;

@@ -119,8 +119,8 @@ pub async fn predict_questions(
     anthropic_key: Option<&str>,
 ) -> Vec<String> {
     let prompt = format!(
-        "Based on the candidate background and job description below, list exactly 8 likely interview questions the interviewer might ask. Output one question per line, numbered 1-8. Mix behavioral, technical, and culture-fit questions. Focus on areas where the candidate's experience intersects with the role requirements.\n\n{}",
-        trunc(&system_prompt, 4000)
+        "Based on the candidate background and job description below, list exactly 8 likely interview questions the interviewer might ask. Output one question per line, numbered 1-8. Mix behavioral, technical, and culture-fit questions. Focus on areas where the candidate's specific experience intersects with the role requirements — tailor questions to their actual background.\n\n{}",
+        trunc(&system_prompt, 8000)
     );
 
     match call_ai(&prompt, gemini_key, anthropic_key, 600).await {
@@ -503,4 +503,63 @@ pub async fn extract_next_steps(
             .collect(),
         Err(_) => vec![],
     }
+}
+
+#[derive(serde::Serialize)]
+pub struct VocalSentiment {
+    pub tone: String,           // e.g. "confident", "hesitant", "nervous"
+    pub pace: String,           // e.g. "good pace (145 wpm)", "too fast (210 wpm)"
+    pub confidence_score: u8,   // 0-100
+    pub coaching: String,       // 1-2 sentence delivery coaching
+    pub fillers_noted: String,  // e.g. "3 fillers detected (um ×2, like ×1)" or ""
+}
+
+pub async fn assess_vocal_delivery(
+    question: &str,
+    transcript: &str,
+    duration_seconds: f32,
+    word_count: u32,
+    filler_count: u32,
+    filler_detail: &str,
+    gemini_key: &str,
+    anthropic_key: Option<&str>,
+) -> VocalSentiment {
+    let wpm = if duration_seconds > 0.0 {
+        (word_count as f32 / duration_seconds * 60.0).round() as u32
+    } else { 0 };
+
+    let pace_note = match wpm {
+        0..=80 => "too slow",
+        81..=120 => "slightly slow",
+        121..=160 => "good pace",
+        161..=200 => "slightly fast",
+        _ => "too fast",
+    };
+
+    let prompt = format!(
+        "Assess the vocal delivery of this practice interview answer.\n\nQuestion asked: \"{}\"\n\nCandidate said:\n\"{}\"\n\nSpeaking metrics:\n- Duration: {:.0}s\n- Words per minute: {} ({})\n- Filler words: {} ({})\n\nRespond in EXACTLY this format:\nTONE: [one word: confident / hesitant / nervous / enthusiastic / flat]\nSCORE: [0-100 integer — overall vocal delivery score]\nCOACHING: [1-2 specific sentences coaching the candidate on their delivery — reference what they said or the metrics]\n\nFocus on: confidence in language choices (hedging words like 'I think', 'maybe', 'sort of' vs. direct statements), filler word usage, answer structure, and whether they sounded prepared.",
+        question, transcript, duration_seconds, wpm, pace_note, filler_count, filler_detail
+    );
+
+    let text = call_ai(&prompt, gemini_key, anthropic_key, 200).await.unwrap_or_default();
+
+    let mut tone = "neutral".to_string();
+    let mut confidence_score: u8 = 50;
+    let mut coaching = String::new();
+
+    for line in text.lines() {
+        let t = line.trim();
+        if let Some(v) = t.strip_prefix("TONE:") { tone = v.trim().to_lowercase(); }
+        else if let Some(v) = t.strip_prefix("SCORE:") { confidence_score = v.trim().parse().unwrap_or(50); }
+        else if let Some(v) = t.strip_prefix("COACHING:") { coaching = v.trim().to_string(); }
+    }
+
+    let pace = format!("{} ({} wpm)", pace_note, wpm);
+    let fillers_noted = if filler_count > 0 {
+        format!("{} filler{} detected ({})", filler_count, if filler_count == 1 { "" } else { "s" }, filler_detail)
+    } else {
+        String::new()
+    };
+
+    VocalSentiment { tone, pace, confidence_score, coaching, fillers_noted }
 }

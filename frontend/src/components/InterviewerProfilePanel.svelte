@@ -29,11 +29,11 @@
   .profiles { display: flex; flex-direction: column; gap: 0.5rem; }
   .profile-card { background: #060e1a; border: 1px solid #1a2d4a; border-radius: 0.4rem; padding: 0.6rem 0.75rem; display: flex; flex-direction: column; gap: 0.3rem; }
   .profile-header { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
-  .profile-name { font-size: 0.8rem; font-weight: 700; color: #e2e8f0; }
-  .profile-role { font-size: 0.68rem; color: #60a5fa; }
-  .profile-bg { font-size: 0.72rem; color: #94a3b8; margin: 0; line-height: 1.4; }
-  .profile-tenure { font-size: 0.65rem; color: #475569; margin: 0; }
+  .profile-name { font-size: var(--fs-base); font-weight: 700; color: #e2e8f0; }
+  .profile-role { font-size: var(--fs-sm); color: #60a5fa; }
+  .profile-bg { font-size: var(--fs-sm); color: #94a3b8; margin: 0; line-height: 1.4; }
+  .profile-tenure { font-size: var(--fs-sm); color: #475569; margin: 0; }
   .rapport-tip { display: flex; flex-direction: column; gap: 0.1rem; padding: 0.35rem 0.5rem; background: #071a0f; border-left: 2px solid #14532d; border-radius: 0.25rem; margin-top: 0.1rem; }
-  .rapport-label { font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #4ade80; }
-  .rapport-text { font-size: 0.72rem; color: #94a3b8; line-height: 1.4; }
+  .rapport-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #4ade80; }
+  .rapport-text { font-size: var(--fs-sm); color: #94a3b8; line-height: 1.4; }
 </style>

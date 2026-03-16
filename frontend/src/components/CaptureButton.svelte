@@ -79,7 +79,7 @@
   .controls { display: flex; align-items: center; gap: 0.5rem; }
   .capture-btn {
     display: inline-flex; align-items: center; gap: 0.5rem;
-    padding: 0.5rem 1.25rem; font-size: 0.9rem; font-weight: 600;
+    padding: 0.5rem 1.25rem; font-size: var(--fs-base); font-weight: 600;
     background: #1e293b; color: #e2e8f0;
     border: 2px solid #3b82f6; border-radius: 9999px; cursor: pointer;
     transition: all 0.2s; white-space: nowrap;
@@ -90,7 +90,7 @@
   .pause-btn {
     width: 2rem; height: 2rem; display: flex; align-items: center; justify-content: center;
     background: #1e293b; border: 1px solid #334155; border-radius: 50%;
-    color: #94a3b8; cursor: pointer; font-size: 0.8rem; transition: all 0.15s;
+    color: #94a3b8; cursor: pointer; font-size: var(--fs-base); transition: all 0.15s;
   }
   .pause-btn:hover { border-color: #f59e0b; color: #f59e0b; }
   .pause-btn.paused { border-color: #f59e0b; color: #f59e0b; background: #1a1500; }
@@ -102,6 +102,6 @@
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
   .capture-error {
     padding: 0.5rem; background: #450a0a; border-radius: 0.375rem;
-    color: #fca5a5; font-size: 0.8rem;
+    color: #fca5a5; font-size: var(--fs-base);
   }
 </style>

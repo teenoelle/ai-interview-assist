@@ -85,7 +85,7 @@
   .empty {
     color: #475569;
     font-style: italic;
-    font-size: 0.85rem;
+    font-size: var(--fs-base);
     padding: 1rem 0;
   }
   .provider-row {
@@ -104,11 +104,11 @@
   }
   .provider-name {
     font-weight: 700;
-    font-size: 0.85rem;
+    font-size: var(--fs-base);
     color: #e2e8f0;
   }
   .counts {
-    font-size: 0.8rem;
+    font-size: var(--fs-base);
     color: #94a3b8;
     font-variant-numeric: tabular-nums;
   }
@@ -131,11 +131,11 @@
     gap: 0.25rem;
   }
   .pct {
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
     font-weight: 600;
   }
   .rate {
-    font-size: 0.72rem;
+    font-size: var(--fs-sm);
     color: #64748b;
     font-variant-numeric: tabular-nums;
   }

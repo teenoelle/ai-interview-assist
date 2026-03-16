@@ -2,13 +2,11 @@
   const {
     videoEmotion,
     videoReason,
-    coaching,
     audioEmotion,
     audioReason,
   } = $props<{
     videoEmotion: string;
     videoReason?: string;
-    coaching?: string;
     audioEmotion?: string;
     audioReason?: string;
   }>();
@@ -44,12 +42,6 @@
         {/if}
       </div>
     </div>
-    {#if coaching}
-      <div class="coaching-tip">
-        <span class="coaching-icon">💡</span>
-        <span class="coaching-text">{coaching}</span>
-      </div>
-    {/if}
   {:else}
     <p class="empty">Waiting for screen capture...</p>
   {/if}
@@ -78,7 +70,7 @@
     padding: 0.75rem;
   }
   .section-label {
-    font-size: 0.58rem;
+    font-size: var(--fs-xs);
     font-weight: 700;
     color: #334155;
     text-transform: uppercase;
@@ -88,7 +80,7 @@
     align-items: center;
     gap: 0.3rem;
   }
-  .label-icon { font-size: 0.7rem; }
+  .label-icon { font-size: var(--fs-sm); }
   .emotion {
     display: flex;
     align-items: flex-start;
@@ -106,33 +98,21 @@
     min-width: 0;
   }
   .label {
-    font-size: 0.9rem;
+    font-size: var(--fs-base);
     font-weight: 700;
     color: var(--color);
     line-height: 1.2;
   }
   .reason {
-    font-size: 0.65rem;
+    font-size: var(--fs-sm);
     color: #475569;
     line-height: 1.3;
     font-style: italic;
   }
-  .coaching-tip {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.4rem;
-    margin-top: 0.4rem;
-    padding: 0.4rem 0.6rem;
-    background: #1a2744;
-    border-radius: 0.4rem;
-    border-left: 2px solid #f59e0b;
-  }
-  .coaching-icon { flex-shrink: 0; font-size: 0.8rem; margin-top: 0.05rem; }
-  .coaching-text { font-size: 0.72rem; color: #fcd34d; line-height: 1.35; }
   .empty {
     color: #334155;
     font-style: italic;
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
     padding: 0.25rem 0;
   }
 </style>

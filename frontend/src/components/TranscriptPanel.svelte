@@ -29,12 +29,11 @@
 </script>
 
 <div class="transcript-panel">
-  <div class="panel-header">
-    <h3>Live Transcript</h3>
-    {#if entries.length > 0}
+  {#if entries.length > 0}
+    <div class="panel-header">
       <button class="export-btn" onclick={exportTranscript} title="Download transcript">↓ Export</button>
-    {/if}
-  </div>
+    </div>
+  {/if}
   <div class="entries" bind:this={container}>
     {#if entries.length === 0}
       <p class="empty">Transcript will appear here when audio is captured...</p>
@@ -65,7 +64,7 @@
   .export-btn {
     padding: 0.15rem 0.5rem; background: transparent;
     border: 1px solid #334155; border-radius: 0.25rem;
-    color: #64748b; font-size: 0.72rem; cursor: pointer;
+    color: #64748b; font-size: var(--fs-sm); cursor: pointer;
   }
   .export-btn:hover { border-color: #60a5fa; color: #60a5fa; }
   .entries { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; }
@@ -73,15 +72,15 @@
     display: flex; flex-direction: column; gap: 0.2rem;
     padding: 0.5rem 0.75rem; border-radius: 0.5rem; border-left: 3px solid transparent;
   }
-  .entry.interviewer { border-left-color: #60a5fa; background: #0f1e33; }
+  .entry.interviewer { border-left-color: #f87171; background: #1a0a0a; }
   .entry.you         { border-left-color: #4ade80; background: #0a1f14; }
   .meta { display: flex; align-items: center; gap: 0.5rem; }
   .speaker {
-    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    font-size: var(--fs-sm); font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.07em; color: #4ade80;
   }
-  .speaker.interviewer { color: #60a5fa; }
-  .time { color: #475569; font-size: 0.7rem; font-family: monospace; }
-  .text { color: #cbd5e1; font-size: 0.9rem; line-height: 1.5; }
+  .speaker.interviewer { color: #f87171; }
+  .time { color: #475569; font-size: var(--fs-sm); font-family: var(--ff-mono); }
+  .text { color: #cbd5e1; font-size: var(--fs-base); line-height: 1.5; }
   .empty { color: #475569; font-style: italic; text-align: center; padding: 2rem; }
 </style>

@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 use common::messages::SetupPayload;
-use context::ai_helper::{generate_debrief, predict_questions, call_ai_simple, generate_company_brief, generate_interviewer_summary, extract_jd_keywords};
+use context::ai_helper::{generate_debrief, predict_questions, call_ai_simple, generate_company_brief, generate_interviewer_summary, extract_jd_keywords, assess_vocal_delivery};
 use context::builder::build_system_prompt;
 use context::crawler::crawl_website;
 use context::linkedin::parse_all_linkedin_profiles;
@@ -112,8 +112,32 @@ pub async fn handle_setup_finalize(
         message: "Setup complete. Ready for interview.".to_string(),
     });
 
+    // Build a focused context for question prediction — raw candidate background + JD,
+    // without the AI-coach preamble that consumes most of the 4000-char budget.
+    let mut prediction_context = String::new();
+    if !payload.job_description.is_empty() {
+        prediction_context.push_str("JOB DESCRIPTION:\n");
+        prediction_context.push_str(&payload.job_description);
+        prediction_context.push_str("\n\n");
+    }
+    if !payload.cv_text.is_empty() {
+        prediction_context.push_str("CANDIDATE CV:\n");
+        prediction_context.push_str(&payload.cv_text);
+        prediction_context.push_str("\n\n");
+    }
+    if !payload.interviewee_linkedin.is_empty() {
+        prediction_context.push_str("CANDIDATE LINKEDIN:\n");
+        prediction_context.push_str(&payload.interviewee_linkedin);
+        prediction_context.push_str("\n\n");
+    }
+    if !payload.extra_experience.is_empty() {
+        prediction_context.push_str("ADDITIONAL EXPERIENCE:\n");
+        prediction_context.push_str(&payload.extra_experience);
+        prediction_context.push_str("\n\n");
+    }
+
     let (predicted_questions, company_brief, interviewer_summaries, jd_keywords) = tokio::join!(
-        predict_questions(&system_prompt, &state.gemini_key, state.anthropic_key.as_deref()),
+        predict_questions(&prediction_context, &state.gemini_key, state.anthropic_key.as_deref()),
         generate_company_brief(&company_info, &state.gemini_key, state.anthropic_key.as_deref()),
         generate_interviewer_summary(&payload.linkedin_text, &state.gemini_key, state.anthropic_key.as_deref()),
         extract_jd_keywords(&payload.job_description, &state.gemini_key, state.anthropic_key.as_deref()),
@@ -357,4 +381,92 @@ pub async fn handle_next_steps(
         state.anthropic_key.as_deref(),
     ).await;
     Ok(Json(NextStepsResponse { steps }))
+}
+
+#[derive(serde::Deserialize)]
+pub struct VocalSentimentRequest {
+    pub question: String,
+    pub transcript: String,
+    pub duration_seconds: f32,
+    pub word_count: u32,
+    pub filler_count: u32,
+    pub filler_detail: String,
+}
+
+pub async fn handle_vocal_sentiment(
+    State(state): State<AppState>,
+    Json(req): Json<VocalSentimentRequest>,
+) -> Result<Json<context::ai_helper::VocalSentiment>, (StatusCode, String)> {
+    let result = assess_vocal_delivery(
+        &req.question,
+        &req.transcript,
+        req.duration_seconds,
+        req.word_count,
+        req.filler_count,
+        &req.filler_detail,
+        &state.gemini_key,
+        state.anthropic_key.as_deref(),
+    ).await;
+    Ok(Json(result))
+}
+
+#[derive(serde::Deserialize)]
+pub struct KeywordDefinitionRequest {
+    pub keyword: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct KeywordDefinitionResponse {
+    pub definition: String,
+}
+
+pub async fn handle_keyword_definition(
+    State(state): State<AppState>,
+    Json(req): Json<KeywordDefinitionRequest>,
+) -> Result<Json<KeywordDefinitionResponse>, (StatusCode, String)> {
+    let sp = state.system_prompt.read().await.clone();
+    let user_prompt = format!(
+        "The candidate needs to understand the keyword: \"{}\"\n\nWrite exactly 1 sentence (max 20 words) explaining what this means for this specific role. No hashtags. No markdown. No bullet points. Plain sentence only.",
+        req.keyword
+    );
+    let definition = call_ai_simple(
+        &sp,
+        &user_prompt,
+        &state.gemini_key,
+        state.anthropic_key.as_deref(),
+    )
+    .await
+    .unwrap_or_else(|_| format!("A key skill or concept relevant to this role: {}.", req.keyword));
+    Ok(Json(KeywordDefinitionResponse { definition }))
+}
+
+#[derive(serde::Deserialize)]
+pub struct ExpandCueRequest {
+    pub question: String,
+    pub cue: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct ExpandCueResponse {
+    pub sentence: String,
+}
+
+pub async fn handle_expand_cue(
+    State(state): State<AppState>,
+    Json(req): Json<ExpandCueRequest>,
+) -> Result<Json<ExpandCueResponse>, (StatusCode, String)> {
+    let sp = state.system_prompt.read().await.clone();
+    let user_prompt = format!(
+        "Interview question: \"{}\"\nTalking point cue: \"{}\"\n\nExpand this cue into 1-2 short spoken sentences the candidate can say out loud. Each sentence must be under 12 words. Sound natural and conversational, not rehearsed. No filler phrases. Output only the sentences, nothing else.",
+        req.question, req.cue
+    );
+    let sentence = call_ai_simple(
+        &sp,
+        &user_prompt,
+        &state.gemini_key,
+        state.anthropic_key.as_deref(),
+    )
+    .await
+    .unwrap_or_else(|_| req.cue.clone());
+    Ok(Json(ExpandCueResponse { sentence }))
 }

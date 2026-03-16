@@ -5,6 +5,9 @@ powershell:
 cd "D:\tee\work\code\ai interview assist"
 claude
 
+cd "D:\tee\work\code\ai interview assist\backend"
+  Start-Process .\target\release\server.exe -WorkingDirectory (Get-Location)
+
 cmd:
 cd /d "D:\\tee\\work\\code\\ai interview assist"
 claude
@@ -42,6 +45,7 @@ run python diarization sidecar to distinguish speakers:
 
 restart the server:
 ./target/release/server
+  cd "D:\tee\work\code\ai interview assist\backend"
 .\target\release\server.exe
 
 

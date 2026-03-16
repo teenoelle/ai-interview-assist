@@ -103,7 +103,7 @@
   h2 { font-size: 1rem; font-weight: 700; color: #f1f5f9; margin: 0; }
   .close-btn { background: none; border: none; color: #64748b; font-size: 1rem; cursor: pointer; }
   .body { overflow-y: auto; padding: 0.75rem; display: flex; flex-direction: column; gap: 0.4rem; }
-  .empty { color: #475569; font-style: italic; font-size: 0.85rem; text-align: center; padding: 2rem; }
+  .empty { color: #475569; font-style: italic; font-size: var(--fs-base); text-align: center; padding: 2rem; }
 
   .weak-section {
     padding: 0.6rem 0.75rem;
@@ -116,7 +116,7 @@
     margin-bottom: 0.25rem;
   }
   .weak-title {
-    font-size: 0.6rem;
+    font-size: var(--fs-xs);
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.07em;
@@ -134,7 +134,7 @@
     line-height: 1.3;
   }
   .weak-count {
-    font-size: 0.65rem;
+    font-size: var(--fs-sm);
     font-weight: 700;
     color: #f59e0b;
     flex-shrink: 0;
@@ -144,20 +144,20 @@
   .record { background: #080d18; border: 1px solid #1e293b; border-radius: 0.4rem; overflow: hidden; }
   .record-header { width: 100%; display: flex; align-items: baseline; gap: 0.6rem; padding: 0.6rem 0.75rem; background: transparent; border: none; cursor: pointer; text-align: left; }
   .record-header:hover { background: #0d1525; }
-  .record-date { font-size: 0.62rem; color: #334155; flex-shrink: 0; white-space: nowrap; }
-  .record-summary { flex: 1; font-size: 0.75rem; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .record-chevron { font-size: 0.6rem; color: #334155; flex-shrink: 0; }
+  .record-date { font-size: var(--fs-xs); color: #334155; flex-shrink: 0; white-space: nowrap; }
+  .record-summary { flex: 1; font-size: var(--fs-sm); color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .record-chevron { font-size: var(--fs-xs); color: #334155; flex-shrink: 0; }
   .record-body { padding: 0.75rem; border-top: 1px solid #1e293b; display: flex; flex-direction: column; gap: 0.6rem; }
-  .record-full-summary { font-size: 0.8rem; color: #94a3b8; line-height: 1.5; margin: 0; }
+  .record-full-summary { font-size: var(--fs-base); color: #94a3b8; line-height: 1.5; margin: 0; }
   .section { display: flex; flex-direction: column; gap: 0.25rem; }
-  .section-label { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
+  .section-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
   .section.green .section-label { color: #4ade80; }
   .section.yellow .section-label { color: #f59e0b; }
   ul { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.15rem; }
-  li { font-size: 0.75rem; color: #64748b; line-height: 1.4; }
+  li { font-size: var(--fs-sm); color: #64748b; line-height: 1.4; }
   .record-actions { display: flex; gap: 0.5rem; padding-top: 0.25rem; }
-  .rehearse-btn { padding: 0.3rem 0.75rem; background: #14532d; border: none; border-radius: 0.3rem; color: #4ade80; font-size: 0.72rem; cursor: pointer; }
+  .rehearse-btn { padding: 0.3rem 0.75rem; background: #14532d; border: none; border-radius: 0.3rem; color: #4ade80; font-size: var(--fs-sm); cursor: pointer; }
   .rehearse-btn:hover { background: #166534; }
-  .delete-btn { padding: 0.3rem 0.6rem; background: transparent; border: 1px solid #1e293b; border-radius: 0.3rem; color: #334155; font-size: 0.72rem; cursor: pointer; margin-left: auto; }
+  .delete-btn { padding: 0.3rem 0.6rem; background: transparent; border: 1px solid #1e293b; border-radius: 0.3rem; color: #334155; font-size: var(--fs-sm); cursor: pointer; margin-left: auto; }
   .delete-btn:hover { border-color: #7f1d1d; color: #fca5a5; }
 </style>

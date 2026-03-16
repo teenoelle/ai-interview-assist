@@ -231,19 +231,19 @@
   }
   h2 { font-size: 1.2rem; font-weight: 700; color: #f1f5f9; margin: 0; }
   .close-btn {
-    background: none; border: none; color: #64748b; font-size: 1.1rem;
+    background: none; border: none; color: #64748b; font-size: var(--fs-lg);
     cursor: pointer; padding: 0.2rem 0.4rem;
   }
   .close-btn:hover { color: #e2e8f0; }
   .modal-body { overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; }
   section { display: flex; flex-direction: column; gap: 0.5rem; }
-  h3 { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #94a3b8; margin: 0; }
+  h3 { font-size: var(--fs-base); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #94a3b8; margin: 0; }
   h3.green { color: #4ade80; }
   h3.yellow { color: #f59e0b; }
   h3.amber { color: #fb923c; }
   .next-steps-section { gap: 0.5rem; display: flex; flex-direction: column; }
-  .steps-loading, .steps-empty { color: #475569; font-size: 0.85rem; font-style: italic; margin: 0; }
-  .summary { color: #cbd5e1; line-height: 1.6; font-size: 0.9rem; margin: 0; }
+  .steps-loading, .steps-empty { color: #475569; font-size: var(--fs-base); font-style: italic; margin: 0; }
+  .summary { color: #cbd5e1; line-height: 1.6; font-size: var(--fs-base); margin: 0; }
   ul { margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.3rem; }
   li { color: #94a3b8; font-size: 0.875rem; line-height: 1.5; }
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
@@ -251,7 +251,7 @@
   .copy-btn {
     padding: 0.2rem 0.7rem; background: transparent;
     border: 1px solid #334155; border-radius: 0.25rem;
-    color: #64748b; font-size: 0.72rem; cursor: pointer;
+    color: #64748b; font-size: var(--fs-sm); cursor: pointer;
     transition: all 0.15s;
   }
   .copy-btn:hover { border-color: #60a5fa; color: #60a5fa; }
@@ -268,7 +268,7 @@
     cursor: text;
   }
   .email-subject {
-    font-size: 0.82rem;
+    font-size: var(--fs-base);
     font-weight: 700;
     color: #93c5fd;
     margin-bottom: 0.5rem;
@@ -276,7 +276,7 @@
     border-bottom: 1px solid #1a2d4a;
   }
   .email-line {
-    font-size: 0.85rem;
+    font-size: var(--fs-base);
     color: #cbd5e1;
     line-height: 1.7;
   }
@@ -295,7 +295,7 @@
     border-radius: 0 0 0.75rem 0.75rem;
   }
   .email-footer-label {
-    font-size: 0.72rem;
+    font-size: var(--fs-sm);
     color: #475569;
     white-space: nowrap;
   }
@@ -306,7 +306,7 @@
     border: 1px solid #1e293b;
     border-radius: 0.3rem;
     color: #e2e8f0;
-    font-size: 0.8rem;
+    font-size: var(--fs-base);
     outline: none;
     transition: border-color 0.15s;
   }
@@ -317,7 +317,7 @@
     border: none;
     border-radius: 0.3rem;
     color: white;
-    font-size: 0.8rem;
+    font-size: var(--fs-base);
     font-weight: 600;
     cursor: pointer;
     transition: all 0.15s;

@@ -37,32 +37,32 @@ pub fn build_user_prompt(question: &str, transcript: &[TranscriptSegment]) -> St
     if is_behavioral(question) {
         format!(
             "{}The interviewer asked a behavioral question: '{}'\n\n\
-Reply in this EXACT format — no extra text:\n\
-Affirm: [3-5 word cue acknowledging what they care about — e.g. 'ownership under pressure', 'team resilience']\n\
-Say: [3-6 word hook — the outcome or boldest action, e.g. 'led migration, cut costs 40%%']\n\
+Reply in this EXACT format. No extra text. No markdown. No hashtags.\n\
+Acknowledge: [max 8 words — empathize with their specific pain point, e.g. 'That kind of instability can really slow teams down.']\n\
+Affirm: [max 10 words — show personal alignment, e.g. 'Reliability at scale is exactly what I have built for.']\n\
+Answer: [max 12 words — boldest outcome first, e.g. 'I cut infrastructure costs by 40%% with zero downtime.']\n\
 ---\n\
-**S:** [situation cue + business impact — e.g. 'legacy system → $2M risk']\n\
-**T:** [3-5 word task/ownership cue]\n\
-**A:** [3-6 word action cue with one **bold** keyword]\n\
-**R:** [3-5 word result cue, include number if possible]\n\
-Ask: [3-6 word follow-up cue for candidate to ask interviewer — e.g. 'how does team handle incidents?']\n\
-Ask: [3-6 word second follow-up cue, or omit if none]\n\n\
-CRITICAL: Every line is a memory cue, NOT a full sentence. 3-6 words max per bullet. Candidate will expand verbally. Use ONLY documented experience.",
+Context: [3-5 word cue]\n\
+Action: [3-5 word cue]\n\
+Result: [3-5 word cue]\n\
+Ask: [full spoken question 8-14 words] | [alternative phrasing] | [casual version]\n\
+Ask: [full spoken question 8-14 words] | [alternative phrasing] | [casual version]\n\n\
+RULES: Acknowledge empathizes with their concern. Affirm bridges to your answer. Answer is the boldest outcome, strictly under 12 words. Cues are 3-5 word fragments only. Each Ask is a FULL SENTENCE followed by pipe-separated alternatives. Use ONLY real documented experience. Output nothing else.",
             ctx_prefix, question
         )
     } else {
         format!(
             "{}The interviewer asked: '{}'\n\n\
-Reply in this EXACT format — no extra text:\n\
-Affirm: [3-5 word cue — the pain point or concern behind this question, e.g. 'clarity under ambiguity', 'culture alignment']\n\
-Say: [3-6 word opening cue — the strongest hook]\n\
+Reply in this EXACT format. No extra text. No markdown. No hashtags.\n\
+Acknowledge: [max 8 words — empathize with their specific pain point, e.g. 'That is exactly the kind of problem worth solving.']\n\
+Affirm: [max 10 words — show personal alignment, e.g. 'This is an area I have invested deeply in.']\n\
+Answer: [max 12 words — strongest direct answer, e.g. 'I turn complex data into decisions people can act on.']\n\
 ---\n\
-• [3-5 word cue — first supporting point]\n\
-• [3-5 word cue — second supporting point or example]\n\
-• [3-5 word cue — optional third point, omit if weak]\n\
-Ask: [3-6 word follow-up cue for candidate to ask interviewer]\n\
-Ask: [3-6 word second follow-up cue, or omit if none]\n\n\
-CRITICAL: Every line is a memory cue, NOT a full sentence. 3-6 words max. No verbs that make it a full sentence. Candidate reads the cue and speaks naturally. Use ONLY documented background.",
+Point: [3-5 word cue — first supporting point]\n\
+Point: [3-5 word cue — second supporting point]\n\
+Ask: [full spoken question 8-14 words] | [alternative phrasing] | [casual version]\n\
+Ask: [full spoken question 8-14 words] | [alternative phrasing] | [casual version]\n\n\
+RULES: Acknowledge empathizes with their concern. Affirm bridges to your answer. Answer is the strongest reply, strictly under 12 words. Cues are 3-5 word fragments only. Each Ask is a FULL SENTENCE followed by pipe-separated alternatives. Use ONLY real documented background. Output nothing else.",
             ctx_prefix, question
         )
     }
@@ -102,17 +102,19 @@ mod tests {
     #[test]
     fn behavioral_question_triggers_star_format() {
         let p = build_user_prompt("Tell me about a time you led a team", &[]);
-        assert!(p.contains("**S:**"));
-        assert!(p.contains("**R:**"));
+        assert!(p.contains("Context:"));
+        assert!(p.contains("Result:"));
+        assert!(p.contains("Acknowledge:"));
         assert!(p.contains("Affirm:"));
+        assert!(p.contains("Answer:"));
     }
 
     #[test]
     fn non_behavioral_uses_bullet_cues() {
         let p = build_user_prompt("What are your strengths?", &[]);
-        assert!(!p.contains("**S:**"));
-        assert!(p.contains("Say:"));
+        assert!(p.contains("Answer:"));
         assert!(p.contains("Affirm:"));
-        assert!(p.contains("•"));
+        assert!(p.contains("Acknowledge:"));
+        assert!(p.contains("Point:"));
     }
 }

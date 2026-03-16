@@ -5,13 +5,24 @@
   import InterviewerProfilePanel from './InterviewerProfilePanel.svelte';
   import StoryBankPanel from './StoryBankPanel.svelte';
 
-  let jobDescription = $state('');
-  let companyUrl = $state('');
-  let interviewers = $state<string[]>(['']);   // start with one empty slot
-  let intervieweeLinkedin = $state('');
-  let extraExperience = $state('');
+  function load(key: string, fallback: string) { return localStorage.getItem(key) ?? fallback; }
+  function loadArr(key: string, fallback: string[]): string[] {
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+  }
+
+  let jobDescription = $state(load('setup-jd', ''));
+  let companyUrl = $state(load('setup-company-url', ''));
+  let interviewers = $state<string[]>(loadArr('setup-interviewers', ['']));
+  let intervieweeLinkedin = $state(load('setup-interviewee-linkedin', ''));
+  let extraExperience = $state(load('setup-extra-experience', ''));
   let cvFile: File | null = $state(null);
   let extraFile: File | null = $state(null);
+
+  $effect(() => { localStorage.setItem('setup-jd', jobDescription); });
+  $effect(() => { localStorage.setItem('setup-company-url', companyUrl); });
+  $effect(() => { localStorage.setItem('setup-interviewers', JSON.stringify(interviewers)); });
+  $effect(() => { localStorage.setItem('setup-interviewee-linkedin', intervieweeLinkedin); });
+  $effect(() => { localStorage.setItem('setup-extra-experience', extraExperience); });
   let loading = $state(false);
   let loadingStep = $state('');
   let error = $state('');
@@ -274,7 +285,7 @@
     padding: 0.75rem 1rem; background: #052e16; border: 1px solid #166534;
     border-radius: 0.5rem; color: #4ade80; font-size: 0.875rem; font-weight: 500;
   }
-  .loading-note { margin-top: 0.5rem; color: #64748b; font-size: 0.8rem; }
+  .loading-note { margin-top: 0.5rem; color: #64748b; font-size: var(--fs-base); }
   h2 { font-size: 1.75rem; margin-bottom: 0.5rem; color: #f1f5f9; }
   .subtitle { color: #94a3b8; margin-bottom: 2rem; }
   .field { margin-bottom: 1.5rem; }
@@ -291,19 +302,19 @@
     width: 100%; padding: 0.75rem;
     background: #1e293b; border: 1px solid #334155;
     border-radius: 0.5rem; color: #e2e8f0;
-    font-size: 0.9rem; resize: vertical;
+    font-size: var(--fs-base); resize: vertical;
   }
   input[type='file'] { color: #94a3b8; }
   .file-row { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem; flex-wrap: wrap; }
-  .file-label { font-size: 0.8rem; color: #64748b; white-space: nowrap; }
-  .file-chosen { font-size: 0.8rem; color: #60a5fa; }
-  small { display: block; margin-top: 0.25rem; color: #64748b; font-size: 0.8rem; }
+  .file-label { font-size: var(--fs-base); color: #64748b; white-space: nowrap; }
+  .file-chosen { font-size: var(--fs-base); color: #60a5fa; }
+  small { display: block; margin-top: 0.25rem; color: #64748b; font-size: var(--fs-base); }
   .interviewer-entry { margin-bottom: 0.75rem; }
-  .interviewer-label { font-size: 0.75rem; color: #60a5fa; font-weight: 600; margin-bottom: 0.25rem; }
+  .interviewer-label { font-size: var(--fs-sm); color: #60a5fa; font-weight: 600; margin-bottom: 0.25rem; }
   .interviewer-row { display: flex; gap: 0.5rem; align-items: flex-start; }
   .interviewer-row textarea { flex: 1; }
   .btn-add {
-    padding: 0.3rem 0.75rem; font-size: 0.8rem; font-weight: 600;
+    padding: 0.3rem 0.75rem; font-size: var(--fs-base); font-weight: 600;
     background: transparent; border: 1px solid #3b82f6; color: #60a5fa;
     border-radius: 0.375rem; cursor: pointer; white-space: nowrap;
     transition: background 0.15s;
@@ -312,7 +323,7 @@
   .btn-remove {
     flex-shrink: 0; padding: 0.4rem 0.6rem; background: transparent;
     border: 1px solid #334155; color: #64748b; border-radius: 0.375rem;
-    cursor: pointer; font-size: 0.85rem; transition: all 0.15s;
+    cursor: pointer; font-size: var(--fs-base); transition: all 0.15s;
     margin-top: 0.25rem;
   }
   .btn-remove:hover { border-color: #ef4444; color: #ef4444; }
@@ -324,7 +335,7 @@
   .preview summary { cursor: pointer; color: #60a5fa; }
   .preview pre {
     margin-top: 0.5rem; padding: 1rem; background: #1e293b;
-    border-radius: 0.5rem; white-space: pre-wrap; font-size: 0.75rem;
+    border-radius: 0.5rem; white-space: pre-wrap; font-size: var(--fs-sm);
     color: #94a3b8; max-height: 200px; overflow: auto;
   }
   .btn-primary {
@@ -336,17 +347,17 @@
   .btn-primary:disabled { background: #1e3a5f; cursor: not-allowed; }
   .post-setup { display: flex; flex-direction: column; gap: 1.25rem; }
   .tab-bar { display: flex; gap: 0.25rem; border-bottom: 1px solid #1e293b; padding-bottom: 0.5rem; }
-  .tab { padding: 0.3rem 0.9rem; background: transparent; border: 1px solid #1e293b; border-radius: 0.375rem; color: #475569; font-size: 0.8rem; cursor: pointer; transition: all 0.15s; }
+  .tab { padding: 0.3rem 0.9rem; background: transparent; border: 1px solid #1e293b; border-radius: 0.375rem; color: #475569; font-size: var(--fs-base); cursor: pointer; transition: all 0.15s; }
   .tab:hover { border-color: #334155; color: #94a3b8; }
   .tab.tab-active { background: #1e293b; border-color: #334155; color: #e2e8f0; }
   .section-block { display: flex; flex-direction: column; gap: 0.4rem; }
-  .section-block-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #475569; }
+  .section-block-label { font-size: var(--fs-sm); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #475569; }
   .keyword-chips { display: flex; flex-wrap: wrap; gap: 0.3rem 0.4rem; }
-  .kw-chip { font-size: 0.72rem; padding: 0.15rem 0.5rem; background: #0f172a; border: 1px solid #1e293b; border-radius: 9999px; color: #60a5fa; }
+  .kw-chip { font-size: var(--fs-sm); padding: 0.15rem 0.5rem; background: #0f172a; border: 1px solid #1e293b; border-radius: 9999px; color: #60a5fa; }
   .predicted { background: #1e293b; border-radius: 0.5rem; padding: 1.25rem; }
-  .predicted h3 { font-size: 0.85rem; color: #60a5fa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.75rem; }
+  .predicted h3 { font-size: var(--fs-base); color: #60a5fa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.75rem; }
   .questions-list { margin: 0; padding-left: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
-  .questions-list li { color: #cbd5e1; font-size: 0.9rem; line-height: 1.5; }
+  .questions-list li { color: #cbd5e1; font-size: var(--fs-base); line-height: 1.5; }
   .action-row { display: flex; gap: 1rem; flex-wrap: wrap; }
   .btn-secondary {
     padding: 0.75rem 2rem; background: transparent; color: #60a5fa;

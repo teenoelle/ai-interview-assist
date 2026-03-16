@@ -37,7 +37,7 @@
   }
   .meter.paused { opacity: 0.5; }
   .bar-wrap { display: flex; align-items: center; gap: 4px; }
-  .lbl { font-size: 0.55rem; color: #475569; font-weight: 700; letter-spacing: 0.05em; width: 22px; }
+  .lbl { font-size: var(--fs-xs); color: #475569; font-weight: 700; letter-spacing: 0.05em; width: 22px; }
   .track {
     flex: 1; height: 4px; background: #1e293b; border-radius: 9999px; overflow: hidden;
   }
@@ -45,7 +45,7 @@
   .fill.mic { background: #4ade80; }
   .fill.sys { background: #60a5fa; }
   .paused-badge {
-    font-size: 0.55rem; color: #f59e0b; font-weight: 700;
+    font-size: var(--fs-xs); color: #f59e0b; font-weight: 700;
     text-align: center; letter-spacing: 0.1em; margin-top: 1px;
   }
 </style>

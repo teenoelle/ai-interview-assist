@@ -123,7 +123,7 @@
     justify-content: space-between;
   }
   .bl-title {
-    font-size: 0.58rem;
+    font-size: var(--fs-xs);
     font-weight: 700;
     color: #334155;
     text-transform: uppercase;
@@ -152,22 +152,22 @@
     align-items: center;
     gap: 0.3rem;
   }
-  .ai-tip-icon { font-size: 0.8rem; flex-shrink: 0; }
+  .ai-tip-icon { font-size: var(--fs-base); flex-shrink: 0; }
   .ai-tip-label {
-    font-size: 0.55rem;
+    font-size: var(--fs-xs);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.07em;
     color: #f59e0b;
   }
   .ai-tip-text {
-    font-size: 0.8rem;
+    font-size: var(--fs-base);
     color: #e2e8f0;
     line-height: 1.45;
     font-weight: 500;
   }
   .ai-tip-why {
-    font-size: 0.68rem;
+    font-size: var(--fs-sm);
     color: #64748b;
     line-height: 1.4;
     font-style: italic;
@@ -175,7 +175,7 @@
     padding-top: 0.25rem;
     margin-top: 0.1rem;
   }
-  .ai-tip-waiting { font-size: 0.7rem; color: #334155; font-style: italic; }
+  .ai-tip-waiting { font-size: var(--fs-sm); color: #334155; font-style: italic; }
 
   /* Checklist */
   .checklist {
@@ -208,10 +208,10 @@
     align-items: center;
     gap: 0.35rem;
   }
-  .check-icon { font-size: 0.8rem; flex-shrink: 0; }
+  .check-icon { font-size: var(--fs-base); flex-shrink: 0; }
   .check-label {
     flex: 1;
-    font-size: 0.72rem;
+    font-size: var(--fs-sm);
     color: #64748b;
     line-height: 1.3;
   }
@@ -230,13 +230,13 @@
   }
 
   .check-chevron {
-    font-size: 0.55rem;
+    font-size: var(--fs-xs);
     color: #1e293b;
     flex-shrink: 0;
   }
 
   .check-why {
-    font-size: 0.68rem;
+    font-size: var(--fs-sm);
     color: #475569;
     line-height: 1.45;
     padding-top: 0.3rem;

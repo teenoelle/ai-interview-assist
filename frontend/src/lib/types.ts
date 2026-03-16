@@ -6,10 +6,7 @@ export type WsEvent =
   | { type: 'suggestion_complete'; full_text: string }
   | { type: 'error'; message: string }
   | { type: 'status'; message: string }
-  | { type: 'rate_limit'; provider: string; requests_remaining: number; requests_limit: number }
-  | { type: 'followup_questions'; questions: string[] }
-  | { type: 'answer_feedback'; feedback: string; had_metric: boolean; answered: boolean; concise: boolean }
-  | { type: 'confidence_score'; score: number; matched_keywords: string[]; missing_keywords: string[] };
+  | { type: 'rate_limit'; provider: string; requests_remaining: number; requests_limit: number };
 
 export type Emotion = 'engaged' | 'curious' | 'neutral' | 'skeptical' | 'confused' | 'bored' | 'pleased';
 
@@ -26,6 +23,14 @@ export interface AnswerFeedback {
   missed_metric: boolean;
 }
 
+export interface VocalSentiment {
+  tone: string;
+  pace: string;
+  confidence_score: number;
+  coaching: string;
+  fillers_noted: string;
+}
+
 export interface TranscriptEntry {
   text: string;
   timestamp_ms: number;
@@ -38,9 +43,11 @@ export interface SuggestionEntry {
   streaming: boolean;
   tag?: QuestionTag;
   redFlag?: RedFlag;
-  followupQuestions?: string[];
+  matchedStories?: { id: string; title: string; result: string }[];
   answerFeedback?: AnswerFeedback;
+  vocalFeedback?: VocalSentiment;
   confidenceScore?: number;
   matchedKeywords?: string[];
+  missedKeywords?: string[];
   answered?: boolean;
 }

@@ -141,63 +141,63 @@
   .story-panel { display: flex; flex-direction: column; gap: 0.75rem; height: 100%; overflow-y: auto; }
   .panel-header { display: flex; flex-direction: column; gap: 0.25rem; }
   h3 { font-size: 1rem; font-weight: 700; color: #f1f5f9; margin: 0; }
-  .subtitle { font-size: 0.8rem; color: #64748b; margin: 0; line-height: 1.4; }
+  .subtitle { font-size: var(--fs-base); color: #64748b; margin: 0; line-height: 1.4; }
   .interview-header { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-  .panel-title { font-size: 0.72rem; font-weight: 700; color: #334155; text-transform: uppercase; letter-spacing: 0.08em; }
-  .close-btn { background: none; border: none; color: #334155; cursor: pointer; font-size: 0.9rem; padding: 0; }
+  .panel-title { font-size: var(--fs-sm); font-weight: 700; color: #334155; text-transform: uppercase; letter-spacing: 0.08em; }
+  .close-btn { background: none; border: none; color: #334155; cursor: pointer; font-size: var(--fs-base); padding: 0; }
   .close-btn:hover { color: #64748b; }
 
   .matched-section { display: flex; flex-direction: column; gap: 0.5rem; }
-  .matched-label { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #4ade80; }
+  .matched-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #4ade80; }
   .matched-story {
     background: #071a0f; border: 1px solid #14532d; border-radius: 0.4rem;
     padding: 0.6rem 0.75rem; display: flex; flex-direction: column; gap: 0.3rem;
   }
-  .story-title { font-size: 0.78rem; font-weight: 700; color: #e2e8f0; }
+  .story-title { font-size: var(--fs-base); font-weight: 700; color: #e2e8f0; }
   .star-row { display: flex; gap: 0.4rem; align-items: flex-start; }
   .star-label {
-    flex-shrink: 0; width: 1.2em; font-size: 0.6rem; font-weight: 800;
+    flex-shrink: 0; width: 1.2em; font-size: var(--fs-xs); font-weight: 800;
     text-transform: uppercase; color: #4ade80; background: #14532d;
     border-radius: 0.2rem; text-align: center; padding: 0.05rem 0.2rem; margin-top: 0.05rem;
   }
   .star-label.star-a { color: #fb923c; background: #431407; }
   .star-label.star-r { color: #60a5fa; background: #1a2d4a; }
-  .star-text { font-size: 0.75rem; color: #94a3b8; line-height: 1.4; }
-  .no-match { font-size: 0.75rem; color: #334155; font-style: italic; margin: 0; }
+  .star-text { font-size: var(--fs-sm); color: #94a3b8; line-height: 1.4; }
+  .no-match { font-size: var(--fs-sm); color: #334155; font-style: italic; margin: 0; }
 
   .form { display: flex; flex-direction: column; gap: 0.6rem; background: #0f172a; border: 1px solid #1e293b; border-radius: 0.5rem; padding: 0.75rem; }
   .form-field { display: flex; flex-direction: column; gap: 0.25rem; }
-  .form-field label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; font-weight: 600; color: #94a3b8; }
-  .hint { font-size: 0.65rem; font-weight: 400; color: #475569; }
+  .form-field label { display: flex; align-items: center; gap: 0.4rem; font-size: var(--fs-sm); font-weight: 600; color: #94a3b8; }
+  .hint { font-size: var(--fs-sm); font-weight: 400; color: #475569; }
   .form-field input, .form-field textarea {
     background: #1e293b; border: 1px solid #334155; border-radius: 0.375rem;
-    color: #e2e8f0; font-size: 0.82rem; padding: 0.4rem 0.6rem; width: 100%;
+    color: #e2e8f0; font-size: var(--fs-base); padding: 0.4rem 0.6rem; width: 100%;
     resize: vertical; font-family: inherit;
   }
   .form-field input:focus, .form-field textarea:focus { outline: none; border-color: #3b82f6; }
   .form-actions { display: flex; gap: 0.5rem; }
   .btn-save {
     padding: 0.35rem 1rem; background: #3b82f6; border: none; border-radius: 0.375rem;
-    color: white; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+    color: white; font-size: var(--fs-base); font-weight: 600; cursor: pointer;
   }
   .btn-save:hover:not(:disabled) { background: #2563eb; }
   .btn-save:disabled { opacity: 0.4; cursor: default; }
-  .btn-cancel { padding: 0.35rem 0.75rem; background: transparent; border: 1px solid #334155; border-radius: 0.375rem; color: #64748b; font-size: 0.8rem; cursor: pointer; }
+  .btn-cancel { padding: 0.35rem 0.75rem; background: transparent; border: 1px solid #334155; border-radius: 0.375rem; color: #64748b; font-size: var(--fs-base); cursor: pointer; }
   .btn-cancel:hover { border-color: #64748b; color: #94a3b8; }
-  .btn-add-story { align-self: flex-start; padding: 0.3rem 0.75rem; background: transparent; border: 1px solid #3b82f6; border-radius: 0.375rem; color: #60a5fa; font-size: 0.8rem; cursor: pointer; }
+  .btn-add-story { align-self: flex-start; padding: 0.3rem 0.75rem; background: transparent; border: 1px solid #3b82f6; border-radius: 0.375rem; color: #60a5fa; font-size: var(--fs-base); cursor: pointer; }
   .btn-add-story:hover { background: #1e3a5f; }
 
   .stories-list { display: flex; flex-direction: column; gap: 0.4rem; }
   .story-card { background: #080d18; border: 1px solid #1e293b; border-radius: 0.4rem; padding: 0.5rem 0.6rem; display: flex; flex-direction: column; gap: 0.25rem; }
   .story-card-header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
-  .story-card-title { font-size: 0.78rem; font-weight: 600; color: #e2e8f0; flex: 1; }
+  .story-card-title { font-size: var(--fs-base); font-weight: 600; color: #e2e8f0; flex: 1; }
   .story-card-actions { display: flex; gap: 0.25rem; flex-shrink: 0; }
-  .btn-edit { padding: 0.1rem 0.45rem; background: transparent; border: 1px solid #1e293b; border-radius: 0.2rem; color: #475569; font-size: 0.62rem; cursor: pointer; }
+  .btn-edit { padding: 0.1rem 0.45rem; background: transparent; border: 1px solid #1e293b; border-radius: 0.2rem; color: #475569; font-size: var(--fs-xs); cursor: pointer; }
   .btn-edit:hover { border-color: #60a5fa; color: #60a5fa; }
-  .btn-delete { padding: 0.1rem 0.4rem; background: transparent; border: 1px solid #1e293b; border-radius: 0.2rem; color: #334155; font-size: 0.62rem; cursor: pointer; }
+  .btn-delete { padding: 0.1rem 0.4rem; background: transparent; border: 1px solid #1e293b; border-radius: 0.2rem; color: #334155; font-size: var(--fs-xs); cursor: pointer; }
   .btn-delete:hover { border-color: #ef4444; color: #ef4444; }
   .tag-row { display: flex; flex-wrap: wrap; gap: 0.2rem; }
-  .tag { font-size: 0.58rem; padding: 0.05rem 0.35rem; background: #0f172a; border: 1px solid #1e293b; border-radius: 9999px; color: #475569; }
-  .story-result { font-size: 0.72rem; color: #475569; font-style: italic; }
-  .empty-stories { font-size: 0.8rem; color: #334155; font-style: italic; text-align: center; padding: 1rem 0; margin: 0; }
+  .tag { font-size: var(--fs-xs); padding: 0.05rem 0.35rem; background: #0f172a; border: 1px solid #1e293b; border-radius: 9999px; color: #475569; }
+  .story-result { font-size: var(--fs-sm); color: #475569; font-style: italic; }
+  .empty-stories { font-size: var(--fs-base); color: #334155; font-style: italic; text-align: center; padding: 1rem 0; margin: 0; }
 </style>

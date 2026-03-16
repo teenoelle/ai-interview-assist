@@ -16,5 +16,4 @@ frontend/dist/
 *.DS_Store
 Thumbs.db
 t - build commands.txt
-t - build suggestions.txt
-t - setup - additional experience and talking points.txt
+t - suggestions.txt

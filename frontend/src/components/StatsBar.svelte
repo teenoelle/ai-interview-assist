@@ -104,14 +104,14 @@
     position: relative;
   }
   .stat-label {
-    font-size: 0.65rem;
+    font-size: var(--fs-sm);
     color: #475569;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     font-weight: 600;
   }
   .stat-value {
-    font-size: 0.75rem;
+    font-size: var(--fs-sm);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
   }
@@ -119,7 +119,7 @@
   .filler-stat { position: relative; }
   .filler-btn {
     background: none; border: none; cursor: pointer;
-    font-size: 0.75rem; font-weight: 700; color: #475569;
+    font-size: var(--fs-sm); font-weight: 700; color: #475569;
     padding: 0;
   }
   .filler-btn.has-fillers { color: #f59e0b; }
@@ -130,8 +130,8 @@
     display: flex; flex-direction: column; gap: 0.2rem;
     white-space: nowrap; min-width: 120px;
   }
-  .filler-item { font-size: 0.72rem; color: #f59e0b; }
-  .ws-status { font-size: 0.8rem; }
+  .filler-item { font-size: var(--fs-sm); color: #f59e0b; }
+  .ws-status { font-size: var(--fs-base); }
   .ws-status.connected { color: #22c55e; }
   .ws-status.reconnecting { color: #f59e0b; }
 </style>

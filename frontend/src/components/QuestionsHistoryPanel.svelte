@@ -151,13 +151,12 @@
 
   .qhist-q {
     font-size: 0.72em;
-    color: #4d7494;
-    font-style: italic;
+    color: #c87070;
     line-height: 1.35;
     overflow-wrap: break-word;
     word-break: break-word;
   }
-  .qhist-item.active .qhist-q { color: #6ba3c4; }
+  .qhist-item.active .qhist-q { color: #f87171; }
 
   .qhist-redflag {
     font-size: 0.6em;

@@ -1345,13 +1345,15 @@ Ask: team | How long have you been with the team?`;
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div class="col-header col-drag-handle" draggable={true} ondragstart={(e) => onColDragStart('right', e)}>
                 <span class="col-label">{collapsedCols.has('right') ? '…' : 'Sentiment'}</span>
-                <div class="zoom-btns">
-                  <button class="zoom-btn" onclick={() => adjustZoom('rightTop', -10)} title="Decrease font size">A−</button>
-                  <button class="zoom-btn" onclick={() => adjustZoom('rightTop', +10)} title="Increase font size">A+</button>
-                  <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('right')} title={collapsedCols.has('right') ? 'Expand' : 'Collapse'}>
-                    {collapsedCols.has('right') ? '▸' : '▾'}
-                  </button>
-                </div>
+                {#if !collapsedCols.has('right')}
+                  <div class="zoom-btns">
+                    <button class="zoom-btn" onclick={() => adjustZoom('rightTop', -10)} title="Decrease font size">A−</button>
+                    <button class="zoom-btn" onclick={() => adjustZoom('rightTop', +10)} title="Increase font size">A+</button>
+                    <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('right')} title="Collapse">▾</button>
+                  </div>
+                {:else}
+                  <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('right')} title="Expand">▸</button>
+                {/if}
               </div>
               {#if !collapsedCols.has('right')}
                 {#if webcamStream}
@@ -1406,13 +1408,15 @@ Ask: team | How long have you been with the team?`;
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div class="col-header col-drag-handle" draggable={true} ondragstart={(e) => onColDragStart('right2', e)}>
                 <span class="col-label">{collapsedCols.has('right2') ? '…' : 'Coaching'}</span>
-                <div class="zoom-btns">
-                  <button class="zoom-btn" onclick={() => adjustZoom('rightBottom', -10)} title="Decrease font size">A−</button>
-                  <button class="zoom-btn" onclick={() => adjustZoom('rightBottom', +10)} title="Increase font size">A+</button>
-                  <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('right2')} title={collapsedCols.has('right2') ? 'Expand' : 'Collapse'}>
-                    {collapsedCols.has('right2') ? '▸' : '▾'}
-                  </button>
-                </div>
+                {#if !collapsedCols.has('right2')}
+                  <div class="zoom-btns">
+                    <button class="zoom-btn" onclick={() => adjustZoom('rightBottom', -10)} title="Decrease font size">A−</button>
+                    <button class="zoom-btn" onclick={() => adjustZoom('rightBottom', +10)} title="Increase font size">A+</button>
+                    <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('right2')} title="Collapse">▾</button>
+                  </div>
+                {:else}
+                  <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('right2')} title="Expand">▸</button>
+                {/if}
               </div>
               {#if !collapsedCols.has('right2')}
                 <!-- svelte-ignore a11y_no_static_element_interactions -->

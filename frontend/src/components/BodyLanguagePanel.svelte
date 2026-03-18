@@ -205,7 +205,7 @@
 
   .check-row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.35rem;
   }
   .check-icon { font-size: var(--fs-base); flex-shrink: 0; }

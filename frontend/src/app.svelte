@@ -1757,19 +1757,19 @@ Ask: team | How long have you been with the team?`;
     display: flex; align-items: center; justify-content: space-between;
     padding: 0.4rem 1rem; background: #0f172a; border-bottom: 1px solid #1e293b; flex-shrink: 0;
   }
-  .header-back-btn { background: none; border: none; color: #60a5fa; font-size: var(--fs-sm); font-weight: 600; cursor: pointer; padding: 0 0.5rem 0 0; white-space: nowrap; }
+  .header-back-btn { background: none; border: none; color: #60a5fa; font-size: var(--fs-base); font-weight: 600; cursor: pointer; padding: 0 0.5rem 0 0; white-space: nowrap; }
   .header-back-btn:hover { color: #93c5fd; }
   .interview-header h1 {
-    font-size: var(--fs-base); font-weight: 700;
+    font-size: var(--fs-lg); font-weight: 700;
     background: linear-gradient(135deg, #60a5fa, #a78bfa);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   }
   .header-right { display: flex; align-items: center; gap: 0.75rem; }
-  .shortcuts-hint { font-size: var(--fs-xs); color: #334155; white-space: nowrap; }
+  .shortcuts-hint { font-size: var(--fs-sm); color: #334155; white-space: nowrap; }
   .debrief-btn {
     padding: 0.3rem 0.8rem; background: transparent;
     border: 1px solid #334155; border-radius: 0.375rem;
-    color: #64748b; font-size: var(--fs-sm); cursor: pointer; white-space: nowrap;
+    color: #64748b; font-size: var(--fs-base); cursor: pointer; white-space: nowrap;
   }
   .debrief-btn:hover { border-color: #a78bfa; color: #a78bfa; }
 
@@ -1808,12 +1808,12 @@ Ask: team | How long have you been with the team?`;
   .tts-btn {
     padding: 0.25rem 0.5rem; background: transparent;
     border: 1px solid #334155; border-radius: 0.375rem;
-    color: #64748b; font-size: var(--fs-sm); cursor: pointer; white-space: nowrap;
+    color: #64748b; font-size: var(--fs-base); cursor: pointer; white-space: nowrap;
   }
   .tts-btn.tts-on { border-color: #22c55e; color: #22c55e; }
   .rate-label {
     display: flex; align-items: center; gap: 0.25rem;
-    font-size: var(--fs-sm); color: #64748b;
+    font-size: var(--fs-base); color: #64748b;
   }
   .rate-val { min-width: 2rem; text-align: right; font-variant-numeric: tabular-nums; }
   .rate-slider { width: 56px; accent-color: #22c55e; cursor: pointer; }
@@ -2501,7 +2501,7 @@ Ask: team | How long have you been with the team?`;
   .header-btn {
     padding: 0.3rem 0.8rem; background: transparent;
     border: 1px solid #334155; border-radius: 0.375rem;
-    color: #64748b; font-size: var(--fs-sm); cursor: pointer; white-space: nowrap;
+    color: #64748b; font-size: var(--fs-base); cursor: pointer; white-space: nowrap;
   }
   .header-btn:hover { border-color: #60a5fa; color: #60a5fa; }
   .transcripts-dropdown {

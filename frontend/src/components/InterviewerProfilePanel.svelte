@@ -39,7 +39,7 @@
           onkeydown={(e) => e.key === 'Enter' && toggleCard(i)}>
           <div class="profile-name-block">
             <span class="profile-name">
-              <span class="name-first">{firstName(iv.name)}</span>{#if lastName(iv.name)} <span class="name-last">{lastName(iv.name)}</span>{/if}
+              <span class="name-first">{firstName(iv.name)}</span>{#if lastName(iv.name)}<span class="name-last">{lastName(iv.name)}</span>{/if}
             </span>
             {#if iv.role}<span class="profile-role">{iv.role}</span>{/if}
           </div>
@@ -92,10 +92,10 @@
   .profile-card { background: #060e1a; border: 1px solid #1a2d4a; border-radius: 0.4rem; padding: 0.6rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }
   .profile-header { display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer; user-select: none; min-width: 0; }
   .profile-name-block { display: flex; flex-direction: column; gap: 0.1rem; flex: 1; min-width: 0; }
-  .profile-name { font-size: var(--fs-base); font-weight: 700; }
+  .profile-name { font-size: var(--fs-base); font-weight: 700; display: inline-flex; gap: 0.3em; align-items: baseline; }
   .name-first { color: #60a5fa; }
   .profile-header:hover .name-first { color: #93c5fd; }
-  .name-last { color: #e2e8f0; }
+  .name-last { color: #94a3b8; }
   .profile-role { font-size: var(--fs-sm); color: #93c5fd; line-height: 1.3; }
   .card-chevron { font-size: var(--fs-xs); color: #334155; flex-shrink: 0; padding-top: 0.15rem; }
   .profile-field { display: flex; flex-direction: column; gap: 0.1rem; }

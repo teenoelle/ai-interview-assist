@@ -41,7 +41,7 @@
             <span class="profile-name">
               <span class="name-first">{firstName(iv.name)}</span>{#if lastName(iv.name)}<span class="name-last">{lastName(iv.name)}</span>{/if}
             </span>
-            {#if iv.role}<span class="profile-role">{iv.role}</span>{/if}
+            {#if iv.role}<span class="profile-role" class:role-collapsed={cardCollapsed}>{iv.role}</span>{/if}
           </div>
           <span class="card-chevron">{cardCollapsed ? '▾' : '▴'}</span>
         </div>
@@ -97,6 +97,7 @@
   .profile-header:hover .name-first { color: #93c5fd; }
   .name-last { color: #94a3b8; }
   .profile-role { font-size: var(--fs-sm); color: #93c5fd; line-height: 1.3; }
+  .profile-role.role-collapsed { color: #94a3b8; }
   .card-chevron { font-size: var(--fs-xs); color: #334155; flex-shrink: 0; padding-top: 0.15rem; }
   .profile-field { display: flex; flex-direction: column; gap: 0.1rem; }
   .profile-field-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #475569; }

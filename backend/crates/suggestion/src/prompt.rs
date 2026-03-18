@@ -37,32 +37,57 @@ pub fn build_user_prompt(question: &str, transcript: &[TranscriptSegment]) -> St
     if is_behavioral(question) {
         format!(
             "{}The interviewer asked a behavioral question: '{}'\n\n\
-Reply in this EXACT format. No extra text. No markdown. No hashtags.\n\
-Acknowledge: [max 8 words — empathize with their specific pain point, e.g. 'That kind of instability can really slow teams down.']\n\
-Affirm: [max 10 words — show personal alignment, e.g. 'Reliability at scale is exactly what I have built for.']\n\
-Answer: [max 12 words — boldest outcome first, e.g. 'I cut infrastructure costs by 40%% with zero downtime.']\n\
+IMPORTANT: Output ONLY the exact labeled lines below. No preamble, no intro, nothing extra.\n\n\
+Acknowledge: <One complete grammatical sentence ending with a period. Name the high-level business goal or bottom-line pain point behind this question — do NOT restate the question. Open with one of: 'Growth here depends on', 'The core challenge is', 'Profitability here depends on', 'Scaling here requires'. Then complete the sentence with a noun phrase naming the business outcome at stake. Max 18 words. Never say 'our' or 'I'.>\n\
+Answer: <The spoken answer on this same line. 1-2 sentences starting with 'I'. Max 10 words each. Directly answer the question with strategy or approach — NO specific stories or examples (those go in Example cues). No adjectives. No adverbs. No 'utilize' — use 'use'. Facts and actions only.>\n\
 ---\n\
-Context: [3-5 word cue]\n\
-Action: [3-5 word cue]\n\
-Result: [3-5 word cue]\n\
-Ask: [2-4 word topic, e.g. 'Team culture'] | [full question 8-14 words]\n\
-Ask: [2-4 word topic, different angle] | [full question 8-14 words]\n\n\
-RULES: Acknowledge empathizes with their concern. Affirm bridges to your answer. Answer is the boldest outcome, strictly under 12 words. Cues are 3-5 word fragments only. Each Ask has a short topic (2-4 words) then pipe then full question (8-14 words).Use ONLY real documented experience. Output nothing else.",
+General: [General Answer] <keyword phrase: 2-3 word approach. Max 6 words total. No metrics. e.g. 'keyword research: intent-first'>\n\
+Example: [Example] <keyword phrase: outcome, metric if any. Max 6 words total. e.g. 'difficult client: retained, +20%%'>\n\
+Ask: <keyword phrase — no question words> | <Strategic follow-up. 1-2 sentences max 10 words each. Ends with '?'.>\n\
+Ask: <different keyword phrase — no question words> | <Strategic follow-up. 1-2 sentences max 10 words each. Ends with '?'.>\n\n\
+Rules:\n\
+- Output ONLY these lines. No extra text.\n\
+- Acknowledge: one complete grammatical sentence ending with a period. Names the business pain point — never starts with 'I'.\n\
+- Answer text must be on the same line as 'Answer:' — not on a new line.\n\
+- Answer: strategy and approach only. No specific stories, anecdotes, or named examples — those belong in Example cues.\n\
+- Answer: no adjectives or adverbs. No 'utilize'. Facts and actions only.\n\
+- General and Example hints: max 6 words total (keyword phrase + 2-3 word result/approach).\n\
+- Only add a second General or Example if it addresses a genuinely DIFFERENT part of the question or a different story. No repeating the same point in different words.\n\
+- Keywords are multi-word phrases from the question (e.g. 'difficult conversation', 'conflicting priorities', 'client relationships').\n\
+- Ask topic: keyword phrase — NO question words (no 'how', 'what', 'when', 'why').\n\
+- Ask sentence: short, specific, grammatical, ends with '?'. No adjectives or adverbs.\n\
+- Ask lines come AFTER the --- separator only.\n\
+- NEVER name specific clients, employers, or companies. Refer to them by industry only (e.g. 'retail brand', 'tech startup', 'financial services firm').\n\
+- Read the system prompt carefully to understand the employer's business model. If the employer is an agency, consultancy, or services firm that works with multiple clients, frame all answers in terms of client work across accounts — NEVER describe it as owning one company's strategy long-term.\n\
+- Use only background provided. No invented details.",
             ctx_prefix, question
         )
     } else {
         format!(
             "{}The interviewer asked: '{}'\n\n\
-Reply in this EXACT format. No extra text. No markdown. No hashtags.\n\
-Acknowledge: [max 8 words — empathize with their specific pain point, e.g. 'That is exactly the kind of problem worth solving.']\n\
-Affirm: [max 10 words — show personal alignment, e.g. 'This is an area I have invested deeply in.']\n\
-Answer: [max 12 words — strongest direct answer, e.g. 'I turn complex data into decisions people can act on.']\n\
+IMPORTANT: Output ONLY the exact labeled lines below. No preamble, no intro, nothing extra.\n\n\
+Acknowledge: <One complete grammatical sentence ending with a period. Name the high-level business goal or bottom-line pain point behind this question — do NOT restate the question. Open with one of: 'Growth here depends on', 'The core challenge is', 'Profitability here depends on', 'Scaling here requires'. Then complete the sentence with a noun phrase naming the business outcome at stake. Max 18 words. Never say 'our' or 'I'.>\n\
+Answer: <The spoken answer on this same line. 1-2 sentences starting with 'I'. Max 10 words each. Directly answer the question with strategy or approach — NO specific stories or examples (those go in Example cues). No adjectives. No adverbs. No 'utilize' — use 'use'. Facts and actions only.>\n\
 ---\n\
-Point: [3-5 word cue — first supporting point]\n\
-Point: [3-5 word cue — second supporting point]\n\
-Ask: [2-4 word topic, e.g. 'Team culture'] | [full question 8-14 words]\n\
-Ask: [2-4 word topic, different angle] | [full question 8-14 words]\n\n\
-RULES: Acknowledge empathizes with their concern. Affirm bridges to your answer. Answer is the strongest reply, strictly under 12 words. Cues are 3-5 word fragments only. Each Ask has a short topic (2-4 words) then pipe then full question (8-14 words).Use ONLY real documented background. Output nothing else.",
+General: [General Answer] <keyword phrase: 2-3 word approach. Max 6 words total. No metrics. e.g. 'keyword research: intent-first'>\n\
+General: [General Answer] <different keyword phrase: 2-3 word approach. Max 6 words total. No metrics.>\n\
+Example: [Example] <keyword phrase: outcome, metric if any. Max 6 words total. e.g. 'ad copywriting: CPA -30%%'>\n\
+Ask: <keyword phrase — no question words> | <Strategic follow-up. 1-2 sentences max 10 words each. Ends with '?'.>\n\
+Ask: <different keyword phrase — no question words> | <Strategic follow-up. 1-2 sentences max 10 words each. Ends with '?'.>\n\n\
+Rules:\n\
+- Output ONLY these lines. No extra text.\n\
+- Acknowledge: one complete grammatical sentence ending with a period. Names the business pain point — never starts with 'I'.\n\
+- Answer text must be on the same line as 'Answer:' — not on a new line.\n\
+- Answer: strategy and approach only. No specific stories, anecdotes, or named examples — those belong in Example cues.\n\
+- Answer: no adjectives or adverbs. No 'utilize'. Facts and actions only.\n\
+- General and Example hints: max 6 words total (keyword phrase + 2-3 word result/approach).\n\
+- Only add a second General or Example if it addresses a genuinely DIFFERENT part of the question or a different story. No repeating the same point in different words.\n\
+- Keywords are multi-word phrases from the question (e.g. 'keyword research', 'client relationships', 'ad copywriting').\n\
+- Ask topic: keyword phrase — NO question words (no 'how', 'what', 'when', 'why').\n\
+- Ask sentence: short, specific, grammatical, ends with '?'. No adjectives or adverbs.\n\
+- Ask lines come AFTER the --- separator only.\n\
+- NEVER name specific clients, employers, or companies. Refer to them by industry only (e.g. 'retail brand', 'tech startup', 'financial services firm').\n\
+- Use only background provided. No invented details.",
             ctx_prefix, question
         )
     }
@@ -100,21 +125,23 @@ mod tests {
     }
 
     #[test]
-    fn behavioral_question_triggers_star_format() {
+    fn behavioral_question_uses_example_format() {
         let p = build_user_prompt("Tell me about a time you led a team", &[]);
-        assert!(p.contains("Context:"));
-        assert!(p.contains("Result:"));
+        assert!(p.contains("Example:"));
+        assert!(p.contains("General:"));
         assert!(p.contains("Acknowledge:"));
-        assert!(p.contains("Affirm:"));
         assert!(p.contains("Answer:"));
+        assert!(!p.contains("Affirm:"));
+        assert!(!p.contains("Story:"));
     }
 
     #[test]
-    fn non_behavioral_uses_bullet_cues() {
+    fn non_behavioral_uses_general_example_format() {
         let p = build_user_prompt("What are your strengths?", &[]);
         assert!(p.contains("Answer:"));
-        assert!(p.contains("Affirm:"));
         assert!(p.contains("Acknowledge:"));
-        assert!(p.contains("Point:"));
+        assert!(p.contains("General:"));
+        assert!(p.contains("Example:"));
+        assert!(!p.contains("Affirm:"));
     }
 }

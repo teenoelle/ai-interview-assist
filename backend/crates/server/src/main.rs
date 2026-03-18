@@ -15,6 +15,7 @@ use crate::state::AppState;
 mod state;
 mod ws_handler;
 mod http_handler;
+mod tts_handler;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -33,6 +34,7 @@ async fn main() -> anyhow::Result<()> {
     let (event_tx, _event_rx) = broadcast::channel::<WsEvent>(512);
 
     let rate_limiter = RateLimiter::new();
+    let call_counts = Arc::new(std::sync::Mutex::new(std::collections::HashMap::<String, u64>::new()));
 
     let active = |k: &Option<String>| if k.is_some() { "yes" } else { "no" };
     tracing::info!(
@@ -48,9 +50,9 @@ async fn main() -> anyhow::Result<()> {
         config.ollama_model,
     );
     tracing::info!(
-        "Suggestion order: {} OpenRouter → Qwen → Cerebras → Mistral → Groq → Ollama ({}) → Gemini",
-        if config.anthropic_api_key.is_some() { "Claude →" } else { "" },
-        config.ollama_model,
+        "Suggestion order: {} Groq (8b-instant) → Cerebras → OpenRouter → Qwen → Mistral → Ollama ({}) → Gemini",
+        if config.anthropic_api_key.is_some() { "Claude Haiku →" } else { "" },
+        config.ollama_models.join(", "),
     );
     tracing::info!(
         "Transcription order: {} Groq Whisper → Gemini (both streams)",
@@ -77,11 +79,18 @@ async fn main() -> anyhow::Result<()> {
         gemini_key: config.gemini_api_key.clone(),
         anthropic_key: config.anthropic_api_key.clone(),
         groq_key: config.groq_api_key.clone(),
+        groq_key_2: config.groq_api_key_2.clone(),
         openrouter_key: config.openrouter_api_key.clone(),
         mistral_key: config.mistral_api_key.clone(),
         cerebras_key: config.cerebras_api_key.clone(),
         qwen_key: config.qwen_api_key.clone(),
+        ollama_url: config.ollama_url.clone(),
+        ollama_model: config.ollama_model.clone(),
+        ollama_models: config.ollama_models.clone(),
         rate_limiter: rate_limiter.clone(),
+        call_counts: call_counts.clone(),
+        piper_binary: config.piper_binary.clone(),
+        piper_models_dir: config.piper_models_dir.clone(),
     };
 
     // Mic agent: microphone audio → always "You", never triggers suggestions
@@ -136,7 +145,7 @@ async fn main() -> anyhow::Result<()> {
         config.cerebras_api_key.clone(),
         config.qwen_api_key.clone(),
         config.ollama_url.clone(),
-        config.ollama_model.clone(),
+        config.ollama_models.clone(),
         rate_limiter.clone(),
     ));
 
@@ -163,6 +172,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/keyword-definition", post(http_handler::handle_keyword_definition))
         .route("/api/expand-cue", post(http_handler::handle_expand_cue))
         .route("/api/next-steps", post(http_handler::handle_next_steps))
+        .route("/api/usage", get(http_handler::handle_usage))
+        .route("/api/tts/voices", get(tts_handler::handle_tts_voices))
+        .route("/api/tts/speak", post(tts_handler::handle_speak))
         .fallback_service(ServeDir::new(&frontend_path))
         .layer(CorsLayer::permissive())
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024)) // 50 MB — handles large CV uploads

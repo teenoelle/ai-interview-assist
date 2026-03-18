@@ -13,7 +13,6 @@
   import QuestionsHistoryPanel from './components/QuestionsHistoryPanel.svelte';
   import CompanyBriefPanel from './components/CompanyBriefPanel.svelte';
   import InterviewerProfilePanel from './components/InterviewerProfilePanel.svelte';
-  import StoryBankPanel from './components/StoryBankPanel.svelte';
   import KeywordTrackerPanel from './components/KeywordTrackerPanel.svelte';
   import SalaryCoachPanel from './components/SalaryCoachPanel.svelte';
   import NextQuestionPanel from './components/NextQuestionPanel.svelte';
@@ -30,13 +29,29 @@
   import { detectRedFlag } from './lib/redFlagDetector';
   import { derivePersonality } from './lib/personalityTracker';
   import { loadKeywords, checkMentioned } from './lib/keywordTracker';
-  import { matchStories, loadStories } from './lib/storyBank';
   import { isSalaryQuestion } from './lib/salaryDetector';
   import { analyzePace, detectEnergySignals } from './lib/paceCoach';
   import type { TranscriptEntry, SuggestionEntry, WsEvent } from './lib/types';
   import type { FillerCount } from './lib/filler';
   import type { MediaCapture } from './lib/capture';
   import type { CompanyBrief, InterviewerSummary } from './lib/api';
+  import { fetchUsage } from './lib/api';
+  import { parseSuggestion } from './lib/parseSuggestion';
+  import '@fontsource/inter/400.css';
+  import '@fontsource/inter/600.css';
+  import '@fontsource/inter/700.css';
+  import '@fontsource/dm-sans/400.css';
+  import '@fontsource/dm-sans/600.css';
+  import '@fontsource/dm-sans/700.css';
+  import '@fontsource/plus-jakarta-sans/400.css';
+  import '@fontsource/plus-jakarta-sans/600.css';
+  import '@fontsource/plus-jakarta-sans/700.css';
+  import '@fontsource/ibm-plex-sans/400.css';
+  import '@fontsource/ibm-plex-sans/600.css';
+  import '@fontsource/ibm-plex-sans/700.css';
+  import '@fontsource/outfit/400.css';
+  import '@fontsource/outfit/600.css';
+  import '@fontsource/outfit/700.css';
 
   type Phase = 'setup' | 'practice' | 'interview';
 
@@ -56,12 +71,14 @@
   let focusMode = $state(false);
   let showHistory = $state(false);
   let showWhisper = $state(false);
-  let showStoryBank = $state(false);
   let emotionHistory = $state<string[]>([]);
 
-  // Setup-time data
-  let companyBrief = $state<CompanyBrief | null>(null);
-  let interviewerSummaries = $state<InterviewerSummary[]>([]);
+  // Setup-time data (persisted via localStorage so they survive back-navigation and practice→interview flow)
+  function loadSetup<T>(key: string, fallback: T): T {
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+  }
+  let companyBrief = $state<CompanyBrief | null>(loadSetup('setup-company-brief', null));
+  let interviewerSummaries = $state<InterviewerSummary[]>(loadSetup('setup-interviewer-summaries', []));
 
   // Keyword tracker
   let jdKeywords = $state<string[]>(loadKeywords());
@@ -121,9 +138,9 @@
 
   // Video overlay resize (persisted)
   let interviewerVidH = $state(Number(localStorage.getItem(SK.interviewerVidH) || '0') || 0);
-  let selfviewW = $state(Number(localStorage.getItem(SK.selfviewW) || '80') || 80);
+  let selfviewH = $state(Number(localStorage.getItem(SK.selfviewW) || '120') || 120);
   let iVidResizing = false, iVidResizeStartY = 0, iVidResizeStartH = 0;
-  let selfviewResizing = false, selfviewResizeStartX = 0, selfviewResizeStartW = 0;
+  let selfviewResizing = false, selfviewResizeStartY = 0, selfviewResizeStartH = 0;
 
   function iVidResizeDown(e: PointerEvent) {
     iVidResizing = true;
@@ -143,19 +160,19 @@
   }
   function selfviewResizeDown(e: PointerEvent) {
     selfviewResizing = true;
-    selfviewResizeStartX = e.clientX;
-    selfviewResizeStartW = selfviewW;
+    selfviewResizeStartY = e.clientY;
+    selfviewResizeStartH = selfviewH;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     e.preventDefault(); e.stopPropagation();
   }
   function selfviewResizeMove(e: PointerEvent) {
     if (!selfviewResizing) return;
-    selfviewW = Math.max(60, selfviewResizeStartW + (e.clientX - selfviewResizeStartX));
+    selfviewH = Math.max(60, selfviewResizeStartH + (e.clientY - selfviewResizeStartY));
   }
   function selfviewResizeUp() {
     if (!selfviewResizing) return;
     selfviewResizing = false;
-    localStorage.setItem(SK.selfviewW, String(selfviewW));
+    localStorage.setItem(SK.selfviewW, String(selfviewH));
   }
 
   $effect(() => {
@@ -172,6 +189,7 @@
   let leftW = $state(Number(localStorage.getItem(SK.colLeft) ?? 240));
   let histW = $state(Number(localStorage.getItem(SK.colHist) ?? 180));
   let centerW = $state(Number(localStorage.getItem(SK.colCenter) ?? 320));
+  let rightW = $state(Number(localStorage.getItem(SK.colRight) ?? 220));
 
   // Per-panel zoom (persisted)
   let leftZoom = $state(Number(localStorage.getItem(SK.zoomLeft) ?? 100));
@@ -296,6 +314,26 @@
   // Jump signal for SuggestionPanel cross-navigation from QuestionsHistoryPanel
   let jumpSignal = $state<{ idx: number; key: number } | null>(null);
 
+  // New question notification
+  let suggestionPinned = $state(true);
+  let unseenCount = $state(0);
+  let scrollToLatestKey = $state(0);
+  let prevSuggestionsLen = $state(0);
+  // Tracks which question index is currently viewed in SuggestionPanel (-1 = latest)
+  let histViewIdx = $state(-1);
+
+  $effect(() => {
+    if (suggestions.length > prevSuggestionsLen && prevSuggestionsLen > 0) {
+      if (suggestionPinned) scrollToLatestKey++;
+      else unseenCount++;
+    }
+    prevSuggestionsLen = suggestions.length;
+  });
+
+  $effect(() => {
+    if (suggestionPinned) { unseenCount = 0; histViewIdx = -1; }
+  });
+
   function adjustZoom(col: 'left' | 'hist' | 'center' | 'rightTop' | 'rightBottom' | 'kw' | 'all', delta: number) {
     if (col === 'left' || col === 'all') {
       leftZoom = Math.max(20, leftZoom + delta);
@@ -323,16 +361,18 @@
     }
   }
 
-  function startResize(col: 'left' | 'hist' | 'center', e: MouseEvent) {
+  function startResize(col: 'left' | 'hist' | 'center' | 'right', e: MouseEvent) {
     e.preventDefault();
     const startX = e.clientX;
-    const startW = col === 'left' ? leftW : col === 'hist' ? histW : centerW;
-    const [min, max] = col === 'left' ? [130, 400] : col === 'hist' ? [120, 280] : [180, 500];
+    const startW = col === 'left' ? leftW : col === 'hist' ? histW : col === 'center' ? centerW : rightW;
+    const vw = window.innerWidth;
+    const [min, max] = col === 'left' ? [130, Math.floor(vw * 0.4)] : col === 'hist' ? [120, Math.floor(vw * 0.35)] : col === 'center' ? [180, Math.floor(vw * 0.6)] : [120, Math.floor(vw * 0.5)];
     function onMove(ev: MouseEvent) {
       const w = Math.max(min, Math.min(max, startW + ev.clientX - startX));
       if (col === 'left') leftW = w;
       else if (col === 'hist') histW = w;
-      else centerW = w;
+      else if (col === 'center') centerW = w;
+      else rightW = w;
     }
     function onUp() {
       window.removeEventListener('mousemove', onMove);
@@ -340,6 +380,7 @@
       localStorage.setItem(SK.colLeft, String(leftW));
       localStorage.setItem(SK.colHist, String(histW));
       localStorage.setItem(SK.colCenter, String(centerW));
+      localStorage.setItem(SK.colRight, String(rightW));
     }
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
@@ -390,13 +431,13 @@
     { panel: 'sentiment', id: 'personality' },
     { panel: 'sentiment', id: 'sentiment-bar' },
     { panel: 'sentiment', id: 'body-language' },
-    { panel: 'coaching', id: 'energy-coach' },
+    { panel: 'sentiment', id: 'energy-coach' },
+    { panel: 'sentiment', id: 'stats' },
     { panel: 'coaching', id: 'salary-coach' },
     { panel: 'coaching', id: 'next-question' },
-    // keywords is in the bottom bar
-    { panel: 'left-bottom', id: 'interviewer-profiles' },
     { panel: 'coaching', id: 'company-brief' },
-    { panel: 'coaching', id: 'stats' },
+    { panel: 'coaching', id: 'interviewer-profiles' },
+    { panel: 'coaching', id: 'rate-limits' },
   ];
   const SECTION_LABELS: Record<string, string> = {
     'screen-preview': 'Screen', 'personality': 'Personality', 'sentiment-bar': 'Sentiment',
@@ -453,9 +494,29 @@
   }
 
   // TTS voice hints
+  import * as ttsClient from './lib/ttsClient';
+  import type { CombinedVoice } from './lib/ttsClient';
+
+  const FONTS = [
+    { id: 'Inter',              label: 'Inter' },
+    { id: 'DM Sans',            label: 'DM Sans' },
+    { id: 'Plus Jakarta Sans',  label: 'Plus Jakarta Sans' },
+    { id: 'IBM Plex Sans',      label: 'IBM Plex Sans' },
+    { id: 'Outfit',             label: 'Outfit' },
+    { id: 'system-ui',          label: 'System Default' },
+  ] as const;
+  let appFont = $state(localStorage.getItem('app-font') ?? 'Inter');
+  $effect(() => {
+    const stack = appFont === 'system-ui'
+      ? 'system-ui, -apple-system, sans-serif'
+      : `'${appFont}', system-ui, sans-serif`;
+    document.documentElement.style.setProperty('--ff-base', stack);
+    localStorage.setItem('app-font', appFont);
+  });
+
   let ttsEnabled = $state(false);
-  let ttsVoices = $state<SpeechSynthesisVoice[]>([]);
-  let ttsVoiceURI = $state(localStorage.getItem(SK.ttsVoice) ?? '');
+  let ttsVoices = $state<CombinedVoice[]>([]);
+  let ttsVoiceId = $state(localStorage.getItem('tts-voice-id') ?? localStorage.getItem(SK.ttsVoice) ?? '');
   let ttsRate = $state(Number(localStorage.getItem(SK.ttsRate) ?? 1.5));
   let ttsVolume = $state(Math.max(0.1, Number(localStorage.getItem(SK.ttsVolume) ?? 1.0)));
   let showVoiceMenu = $state(false);
@@ -463,40 +524,23 @@
   let lastSpeechAt = 0; // ms timestamp
   const TTS_SILENCE_GAP_MS = 2500;
 
-  function loadVoices() {
-    const voices = speechSynthesis.getVoices();
-    if (voices.length > 0) {
-      ttsVoices = voices;
-      if (!ttsVoiceURI) ttsVoiceURI = voices[0]?.voiceURI ?? '';
-    }
-  }
   $effect(() => {
-    loadVoices();
-    speechSynthesis.addEventListener('voiceschanged', loadVoices);
-    return () => speechSynthesis.removeEventListener('voiceschanged', loadVoices);
+    ttsClient.loadAllVoices().then(all => {
+      ttsVoices = all;
+      if (!ttsVoiceId || !all.find(v => v.id === ttsVoiceId)) ttsVoiceId = all[0]?.id ?? '';
+    });
   });
   $effect(() => { localStorage.setItem(SK.ttsRate, String(ttsRate)); });
   $effect(() => { localStorage.setItem(SK.ttsVolume, String(ttsVolume)); });
-  $effect(() => { if (ttsVoiceURI) localStorage.setItem(SK.ttsVoice, ttsVoiceURI); });
+  $effect(() => { if (ttsVoiceId) localStorage.setItem('tts-voice-id', ttsVoiceId); });
 
   function speakText(text: string) {
     if (!ttsEnabled || !text) return;
     if (Date.now() - lastSpeechAt < TTS_SILENCE_GAP_MS) return;
     if (answerStartTime !== null) return;
-    // Only speak the Affirm line — brief enough not to pause the interviewee
-    let affirm = '';
-    for (const line of text.split('\n')) {
-      const t = line.trim();
-      if (!affirm && t.match(/^Affirm:\s*/i)) { affirm = t.replace(/^Affirm:\s*/i, '').trim(); break; }
-    }
-    if (!affirm) return;
-    speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(affirm);
-    const voice = ttsVoices.find(v => v.voiceURI === ttsVoiceURI);
-    if (voice) utt.voice = voice;
-    utt.rate = ttsRate;
-    utt.volume = ttsVolume;
-    speechSynthesis.speak(utt);
+    const parsed = parseSuggestion(text);
+    if (!parsed.acknowledge) return;
+    ttsClient.speak(parsed.acknowledge, ttsVoiceId, ttsRate, ttsVolume);
   }
 
   // Audio sentiment (client-side, free — based on interviewer text)
@@ -570,6 +614,15 @@
   // Rate limits
   interface RateLimitEntry { remaining: number; limit: number; history: Array<{ r: number; t: number }>; }
   let rateLimits = $state<Record<string, RateLimitEntry>>({});
+  let callCounts = $state<Record<string, number>>({});
+
+  $effect(() => {
+    const id = setInterval(async () => {
+      callCounts = await fetchUsage();
+    }, 5000);
+    fetchUsage().then(d => callCounts = d);
+    return () => clearInterval(id);
+  });
 
   // WS status
   let wsStatus = $state('disconnected');
@@ -638,14 +691,26 @@
     loadingNextSteps = false;
   }
 
+  const OPENING_SUGGESTION_STATIC =
+`Acknowledge: Hi! Really great to meet you — thanks so much for having me today.
+Answer: I'm doing well, thank you! Really looking forward to our conversation.
+---
+General: [their day] Ask how their day is going — keeps the tone warm and shows you're interested in them as a person
+General: [the commute / setup] A quick comment about working from home or their office is a natural low-stakes opener
+General: [something you noticed] If you spot something in their background or office, a brief friendly comment shows genuine curiosity
+Ask: day | How's your day going so far?
+Ask: week | Has it been a busy week for you?
+Ask: team | How long have you been with the team?`;
+
   async function fetchOpeningSuggestion() {
     const names = interviewerSummaries.map(i => i.name).filter(Boolean).join(', ');
-    const tips = interviewerSummaries.map(i => i.rapport_tip).filter(Boolean).join('; ');
-    const context = [names && `Interviewer: ${names}`, tips && `Rapport tips: ${tips}`].filter(Boolean).join('. ');
-    const question = `Interview opening small talk${context ? ` — ${context}` : ''} — give me warm opening lines and 2-3 natural conversation topics to build rapport before the interview starts`;
+    const tips = interviewerSummaries.flatMap(i => i.rapport_tips ?? []).filter(Boolean).join('; ');
+    const context = [names && `Interviewer(s): ${names}`, tips && `Rapport tips: ${tips}`].filter(Boolean).join('. ');
+    const question = `Meeting opening greeting and small talk${context ? ` — ${context}` : ''} — give me warm, natural opening lines and 2-3 casual conversation topics to exchange greetings and build rapport at the very start of the meeting, before any interview questions begin. Keep it generic and friendly, not job-focused.`;
 
     currentQuestionIdx = 0;
-    suggestions = [{ question: '🤝 Interview Opening', suggestion: '', streaming: true }];
+    // Show static fallback immediately so there's always something visible
+    suggestions = [{ question: '🤝 Opening', suggestion: OPENING_SUGGESTION_STATIC, streaming: false }];
 
     try {
       const resp = await fetch('/api/practice-question', {
@@ -653,10 +718,12 @@
         body: JSON.stringify({ question }),
       });
       const data = resp.ok ? await resp.json() : null;
-      suggestions = [{ ...suggestions[0], suggestion: data?.suggestion ?? '', streaming: false }];
-    } catch {
-      suggestions = [{ ...suggestions[0], streaming: false }];
-    }
+      if (data?.suggestion) {
+        // Add personalized version as a second entry so both are in question history
+        suggestions = [...suggestions, { question: '🤝 Opening (personalized)', suggestion: data.suggestion, streaming: false }];
+        currentQuestionIdx = 1;
+      }
+    } catch { /* keep static fallback */ }
   }
 
   function handleSetupComplete(data?: { companyBrief?: any; interviewerSummaries?: any[]; jdKeywords?: string[] }) {
@@ -684,7 +751,7 @@
         if (event.speaker === 'You') {
           lastSpeechAt = Date.now();
           youSegments++;
-          startAnswerTimer();
+          if (capturing) startAnswerTimer();
           youSegmentsSinceQuestion = [...youSegmentsSinceQuestion, event.text];
           recentYouTexts = [...recentYouTexts.slice(-19), { text: event.text, time: Date.now() }];
           // Track JD keywords mentioned
@@ -810,20 +877,17 @@
         const subQuestions = splitMultiQuestions(event.question);
         youSegmentsSinceQuestion = [];
 
-        const allStories = loadStories();
         for (let qi = 0; qi < subQuestions.length; qi++) {
           const q = subQuestions[qi];
           const isFirst = qi === 0;
           const newIdx = suggestions.length;
           if (isFirst) currentQuestionIdx = newIdx;
-          const matched = matchStories(q, allStories).map(s => ({ id: s.id, title: s.title, result: s.result }));
           suggestions = [...suggestions, {
             question: q,
             suggestion: isFirst ? '' : '(Additional question — will generate suggestion when you navigate here)',
             streaming: isFirst,
             tag: tagQuestion(q),
             redFlag: detectRedFlag(q) ?? undefined,
-            matchedStories: matched.length > 0 ? matched : undefined,
           }];
         }
         resetAnswerTimer();
@@ -981,8 +1045,21 @@
       <header class="setup-header">
         <h1>AI Interview Assistant</h1>
         <p>Real-time AI coaching during your job interview</p>
+        <div class="setup-font-row">
+          <label class="setup-font-label">Font</label>
+          <select class="font-select" bind:value={appFont} title="App font">
+            {#each FONTS as f}
+              <option value={f.id}>{f.label}</option>
+            {/each}
+          </select>
+        </div>
       </header>
       <SetupForm onSetupComplete={handleSetupComplete} onPractice={handlePractice} />
+      {#if Object.keys(callCounts).length > 0 || Object.keys(rateLimits).length > 0}
+        <div class="setup-usage">
+          <RateLimitPanel {rateLimits} {callCounts} />
+        </div>
+      {/if}
     </div>
 
   {:else if phase === 'practice'}
@@ -990,12 +1067,14 @@
       questions={predictedQuestions}
       systemPrompt=""
       onStartInterview={() => { phase = 'interview'; }}
+      onBackToSetup={() => { phase = 'setup'; }}
     />
 
   {:else}
     <div class="interview-layout">
       <header class="interview-header">
         <div class="header-title-row">
+          <button class="header-back-btn" onclick={() => { phase = 'setup'; }} title="Back to overview">← Overview</button>
           <h1>AI Interview Assistant</h1>
           <span class="ws-header-dot"
             class:ws-connected={wsStatus === 'connected'}
@@ -1021,54 +1100,49 @@
               </label>
               <label class="rate-label" title="Voice volume">
                 <span class="rate-val">{Math.round(ttsVolume * 100)}%</span>
-                <input type="range" min="0.1" max="1" step="0.05" bind:value={ttsVolume} class="rate-slider vol-slider" />
+                <input type="range" min="0.1" max="4" step="0.05" bind:value={ttsVolume} class="rate-slider vol-slider"
+                  oninput={(e) => { const v = Number((e.target as HTMLInputElement).value); if (Math.abs(v - 1) < 0.08) ttsVolume = 1; }} />
               </label>
               <button class="voice-pick-btn" onclick={() => showVoiceMenu = !showVoiceMenu} title="Choose voice">▾</button>
               <button
                 class="voice-test-inline-btn"
                 title="Test current voice"
-                onclick={() => {
-                  speechSynthesis.cancel();
-                  const utt = new SpeechSynthesisUtterance("Hi, I'm excited to be here today.");
-                  const voice = ttsVoices.find(v => v.voiceURI === ttsVoiceURI);
-                  if (voice) utt.voice = voice;
-                  utt.rate = ttsRate;
-                  utt.volume = ttsVolume;
-                  speechSynthesis.speak(utt);
-                }}
+                onclick={() => ttsClient.speak("Hi, I'm excited to be here today.", ttsVoiceId, ttsRate, ttsVolume)}
               >▶ Test</button>
             {/if}
+            <select class="font-select" bind:value={appFont} title="App font">
+              {#each FONTS as f}
+                <option value={f.id}>{f.label}</option>
+              {/each}
+            </select>
 
             {#if showVoiceMenu}
               <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
               <div class="voice-menu" role="menu" onmouseleave={() => showVoiceMenu = false}>
-                {#each ttsVoices as v}
-                  <div class="voice-row" class:selected={v.voiceURI === ttsVoiceURI}>
-                    <button
-                      class="voice-option"
-                      class:selected={v.voiceURI === ttsVoiceURI}
-                      onclick={() => { ttsVoiceURI = v.voiceURI; showVoiceMenu = false; }}
-                    >{v.name} ({v.lang})</button>
-                    <button
-                      class="voice-test-btn"
-                      title="Preview this voice"
-                      onclick={(e) => {
-                        e.stopPropagation();
-                        speechSynthesis.cancel();
-                        const utt = new SpeechSynthesisUtterance("Hi, I'm excited to be here today.");
-                        utt.voice = v;
-                        utt.rate = ttsRate;
-                        utt.volume = ttsVolume;
-                        speechSynthesis.speak(utt);
-                      }}
-                    >▶</button>
-                  </div>
+                {#each ['piper', 'os', 'browser'] as src}
+                  {@const group = ttsVoices.filter(v => v.source === src)}
+                  {#if group.length > 0}
+                    <div class="voice-group-label">{src === 'piper' ? 'Piper (Neural)' : src === 'os' ? 'Windows (SAPI)' : 'Browser'}</div>
+                    {#each group as v}
+                      <div class="voice-row" class:selected={v.id === ttsVoiceId}>
+                        <button
+                          class="voice-option"
+                          class:selected={v.id === ttsVoiceId}
+                          onclick={() => { ttsVoiceId = v.id; showVoiceMenu = false; }}
+                        >{v.name}</button>
+                        <button
+                          class="voice-test-btn"
+                          title="Preview this voice"
+                          onclick={(e) => { e.stopPropagation(); ttsClient.speak("Hi, I'm excited to be here today.", v.id, ttsRate, ttsVolume); }}
+                        >▶</button>
+                      </div>
+                    {/each}
+                  {/if}
                 {/each}
               </div>
             {/if}
           </div>
 
-          <button class="history-btn" onclick={() => showStoryBank = !showStoryBank}>Stories</button>
           <button class="history-btn" onclick={() => showHistory = true}>History</button>
           <button class="history-btn" title="Reset all panel positions and zoom" onclick={() => {
             Object.values(SK).forEach(k => localStorage.removeItem(k));
@@ -1130,7 +1204,7 @@
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div class="resize-handle" onmousedown={(e) => {
               const prevCol = colOrder[ci - 1];
-              if (prevCol === 'left' || prevCol === 'hist' || prevCol === 'center') startResize(prevCol, e);
+              if (prevCol === 'left' || prevCol === 'hist' || prevCol === 'center' || prevCol === 'right') startResize(prevCol as 'left' | 'hist' | 'center' | 'right', e);
             }} title="Drag to resize"></div>
           {/if}
 
@@ -1166,7 +1240,7 @@
               ondragover={onColDragOver} ondrop={(e) => onColDrop('hist', e)}>
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div class="col-header col-drag-handle" draggable={true} ondragstart={(e) => onColDragStart('hist', e)}>
-                <span class="col-label">{collapsedCols.has('hist') ? '…' : 'Questions'}</span>
+                <span class="col-label">{collapsedCols.has('hist') ? '…' : 'Questions'}{#if unseenCount > 0}<span class="new-q-badge">{unseenCount}</span>{/if}</span>
                 {#if !collapsedCols.has('hist')}
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('hist', -10)} title="Decrease font size">A−</button>
@@ -1182,8 +1256,9 @@
                   <div class="col-body-scroll" style="zoom: {histZoom/100}; padding: 0.3rem 0.4rem 0.75rem;">
                     <QuestionsHistoryPanel
                       {suggestions}
-                      currentIndex={currentQuestionIdx}
-                      onJump={(i) => { jumpSignal = { idx: i, key: Date.now() }; }}
+                      currentIndex={histViewIdx === -1 ? currentQuestionIdx : histViewIdx}
+                      onJump={(i) => { histViewIdx = i; jumpSignal = { idx: i, key: Date.now() }; }}
+                      {scrollToLatestKey}
                     />
                   </div>
                 </div>
@@ -1256,7 +1331,7 @@
               {#if !collapsedCols.has('center')}
                 <div class="col-body col-split-body" bind:this={centerColBodyEl}>
                   <div class="col-body-scroll" style="zoom: {centerZoom/100}; padding: 0.25rem 0.5rem 0.5rem;">
-                    <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} {jumpSignal} {cueExpandSignal} />
+                    <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} {jumpSignal} {cueExpandSignal} onPinnedChange={(p) => (suggestionPinned = p)} />
                   </div>
                 </div>
               {/if}
@@ -1265,6 +1340,7 @@
           {:else if col === 'right'}
             <!-- Right: Interviewer Sentiment -->
             <div class="col col-right"
+              style={collapsedCols.has('right') ? 'flex: 0 0 28px; min-width: 0; width: 28px;' : `flex-shrink: 0; width: ${rightW}px`}
               ondragover={onColDragOver} ondrop={(e) => onColDrop('right', e)}>
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div class="col-header col-drag-handle" draggable={true} ondragstart={(e) => onColDragStart('right', e)}>
@@ -1280,31 +1356,29 @@
               {#if !collapsedCols.has('right')}
                 {#if webcamStream}
                   <div class="selfview-strip">
-                    <div class="selfview-vid-wrap">
-                      <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_media_has_caption -->
-                      <div class="selfview-zoom-shell"
-                        class:selfview-zoomed={sVid.zoom > 1}
-                        onwheel={(e) => vidWheel(sVid, e)}
-                        onpointerdown={(e) => vidDown(sVid, sPan, e)}
-                        onpointermove={(e) => vidMove(sVid, sPan, e)}
-                        onpointerup={() => vidUp(sPan)}
-                        ondblclick={() => vidReset(sVid)}
-                        style="width:{selfviewW}px;height:{Math.round(selfviewW*3/4)}px;cursor:{sVid.zoom > 1 ? 'grab' : 'default'}"
-                        title="Scroll to zoom · drag to pan · double-click to reset"
-                      >
-                        <video bind:this={webcamEl} class="selfview" autoplay muted playsinline
-                          style="transform: translate({sVid.panX}px, {sVid.panY}px) scale({sVid.zoom}) scaleX(-1); transform-origin: center;"
-                        ></video>
-                      </div>
-                      <!-- svelte-ignore a11y_no_static_element_interactions -->
-                      <div class="selfview-resize-corner"
-                        onpointerdown={selfviewResizeDown}
-                        onpointermove={selfviewResizeMove}
-                        onpointerup={selfviewResizeUp}
-                        onpointercancel={selfviewResizeUp}
-                      ></div>
+                    <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_media_has_caption -->
+                    <div class="selfview-zoom-shell"
+                      class:selfview-zoomed={sVid.zoom > 1}
+                      onwheel={(e) => vidWheel(sVid, e)}
+                      onpointerdown={(e) => vidDown(sVid, sPan, e)}
+                      onpointermove={(e) => vidMove(sVid, sPan, e)}
+                      onpointerup={() => vidUp(sPan)}
+                      ondblclick={() => vidReset(sVid)}
+                      style="height:{selfviewH}px;cursor:{sVid.zoom > 1 ? 'grab' : 'default'}"
+                      title="Scroll to zoom · drag to pan · double-click to reset"
+                    >
+                      <video bind:this={webcamEl} class="selfview" autoplay muted playsinline
+                        style="transform: translate({sVid.panX}px, {sVid.panY}px) scale({sVid.zoom}) scaleX(-1); transform-origin: center;"
+                      ></video>
                     </div>
                     <div class="selfview-label">You</div>
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <div class="vid-resize-handle selfview-resize-handle"
+                      onpointerdown={selfviewResizeDown}
+                      onpointermove={selfviewResizeMove}
+                      onpointerup={selfviewResizeUp}
+                      onpointercancel={selfviewResizeUp}
+                    ></div>
                   </div>
                 {/if}
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1327,6 +1401,7 @@
           {:else if col === 'right2'}
             <!-- Right2: Coaching Tips + Self-view -->
             <div class="col col-right"
+              style={collapsedCols.has('right2') ? 'flex: 0 0 28px; min-width: 0; width: 28px;' : 'flex: 1; min-width: 120px;'}
               ondragover={onColDragOver} ondrop={(e) => onColDrop('right2', e)}>
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div class="col-header col-drag-handle" draggable={true} ondragstart={(e) => onColDragStart('right2', e)}>
@@ -1378,20 +1453,17 @@
                   <button class="section-collapse-btn" onclick={() => toggleSectionCollapse(sid)}>▾</button>
                 </div>
                 {#if sid === 'screen-preview'}
-                  {#if coachingLog.length > 0}
-                    <div class="coaching-log">
-                      {#each coachingLog.slice().reverse() as entry, i}
-                        <div class="coaching-log-entry" class:coaching-log-latest={i === 0}>
-                          <div class="coaching-log-meta">
-                            <span class="coaching-log-emotion">{entry.emotion}</span>
-                            <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
-                          </div>
-                          <span class="coaching-log-text">{entry.text}</span>
-                        </div>
+                  {#if emotion}
+                    <div class="coaching-log-emotion-only">{emotion}</div>
+                  {/if}
+                  {@const latestMissed = suggestions.slice().reverse().find(s => s.confidenceScore != null && s.confidenceScore < 40 && s.missedKeywords?.length)}
+                  {#if latestMissed}
+                    <div class="ascore-missed">
+                      <span class="ascore-missed-label">Not covered</span>
+                      {#each latestMissed.missedKeywords as kw}
+                        <span class="ascore-missed-kw">{kw}</span>
                       {/each}
                     </div>
-                  {:else if emotion}
-                    <div class="coaching-log-emotion-only">{emotion}</div>
                   {/if}
                 {:else if sid === 'personality'}
                   {#if personality}
@@ -1402,7 +1474,20 @@
                   {/if}
                 {:else if sid === 'sentiment-bar'}
                   <SentimentBar videoEmotion={emotion} videoReason={emotionReason} {audioEmotion} {audioReason} />
-                  {@const latestWithFeedback = suggestions.slice().reverse().find(s => s.answerFeedback || s.vocalFeedback || (s.confidenceScore != null && s.confidenceScore < 40 && s.missedKeywords?.length))}
+                  {#if coachingLog.length > 0}
+                    <div class="coaching-log coaching-log-sentiment">
+                      {#each coachingLog.slice().reverse() as entry, i}
+                        <div class="coaching-log-entry" class:coaching-log-latest={i === 0}>
+                          <div class="coaching-log-meta">
+                            <span class="coaching-log-emotion">{entry.emotion}</span>
+                            <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
+                          </div>
+                          <span class="coaching-log-text">{entry.text}</span>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                  {@const latestWithFeedback = suggestions.slice().reverse().find(s => s.answerFeedback || s.vocalFeedback)}
                   {#if latestWithFeedback}
                     <div class="answer-score-panel">
                       {#if latestWithFeedback.answerFeedback}
@@ -1411,14 +1496,6 @@
                           {#if latestWithFeedback.answerFeedback.missed_metric}<span class="ascore-badge ascore-warn">Add a metric</span>{/if}
                         </div>
                         <p class="ascore-coaching">{latestWithFeedback.answerFeedback.coaching}</p>
-                      {/if}
-                      {#if latestWithFeedback.confidenceScore != null && latestWithFeedback.confidenceScore < 40 && latestWithFeedback.missedKeywords?.length}
-                        <div class="ascore-missed">
-                          <span class="ascore-missed-label">Not covered</span>
-                          {#each latestWithFeedback.missedKeywords as kw}
-                            <span class="ascore-missed-kw">{kw}</span>
-                          {/each}
-                        </div>
                       {/if}
                       {#if latestWithFeedback.vocalFeedback}
                         <div class="ascore-vocal-row">
@@ -1455,10 +1532,7 @@
                   {/if}
                 {:else if sid === 'interviewer-profiles'}
                   {#if interviewerSummaries.length > 0}
-                    <div class="side-section">
-                      <div class="side-section-label">Interviewers</div>
-                      <InterviewerProfilePanel interviewers={interviewerSummaries} />
-                    </div>
+                    <InterviewerProfilePanel interviewers={interviewerSummaries} />
                   {/if}
                 {:else if sid === 'stats'}
                   <div class="side-stats">
@@ -1489,12 +1563,9 @@
                         {wsStatus === 'connected' ? '●' : wsStatus === 'reconnecting' ? `↻ #${wsAttempt}` : '○'}
                       </span>
                     </div>
-                    <div class="side-ratelimits">
-                      <RateLimitPanel {rateLimits} />
-                    </div>
                   </div>
                 {:else if sid === 'rate-limits'}
-                  <!-- merged into stats section -->
+                  <RateLimitPanel {rateLimits} {callCounts} />
                 {/if}
               {/if}
             </div>
@@ -1633,15 +1704,6 @@
     {#if showWhisper && whisperTell}
       <WhisperOverlay tell={whisperTell} onClose={() => showWhisper = false} />
     {/if}
-    {#if showStoryBank}
-      <div class="story-bank-overlay">
-        <StoryBankPanel
-          mode="interview"
-          matchQuestion={suggestions[currentQuestionIdx]?.question ?? ''}
-          onClose={() => showStoryBank = false}
-        />
-      </div>
-    {/if}
   {/if}
 {#if showHistory}
   <InterviewHistoryPanel
@@ -1653,7 +1715,7 @@
 
 <style>
   :root {
-    --ff-base: 'Inter', system-ui, -apple-system, sans-serif;
+    --ff-base: 'Inter', system-ui, sans-serif;
     --ff-mono: 'JetBrains Mono', 'Fira Code', monospace;
     --fs-xs:   0.62rem;   /* badges, labels, metadata */
     --fs-sm:   0.74rem;   /* coaching notes, hints, secondary */
@@ -1669,8 +1731,16 @@
 
   .app { font-family: var(--ff-base); }
 
+  /* Ensure form elements inherit the chosen font */
+  :global(input), :global(select), :global(button), :global(textarea) {
+    font-family: inherit;
+  }
+
   .setup-container { max-width: 800px; margin: 0 auto; }
+  .setup-usage { max-width: 800px; margin: 0 auto 2rem; padding: 0 2rem; }
   .setup-header { text-align: center; padding: 3rem 2rem 1rem; }
+  .setup-font-row { display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-top: 1rem; }
+  .setup-font-label { font-size: var(--fs-sm); color: #64748b; }
   .setup-header h1 {
     font-size: 2.5rem; font-weight: 800;
     background: linear-gradient(135deg, #60a5fa, #a78bfa);
@@ -1681,18 +1751,14 @@
   .side-section { display: flex; flex-direction: column; gap: 0.3rem; }
   .side-section-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #334155; }
 
-  .story-bank-overlay {
-    position: fixed; top: 4rem; right: 1rem; width: 340px; max-height: calc(100vh - 5rem);
-    background: #0a1020; border: 1px solid #1e293b; border-radius: 0.6rem;
-    padding: 0.75rem; overflow-y: auto; z-index: 200;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-  }
 
   .interview-layout { display: flex; flex-direction: column; height: 100vh; }
   .interview-header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 0.4rem 1rem; background: #0f172a; border-bottom: 1px solid #1e293b; flex-shrink: 0;
   }
+  .header-back-btn { background: none; border: none; color: #60a5fa; font-size: var(--fs-sm); font-weight: 600; cursor: pointer; padding: 0 0.5rem 0 0; white-space: nowrap; }
+  .header-back-btn:hover { color: #93c5fd; }
   .interview-header h1 {
     font-size: var(--fs-base); font-weight: 700;
     background: linear-gradient(135deg, #60a5fa, #a78bfa);
@@ -1762,6 +1828,22 @@
     background: #1e293b; border: 1px solid #334155; border-radius: 0.375rem;
     min-width: 200px; max-height: 250px; overflow-y: auto;
     display: flex; flex-direction: column;
+  }
+  .font-select {
+    background: #0f172a;
+    color: #94a3b8;
+    border: 1px solid #1e293b;
+    border-radius: 0.25rem;
+    font-size: var(--fs-xs);
+    padding: 0.15rem 0.3rem;
+    cursor: pointer;
+    height: 1.6rem;
+  }
+  .font-select:hover { border-color: #334155; color: #cbd5e1; }
+
+  .voice-group-label {
+    padding: 0.2rem 0.75rem 0.1rem; font-size: 0.6rem; font-weight: 800;
+    text-transform: uppercase; letter-spacing: 0.08em; color: #475569;
   }
   .voice-row {
     display: flex; align-items: center;
@@ -1901,8 +1983,8 @@
   }
 
   .col-right {
-    flex: 1;
-    min-width: 180px;
+    flex-shrink: 0;
+    min-width: 120px;
     background: #080d18;
   }
 
@@ -1995,6 +2077,25 @@
     color: #334155;
     text-transform: uppercase;
     letter-spacing: 0.1em;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .new-q-badge {
+    font-size: 0.6em;
+    font-weight: 800;
+    color: #fff;
+    background: #2563eb;
+    border-radius: 999px;
+    padding: 0.05em 0.45em;
+    letter-spacing: 0;
+    text-transform: none;
+    animation: badge-pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes badge-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
   }
 
   .zoom-btns {
@@ -2120,8 +2221,7 @@
     width: 100%;
     background: #060e1a;
   }
-  /* Selfview zoom shell */
-  .selfview-vid-wrap { position: relative; flex-shrink: 0; }
+  /* Selfview zoom shell (overrides applied via .selfview-strip context) */
   .selfview-zoom-shell {
     overflow: hidden;
     border-radius: 0.375rem;
@@ -2133,17 +2233,6 @@
     position: relative;
     border-color: #3b82f6;
   }
-  .selfview-resize-corner {
-    position: absolute; bottom: 0; right: 0;
-    width: 14px; height: 14px; cursor: nwse-resize; touch-action: none;
-  }
-  .selfview-resize-corner::after {
-    content: ''; position: absolute; bottom: 2px; right: 2px;
-    width: 8px; height: 8px;
-    border-right: 2px solid #334155; border-bottom: 2px solid #334155;
-    border-radius: 1px;
-  }
-  .selfview-resize-corner:hover::after { border-color: #60a5fa; }
   .face-pick-row {
     display: flex; gap: 0.3rem; padding: 0.2rem 0.5rem;
     background: #060e1a;
@@ -2215,16 +2304,23 @@
 
   /* Webcam self-view */
   .selfview-strip {
-    display: flex; align-items: center; gap: 0.5rem;
-    padding: 0.35rem 0.75rem; border-bottom: 1px solid #1e293b;
+    display: flex; flex-direction: column;
+    border-bottom: 1px solid #1e293b;
     background: #060e1a; flex-shrink: 0;
   }
-  .selfview {
-    width: 100%; height: 100%; object-fit: cover;
-    border-radius: 0.375rem; background: #0f172a;
-    display: block;
+  .selfview-strip .selfview-zoom-shell {
+    width: 100%; overflow: hidden;
+    border-radius: 0; border: none;
   }
-  .selfview-label { font-size: var(--fs-xs); color: #334155; text-transform: uppercase; letter-spacing: 0.08em; }
+  .selfview-strip .selfview-zoom-shell.selfview-zoomed {
+    overflow: visible; border: none;
+  }
+  .selfview {
+    width: 100%; height: 100%; object-fit: contain;
+    background: #0a1525; display: block; transform-origin: center;
+  }
+  .selfview-label { font-size: var(--fs-xs); color: #334155; text-transform: uppercase; letter-spacing: 0.08em; padding: 0.15rem 0.75rem; }
+  .selfview-resize-handle { touch-action: none; }
 
   /* Interviewer screen preview */
   .interviewer-preview {
@@ -2253,6 +2349,12 @@
   .coaching-log {
     display: flex; flex-direction: column; gap: 0.3rem;
     padding: 0.25rem 0;
+  }
+  .coaching-log-sentiment {
+    margin-top: 0.5rem; padding-top: 0.5rem;
+    border-top: 1px solid #1e293b;
+    max-height: 14rem; overflow-y: auto;
+    resize: vertical; min-height: 4rem;
   }
   .coaching-log-entry {
     display: flex; flex-direction: column; gap: 0.1rem;
@@ -2284,6 +2386,13 @@
     font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.07em; color: #f59e0b; padding: 0.25rem 0.6rem;
   }
+
+  .rapport-coaching { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.35rem 0.5rem; background: #071a0f; border-left: 2px solid #14532d; border-radius: 0.25rem; margin-top: 0.35rem; }
+  .rapport-coaching-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #4ade80; }
+  .rapport-coaching-who { font-size: var(--fs-xs); color: #60a5fa; font-weight: 600; margin-top: 0.1rem; }
+  .rapport-coaching-tip { display: flex; flex-direction: column; gap: 0.05rem; }
+  .rapport-coaching-kw { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #4ade80; }
+  .rapport-coaching-text { font-size: var(--fs-sm); color: #94a3b8; line-height: 1.4; }
 
   .interviewer-coaching {
     display: flex;
@@ -2348,12 +2457,12 @@
     padding-left: 0.1rem;
   }
   .filler-tag {
-    font-size: var(--fs-sm); color: #78350f;
+    font-size: var(--fs-base); color: #92400e;
     background: #1c1006; border: 1px solid #78350f;
-    border-radius: 0.25rem; padding: 0.08rem 0.35rem;
+    border-radius: 0.25rem; padding: 0.1rem 0.5rem;
     white-space: nowrap;
   }
-  .filler-tag strong { color: #f59e0b; font-weight: 700; }
+  .filler-tag strong { color: #fbbf24; font-weight: 800; font-size: 1.05em; }
   .side-ratelimits { flex: 1; overflow-y: auto; min-height: 0; }
 
   /* Focus overlay */

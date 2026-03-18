@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 use common::messages::SetupPayload;
-use context::ai_helper::{generate_debrief, predict_questions, call_ai_simple, generate_company_brief, generate_interviewer_summary, extract_jd_keywords, assess_vocal_delivery};
+use context::ai_helper::{generate_debrief, predict_questions, call_ai_simple, generate_company_brief, generate_interviewer_summary, extract_jd_keywords, assess_vocal_delivery, AiConfig};
 use context::builder::build_system_prompt;
 use context::crawler::crawl_website;
 use context::linkedin::parse_all_linkedin_profiles;
@@ -40,6 +40,9 @@ pub async fn handle_setup_finalize(
             }
             "company_url" => {
                 payload.company_url = field.text().await.unwrap_or_default();
+            }
+            "portfolio_url" => {
+                payload.portfolio_url = field.text().await.unwrap_or_default();
             }
             "linkedin_text" => {
                 payload.linkedin_text = field.text().await.unwrap_or_default();
@@ -80,14 +83,26 @@ pub async fn handle_setup_finalize(
         }
     }
 
-    // Crawl company website
-    let company_info = if !payload.company_url.is_empty() {
-        crawl_website(&payload.company_url, 50)
-            .await
-            .unwrap_or_default()
-    } else {
-        String::new()
-    };
+    // Crawl company website and portfolio
+    let (company_info, portfolio_text) = tokio::join!(
+        async {
+            if !payload.company_url.is_empty() {
+                crawl_website(&payload.company_url, 50).await.unwrap_or_default()
+            } else { String::new() }
+        },
+        async {
+            let urls: Vec<&str> = payload.portfolio_url.lines()
+                .map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+            if urls.is_empty() { return String::new(); }
+            let mut parts = Vec::new();
+            for url in urls {
+                let text = crawl_website(url, 10).await.unwrap_or_default();
+                if !text.is_empty() { parts.push(text); }
+            }
+            parts.join("\n\n---\n\n")
+        }
+    );
+    payload.portfolio_text = portfolio_text;
 
     // Parse LinkedIn (supports multiple profiles separated by ---INTERVIEWER---)
     let interviewer_profiles = parse_all_linkedin_profiles(&payload.linkedin_text);
@@ -130,17 +145,32 @@ pub async fn handle_setup_finalize(
         prediction_context.push_str(&payload.interviewee_linkedin);
         prediction_context.push_str("\n\n");
     }
+    if !payload.portfolio_text.is_empty() {
+        prediction_context.push_str("PORTFOLIO / WEBSITE:\n");
+        prediction_context.push_str(&payload.portfolio_text);
+        prediction_context.push_str("\n\n");
+    }
     if !payload.extra_experience.is_empty() {
         prediction_context.push_str("ADDITIONAL EXPERIENCE:\n");
         prediction_context.push_str(&payload.extra_experience);
         prediction_context.push_str("\n\n");
     }
 
+    let cfg = AiConfig {
+        gemini_key: &state.gemini_key,
+        anthropic_key: state.anthropic_key.as_deref(),
+        groq_key: state.groq_key.as_deref(),
+        groq_key_2: state.groq_key_2.as_deref(),
+        ollama_url: &state.ollama_url,
+        ollama_model: &state.ollama_model,
+        usage: Some(state.call_counts.clone()),
+    };
+
     let (predicted_questions, company_brief, interviewer_summaries, jd_keywords) = tokio::join!(
-        predict_questions(&prediction_context, &state.gemini_key, state.anthropic_key.as_deref()),
-        generate_company_brief(&company_info, &state.gemini_key, state.anthropic_key.as_deref()),
-        generate_interviewer_summary(&payload.linkedin_text, &state.gemini_key, state.anthropic_key.as_deref()),
-        extract_jd_keywords(&payload.job_description, &state.gemini_key, state.anthropic_key.as_deref()),
+        predict_questions(&prediction_context, &cfg),
+        generate_company_brief(&company_info, &cfg),
+        generate_interviewer_summary(&payload.linkedin_text, &cfg),
+        extract_jd_keywords(&payload.job_description, &cfg),
     );
 
     let company_brief_opt = if company_brief.name.is_empty() { None } else { Some(company_brief) };
@@ -228,15 +258,19 @@ pub async fn handle_debrief(
         .collect::<Vec<_>>()
         .join("\n\n");
 
-    generate_debrief(
-        &transcript_text,
-        &suggestions_text,
-        &state.gemini_key,
-        state.anthropic_key.as_deref(),
-    )
-    .await
-    .map(Json)
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+    let cfg = AiConfig {
+        gemini_key: &state.gemini_key,
+        anthropic_key: state.anthropic_key.as_deref(),
+        groq_key: state.groq_key.as_deref(),
+        groq_key_2: state.groq_key_2.as_deref(),
+        ollama_url: &state.ollama_url,
+        ollama_model: &state.ollama_model,
+        usage: Some(state.call_counts.clone()),
+    };
+    generate_debrief(&transcript_text, &suggestions_text, &cfg)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
 #[derive(serde::Deserialize)]
@@ -255,15 +289,18 @@ pub async fn handle_practice_question(
 ) -> Result<Json<PracticeQuestionResponse>, (StatusCode, String)> {
     let sp = state.system_prompt.read().await.clone();
     let user_prompt = suggestion::prompt::build_user_prompt(&req.question, &[]);
-
-    let suggestion = call_ai_simple(
-        &sp,
-        &user_prompt,
-        &state.gemini_key,
-        state.anthropic_key.as_deref(),
-    )
-    .await
-    .unwrap_or_else(|_| "Could not generate hints at this time.".to_string());
+    let cfg = AiConfig {
+        gemini_key: &state.gemini_key,
+        anthropic_key: state.anthropic_key.as_deref(),
+        groq_key: state.groq_key.as_deref(),
+        groq_key_2: state.groq_key_2.as_deref(),
+        ollama_url: &state.ollama_url,
+        ollama_model: &state.ollama_model,
+        usage: Some(state.call_counts.clone()),
+    };
+    let suggestion = call_ai_simple(&cfg, &sp, &user_prompt)
+        .await
+        .unwrap_or_else(|_| "Could not generate hints at this time.".to_string());
 
     Ok(Json(PracticeQuestionResponse { suggestion }))
 }
@@ -279,16 +316,19 @@ pub async fn handle_answer_feedback(
     State(state): State<AppState>,
     Json(req): Json<AnswerFeedbackRequest>,
 ) -> Result<Json<context::ai_helper::AnswerFeedbackResult>, (StatusCode, String)> {
-    context::ai_helper::generate_answer_feedback(
-        &req.question,
-        &req.answer,
-        &req.suggestion,
-        &state.gemini_key,
-        state.anthropic_key.as_deref(),
-    )
-    .await
-    .map(Json)
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+    let cfg = AiConfig {
+        gemini_key: &state.gemini_key,
+        anthropic_key: state.anthropic_key.as_deref(),
+        groq_key: state.groq_key.as_deref(),
+        groq_key_2: state.groq_key_2.as_deref(),
+        ollama_url: &state.ollama_url,
+        ollama_model: &state.ollama_model,
+        usage: Some(state.call_counts.clone()),
+    };
+    context::ai_helper::generate_answer_feedback(&req.question, &req.answer, &req.suggestion, &cfg)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
 #[derive(serde::Deserialize)]
@@ -310,12 +350,16 @@ pub async fn handle_next_question(
         .collect::<Vec<_>>()
         .join("\n");
     let sp = state.system_prompt.read().await.clone();
-    let questions = context::ai_helper::predict_next_questions(
-        &transcript_text,
-        &sp,
-        &state.gemini_key,
-        state.anthropic_key.as_deref(),
-    ).await;
+    let cfg = AiConfig {
+        gemini_key: &state.gemini_key,
+        anthropic_key: state.anthropic_key.as_deref(),
+        groq_key: state.groq_key.as_deref(),
+        groq_key_2: state.groq_key_2.as_deref(),
+        ollama_url: &state.ollama_url,
+        ollama_model: &state.ollama_model,
+        usage: Some(state.call_counts.clone()),
+    };
+    let questions = context::ai_helper::predict_next_questions(&transcript_text, &sp, &cfg).await;
     Ok(Json(NextQuestionResponse { questions }))
 }
 
@@ -328,11 +372,16 @@ pub async fn handle_salary_coach(
     State(state): State<AppState>,
     Json(req): Json<SalaryCoachRequest>,
 ) -> Result<Json<context::ai_helper::SalaryTactics>, (StatusCode, String)> {
-    let tactics = context::ai_helper::generate_salary_tactics(
-        &req.role_context,
-        &state.gemini_key,
-        state.anthropic_key.as_deref(),
-    ).await;
+    let cfg = AiConfig {
+        gemini_key: &state.gemini_key,
+        anthropic_key: state.anthropic_key.as_deref(),
+        groq_key: state.groq_key.as_deref(),
+        groq_key_2: state.groq_key_2.as_deref(),
+        ollama_url: &state.ollama_url,
+        ollama_model: &state.ollama_model,
+        usage: Some(state.call_counts.clone()),
+    };
+    let tactics = context::ai_helper::generate_salary_tactics(&req.role_context, &cfg).await;
     Ok(Json(tactics))
 }
 
@@ -347,13 +396,16 @@ pub async fn handle_score_practice(
     Json(req): Json<ScorePracticeRequest>,
 ) -> Result<Json<context::ai_helper::PracticeScore>, (StatusCode, String)> {
     let sp = state.system_prompt.read().await.clone();
-    let score = context::ai_helper::score_practice_answer(
-        &req.question,
-        &req.answer,
-        &sp,
-        &state.gemini_key,
-        state.anthropic_key.as_deref(),
-    ).await;
+    let cfg = AiConfig {
+        gemini_key: &state.gemini_key,
+        anthropic_key: state.anthropic_key.as_deref(),
+        groq_key: state.groq_key.as_deref(),
+        groq_key_2: state.groq_key_2.as_deref(),
+        ollama_url: &state.ollama_url,
+        ollama_model: &state.ollama_model,
+        usage: Some(state.call_counts.clone()),
+    };
+    let score = context::ai_helper::score_practice_answer(&req.question, &req.answer, &sp, &cfg).await;
     Ok(Json(score))
 }
 
@@ -375,11 +427,16 @@ pub async fn handle_next_steps(
         .map(|e| format!("{}: {}", e.speaker, e.text))
         .collect::<Vec<_>>()
         .join("\n");
-    let steps = context::ai_helper::extract_next_steps(
-        &transcript_text,
-        &state.gemini_key,
-        state.anthropic_key.as_deref(),
-    ).await;
+    let cfg = AiConfig {
+        gemini_key: &state.gemini_key,
+        anthropic_key: state.anthropic_key.as_deref(),
+        groq_key: state.groq_key.as_deref(),
+        groq_key_2: state.groq_key_2.as_deref(),
+        ollama_url: &state.ollama_url,
+        ollama_model: &state.ollama_model,
+        usage: Some(state.call_counts.clone()),
+    };
+    let steps = context::ai_helper::extract_next_steps(&transcript_text, &cfg).await;
     Ok(Json(NextStepsResponse { steps }))
 }
 
@@ -397,15 +454,18 @@ pub async fn handle_vocal_sentiment(
     State(state): State<AppState>,
     Json(req): Json<VocalSentimentRequest>,
 ) -> Result<Json<context::ai_helper::VocalSentiment>, (StatusCode, String)> {
+    let cfg = AiConfig {
+        gemini_key: &state.gemini_key,
+        anthropic_key: state.anthropic_key.as_deref(),
+        groq_key: state.groq_key.as_deref(),
+        groq_key_2: state.groq_key_2.as_deref(),
+        ollama_url: &state.ollama_url,
+        ollama_model: &state.ollama_model,
+        usage: Some(state.call_counts.clone()),
+    };
     let result = assess_vocal_delivery(
-        &req.question,
-        &req.transcript,
-        req.duration_seconds,
-        req.word_count,
-        req.filler_count,
-        &req.filler_detail,
-        &state.gemini_key,
-        state.anthropic_key.as_deref(),
+        &req.question, &req.transcript, req.duration_seconds,
+        req.word_count, req.filler_count, &req.filler_detail, &cfg,
     ).await;
     Ok(Json(result))
 }
@@ -429,14 +489,18 @@ pub async fn handle_keyword_definition(
         "The candidate needs to understand the keyword: \"{}\"\n\nWrite exactly 1 sentence (max 20 words) explaining what this means for this specific role. No hashtags. No markdown. No bullet points. Plain sentence only.",
         req.keyword
     );
-    let definition = call_ai_simple(
-        &sp,
-        &user_prompt,
-        &state.gemini_key,
-        state.anthropic_key.as_deref(),
-    )
-    .await
-    .unwrap_or_else(|_| format!("A key skill or concept relevant to this role: {}.", req.keyword));
+    let cfg = AiConfig {
+        gemini_key: &state.gemini_key,
+        anthropic_key: state.anthropic_key.as_deref(),
+        groq_key: state.groq_key.as_deref(),
+        groq_key_2: state.groq_key_2.as_deref(),
+        ollama_url: &state.ollama_url,
+        ollama_model: &state.ollama_model,
+        usage: Some(state.call_counts.clone()),
+    };
+    let definition = call_ai_simple(&cfg, &sp, &user_prompt)
+        .await
+        .unwrap_or_else(|_| format!("A key skill or concept relevant to this role: {}.", req.keyword));
     Ok(Json(KeywordDefinitionResponse { definition }))
 }
 
@@ -456,17 +520,35 @@ pub async fn handle_expand_cue(
     Json(req): Json<ExpandCueRequest>,
 ) -> Result<Json<ExpandCueResponse>, (StatusCode, String)> {
     let sp = state.system_prompt.read().await.clone();
+    let context_line = if sp.is_empty() {
+        String::new()
+    } else {
+        format!("Candidate background:\n{}\n\n", &sp[..sp.len().min(800)])
+    };
     let user_prompt = format!(
-        "Interview question: \"{}\"\nTalking point cue: \"{}\"\n\nExpand this cue into 1-2 short spoken sentences the candidate can say out loud. Each sentence must be under 12 words. Sound natural and conversational, not rehearsed. No filler phrases. Output only the sentences, nothing else.",
-        req.question, req.cue
+        "{}Interview question: \"{}\"\nTalking point cue: \"{}\"\n\nIMPORTANT: Output ONLY the spoken sentences. No intro, no preamble, no framing like 'Here are...' or 'Sure!' or 'Certainly!' — the first word of output must be 'I'.\n\nExpand this cue into 2-3 short spoken sentences. Output each sentence on its own line.\nRules:\n- Every sentence starts with 'I'\n- Every sentence is max 10 words\n- Multiple short sentences are better than one long sentence\n- Grammatically correct and natural to say out loud\n- No adjectives or adverbs — facts and actions only\n- No 'utilize' — use 'use' instead\n- OUTCOME FIRST: State the result or business outcome before the method. Say what you achieved, then how. Example: 'I cut CPA 30% by restructuring bidding.' NOT 'I restructured bidding to cut CPA 30%.'\n- If the cue is an [Example], tell the brief story (situation, action, result) in short 'I' sentences — result sentence comes last\n- If the cue is a [General Answer], lead with the outcome, then the method\n- Use ONLY facts from the candidate background — never invent companies, roles, metrics, or industries\n- Do not include any help text, labels, or instructions in the output",
+        context_line, req.question, req.cue
     );
-    let sentence = call_ai_simple(
-        &sp,
-        &user_prompt,
-        &state.gemini_key,
-        state.anthropic_key.as_deref(),
-    )
-    .await
-    .unwrap_or_else(|_| req.cue.clone());
+    let cfg = AiConfig {
+        gemini_key: &state.gemini_key,
+        anthropic_key: state.anthropic_key.as_deref(),
+        groq_key: state.groq_key.as_deref(),
+        groq_key_2: state.groq_key_2.as_deref(),
+        ollama_url: &state.ollama_url,
+        ollama_model: &state.ollama_model,
+        usage: Some(state.call_counts.clone()),
+    };
+    let sentence = call_ai_simple(&cfg, &sp, &user_prompt)
+        .await
+        .unwrap_or_else(|_| req.cue.clone());
     Ok(Json(ExpandCueResponse { sentence }))
+}
+
+pub async fn handle_usage(
+    State(state): State<AppState>,
+) -> Json<std::collections::HashMap<String, u64>> {
+    let map = state.call_counts.lock()
+        .map(|m| m.clone())
+        .unwrap_or_default();
+    Json(map)
 }

@@ -37,65 +37,67 @@ async fn suggest_with_fallback(
     cerebras_key: Option<&str>,
     qwen_key: Option<&str>,
     ollama_url: &str,
-    ollama_model: &str,
+    ollama_models: &[String],
     system_prompt: &str,
     user_prompt: &str,
     rate_limiter: &RateLimiter,
     event_tx: broadcast::Sender<WsEvent>,
 ) -> anyhow::Result<()> {
-    // 1. Claude — primary when key available; fast, high quality, separate quota
+    // 1. Claude Haiku — primary, high quality
     if let Some(key) = anthropic_key {
         try_provider!("Claude",
             claude_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
             event_tx, ());
     }
 
-    // 2. OpenRouter — no daily cap, just RPM throttled
-    if let Some(key) = openrouter_key {
-        try_provider!("OpenRouter",
-            openrouter_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
-            event_tx, ());
-    }
-
-    // 3. Qwen (DashScope) — generous free tier for qwen-turbo
-    if let Some(key) = qwen_key {
-        try_provider!("Qwen",
-            qwen_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
-            event_tx, ());
-    }
-
-    // 4. Cerebras — fast free Llama, generous free tier
-    if let Some(key) = cerebras_key {
-        try_provider!("Cerebras",
-            cerebras_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
-            event_tx, ());
-    }
-
-    // 5. Mistral — free tier mistral-small
-    if let Some(key) = mistral_key {
-        try_provider!("Mistral",
-            mistral_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
-            event_tx, ());
-    }
-
-    // 6. Groq key 1 — 1,000 req/day LLM limit; saved here since Whisper uses a separate quota
+    // 2. Groq key 1 — fast fallback
     if let Some(key) = groq_key {
         try_provider!("Groq key 1",
             groq_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
             event_tx, ());
     }
 
-    // 6b. Groq key 2 — higher-limit secondary key
+    // 3. Groq key 2 — higher-limit secondary key
     if let Some(key) = groq_key_2 {
         try_provider!("Groq key 2",
             groq_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
             event_tx, ());
     }
 
-    // 7. Ollama — local model, always free, no rate limit; silently skip if not running
-    match ollama_llm::stream_suggestions(ollama_url, ollama_model, system_prompt, user_prompt, event_tx.clone()).await {
-        Ok(()) => return Ok(()),
-        Err(e) => tracing::warn!("Ollama suggestions unavailable, trying Gemini: {}", e),
+    // 4. Cerebras — wafer-scale fast inference
+    if let Some(key) = cerebras_key {
+        try_provider!("Cerebras",
+            cerebras_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
+            event_tx, ());
+    }
+
+    // 5. OpenRouter — no daily cap, just RPM throttled
+    if let Some(key) = openrouter_key {
+        try_provider!("OpenRouter",
+            openrouter_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
+            event_tx, ());
+    }
+
+    // 6. Qwen (DashScope) — generous free tier for qwen-turbo
+    if let Some(key) = qwen_key {
+        try_provider!("Qwen",
+            qwen_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
+            event_tx, ());
+    }
+
+    // 7. Mistral — free tier mistral-small
+    if let Some(key) = mistral_key {
+        try_provider!("Mistral",
+            mistral_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
+            event_tx, ());
+    }
+
+    // 7. Ollama — try each configured model in order (fastest first)
+    for model in ollama_models {
+        match ollama_llm::stream_suggestions(ollama_url, model, system_prompt, user_prompt, event_tx.clone()).await {
+            Ok(()) => return Ok(()),
+            Err(e) => tracing::warn!("Ollama {} unavailable, trying next: {}", model, e),
+        }
     }
 
     // 8. Gemini — absolute last resort, keep credits for sentiment analysis
@@ -123,7 +125,7 @@ pub async fn run_agent(
     cerebras_key: Option<String>,
     qwen_key: Option<String>,
     ollama_url: String,
-    ollama_model: String,
+    ollama_models: Vec<String>,
     rate_limiter: RateLimiter,
 ) {
     loop {
@@ -138,7 +140,7 @@ pub async fn run_agent(
                 let ckey = cerebras_key.clone();
                 let qkey = qwen_key.clone();
                 let ourl = ollama_url.clone();
-                let omodel = ollama_model.clone();
+                let omodels = ollama_models.clone();
                 let etx = event_tx.clone();
                 let sp = system_prompt.read().await.clone();
                 let tr = transcript.read().await.clone();
@@ -158,7 +160,7 @@ pub async fn run_agent(
                         ckey.as_deref(),
                         qkey.as_deref(),
                         &ourl,
-                        &omodel,
+                        &omodels,
                         &sp,
                         &user_prompt,
                         &rl,

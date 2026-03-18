@@ -5,7 +5,10 @@
     history: Array<{ r: number; t: number }>;
   }
 
-  const { rateLimits } = $props<{ rateLimits: Record<string, RateLimitEntry> }>();
+  const { rateLimits, callCounts = {} } = $props<{
+    rateLimits: Record<string, RateLimitEntry>;
+    callCounts?: Record<string, number>;
+  }>();
 
   function pct(entry: RateLimitEntry) {
     return entry.limit > 0 ? (entry.remaining / entry.limit) * 100 : 0;
@@ -65,6 +68,17 @@
                 usage rate: tracking...
               {/if}
             </span>
+          </div>
+          {#if callCounts[provider] != null}
+            <div class="call-count">{callCounts[provider]} call{callCounts[provider] !== 1 ? 's' : ''} this session</div>
+          {/if}
+        </div>
+      {/each}
+      {#each Object.entries(callCounts).filter(([p]) => !rateLimits[p]) as [provider, count]}
+        <div class="provider-row provider-row-counts-only">
+          <div class="provider-header">
+            <span class="provider-name">{provider}</span>
+            <span class="counts">{count} call{count !== 1 ? 's' : ''}</span>
           </div>
         </div>
       {/each}
@@ -139,4 +153,6 @@
     color: #64748b;
     font-variant-numeric: tabular-nums;
   }
+  .call-count { font-size: var(--fs-xs); color: #475569; }
+  .provider-row-counts-only { border-color: #1e293b; opacity: 0.7; }
 </style>

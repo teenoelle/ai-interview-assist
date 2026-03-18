@@ -42,6 +42,13 @@ pub fn build_system_prompt(
         prompt.push_str("\n\n");
     }
 
+    if !payload.portfolio_text.is_empty() {
+        prompt.push_str("## Candidate Portfolio / Personal Website\n");
+        let portfolio_preview = trunc(&payload.portfolio_text, 5000);
+        prompt.push_str(portfolio_preview);
+        prompt.push_str("\n\n");
+    }
+
     if !payload.extra_experience.is_empty() {
         prompt.push_str("## Additional Experience / Notes\n");
         prompt.push_str(&payload.extra_experience);

@@ -18,6 +18,7 @@ BUILD COMMANDS
 continue where i left off:
 --resume
 
+cd "D:\tee\work\code\ai interview assist"
 claude --dangerously-skip-permissions
 
 read the files in this project to understand the current state of the codebase.
@@ -61,4 +62,18 @@ Then to run the tests:
   .\run_tests.ps1 -Integration
 
 cd "D:\tee\work\code\ai interview assist\backend" && cargo test --workspace --quiet       2>&1
+
+
+
+
+Here's the full suggestion structure with names:
+
+  Main sections (top-level blocks):                                                                                       1. Acknowledge — the empathy opener ("I understand that you're looking for...")
+  2. Answer — the 1-2 sentence spoken response starting with "I"                                                          3. Cues — the bullet hints below Answer (General Answer / Example / Story points)
+  4. Ask — the follow-up questions                                                                                                                                                                                                                Within Cues:                                                                                                            - Cue hint — the short 2-3 word fragment shown collapsed (e.g. "Audience before channel")                               - Cue label / badge — the tag showing the type: General Answer, Example, or Story                                       - Expanded sentence — the full white text shown when you click a cue
+                                                                                                                          Within Ask:                                                                                                             - Ask topic — the short 2-4 word hint shown in the row (e.g. "Team structure")                                          - Ask sentence / Ask question — the full white sentence shown below the topic                                         
+  Other terms:                                                                                                            - Teleprompter — the main interview view (right panel during live interview)
+  - Practice panel — the practice mode view                                                                             
+  So for example you could say: "the cue hint text is too long", "the ask topic is unclear", "the expanded sentence font   is too small", or "the General Answer badge should be blue" — and I'd know exactly what you mean.  
+
 

@@ -3,6 +3,7 @@ export const SK = {
   colLeft: 'col-left',
   colHist: 'col-hist',
   colCenter: 'col-center',
+  colRight: 'col-right',
   rightPanelOrder: 'right-panel-order',
   sectionLayout: 'section-layout',
   collapsedSections: 'collapsed-sections',

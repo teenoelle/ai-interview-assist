@@ -12,7 +12,7 @@ export interface InterviewerSummary {
   role: string;
   background: string;
   tenure: string;
-  rapport_tip: string;
+  rapport_tips: string[];
 }
 
 export interface SetupResponse {
@@ -35,4 +35,12 @@ export async function submitSetup(formData: FormData): Promise<SetupResponse> {
     throw new Error(`Setup failed: ${resp.status} ${text}`);
   }
   return resp.json();
+}
+
+export async function fetchUsage(): Promise<Record<string, number>> {
+  try {
+    const resp = await fetch('/api/usage');
+    if (resp.ok) return resp.json();
+  } catch {}
+  return {};
 }

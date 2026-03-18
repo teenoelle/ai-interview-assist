@@ -14,9 +14,12 @@ pub struct Config {
     pub whisper_model: String,
     pub ollama_url: String,
     pub ollama_model: String,
+    pub ollama_models: Vec<String>,  // suggestion fallback chain (may include multiple)
     pub ollama_vision_model: String,
     pub diarize_url: Option<String>,
     pub port: u16,
+    pub piper_binary: Option<String>,
+    pub piper_models_dir: Option<String>,
 }
 
 impl Config {
@@ -39,7 +42,10 @@ impl Config {
         let ollama_url = std::env::var("OLLAMA_URL")
             .unwrap_or_else(|_| "http://localhost:11434".to_string());
         let ollama_model = std::env::var("OLLAMA_MODEL")
-            .unwrap_or_else(|_| "llama3.2".to_string());
+            .unwrap_or_else(|_| "llama3.2:latest".to_string());
+        let ollama_models = std::env::var("OLLAMA_MODELS")
+            .map(|s| s.split(',').map(|m| m.trim().to_string()).filter(|m| !m.is_empty()).collect::<Vec<_>>())
+            .unwrap_or_else(|_| vec![ollama_model.clone()]);
         let ollama_vision_model = std::env::var("OLLAMA_VISION_MODEL")
             .unwrap_or_else(|_| "llava".to_string());
         // Diarization sidecar — optional; defaults to localhost:8001 if HF_TOKEN is set
@@ -55,6 +61,8 @@ impl Config {
             .unwrap_or_else(|_| "3000".to_string())
             .parse::<u16>()
             .context("PORT must be a valid number")?;
-        Ok(Self { gemini_api_key, groq_api_key, groq_api_key_2, openrouter_api_key, mistral_api_key, cerebras_api_key, anthropic_api_key, qwen_api_key, whisper_url, whisper_model, ollama_url, ollama_model, ollama_vision_model, diarize_url, port })
+        let piper_binary = std::env::var("PIPER_BINARY").ok().filter(|s| !s.is_empty());
+        let piper_models_dir = std::env::var("PIPER_MODELS_DIR").ok().filter(|s| !s.is_empty());
+        Ok(Self { gemini_api_key, groq_api_key, groq_api_key_2, openrouter_api_key, mistral_api_key, cerebras_api_key, anthropic_api_key, qwen_api_key, whisper_url, whisper_model, ollama_url, ollama_model, ollama_models, ollama_vision_model, diarize_url, port, piper_binary, piper_models_dir })
     }
 }

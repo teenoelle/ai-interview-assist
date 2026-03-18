@@ -3,8 +3,7 @@
   import { saveKeywords } from '../lib/keywordTracker';
   import CompanyBriefPanel from './CompanyBriefPanel.svelte';
   import InterviewerProfilePanel from './InterviewerProfilePanel.svelte';
-  import StoryBankPanel from './StoryBankPanel.svelte';
-
+  import KeywordTrackerPanel from './KeywordTrackerPanel.svelte';
   function load(key: string, fallback: string) { return localStorage.getItem(key) ?? fallback; }
   function loadArr(key: string, fallback: string[]): string[] {
     try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
@@ -14,6 +13,7 @@
   let companyUrl = $state(load('setup-company-url', ''));
   let interviewers = $state<string[]>(loadArr('setup-interviewers', ['']));
   let intervieweeLinkedin = $state(load('setup-interviewee-linkedin', ''));
+  let portfolioUrls = $state<string[]>(loadArr('setup-portfolio-urls', ['']));
   let extraExperience = $state(load('setup-extra-experience', ''));
   let cvFile: File | null = $state(null);
   let extraFile: File | null = $state(null);
@@ -22,19 +22,23 @@
   $effect(() => { localStorage.setItem('setup-company-url', companyUrl); });
   $effect(() => { localStorage.setItem('setup-interviewers', JSON.stringify(interviewers)); });
   $effect(() => { localStorage.setItem('setup-interviewee-linkedin', intervieweeLinkedin); });
+  $effect(() => { localStorage.setItem('setup-portfolio-urls', JSON.stringify(portfolioUrls)); });
   $effect(() => { localStorage.setItem('setup-extra-experience', extraExperience); });
   let loading = $state(false);
   let loadingStep = $state('');
   let error = $state('');
   let formEl: HTMLDivElement | undefined = $state();
-  let systemPromptPreview = $state('');
-  let predictedQuestions = $state<string[]>([]);
-  let companyBrief = $state<CompanyBrief | null>(null);
-  let interviewerSummaries = $state<InterviewerSummary[]>([]);
-  let jdKeywords = $state<string[]>([]);
-  let setupDone = $state(false);
-  let activeTab = $state<'overview' | 'stories'>('overview');
 
+  // Restore previous results so back-navigation preserves the overview
+  function loadSaved<T>(key: string, fallback: T): T {
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+  }
+  let systemPromptPreview = $state(loadSaved('setup-system-prompt-preview', ''));
+  let predictedQuestions = $state<string[]>(loadSaved('setup-predicted-questions', []));
+  let companyBrief = $state<CompanyBrief | null>(loadSaved('setup-company-brief', null));
+  let interviewerSummaries = $state<InterviewerSummary[]>(loadSaved('setup-interviewer-summaries', []));
+  let jdKeywords = $state<string[]>(loadSaved('setup-jd-keywords-result', []));
+  let setupDone = $state(loadSaved<boolean>('setup-done', false));
   const props = $props<{
     onSetupComplete: (data?: { companyBrief?: any; interviewerSummaries?: any[]; jdKeywords?: string[] }) => void;
     onPractice: (questions: string[]) => void;
@@ -69,6 +73,15 @@
     interviewers = interviewers.map((v, idx) => idx === i ? val : v);
   }
 
+  function addPortfolio() { portfolioUrls = [...portfolioUrls, '']; }
+  function removePortfolio(i: number) {
+    portfolioUrls = portfolioUrls.filter((_, idx) => idx !== i);
+    if (portfolioUrls.length === 0) portfolioUrls = [''];
+  }
+  function updatePortfolio(i: number, val: string) {
+    portfolioUrls = portfolioUrls.map((v, idx) => idx === i ? val : v);
+  }
+
   async function handleSubmit() {
     loading = true;
     error = '';
@@ -84,6 +97,8 @@
         .join('\n\n---INTERVIEWER---\n\n');
       formData.append('linkedin_text', linkedinText);
       formData.append('interviewee_linkedin', intervieweeLinkedin);
+      const portfolioText = portfolioUrls.filter(u => u.trim()).join('\n');
+      if (portfolioText) formData.append('portfolio_url', portfolioText);
 
       formData.append('extra_experience', extraExperience);
       if (cvFile) formData.append('cv_file', cvFile);
@@ -98,6 +113,13 @@
       jdKeywords = result.jd_keywords ?? [];
       if (jdKeywords.length > 0) saveKeywords(jdKeywords);
       setupDone = true;
+      // Persist so back-navigation restores the overview
+      localStorage.setItem('setup-system-prompt-preview', JSON.stringify(systemPromptPreview));
+      localStorage.setItem('setup-predicted-questions', JSON.stringify(predictedQuestions));
+      localStorage.setItem('setup-company-brief', JSON.stringify(companyBrief));
+      localStorage.setItem('setup-interviewer-summaries', JSON.stringify(interviewerSummaries));
+      localStorage.setItem('setup-jd-keywords-result', JSON.stringify(jdKeywords));
+      localStorage.setItem('setup-done', JSON.stringify(true));
     } catch (e) {
       error = String(e);
       formEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -128,18 +150,9 @@
 
   {#if setupDone}
     <div class="post-setup">
-      <div class="setup-success">
-        ✓ Setup complete — review your brief below, then start the interview
-      </div>
+      <div class="setup-success">✓ Setup complete — review your brief below, then start the interview</div>
 
-      <!-- Tab bar -->
-      <div class="tab-bar">
-        <button class="tab" class:tab-active={activeTab === 'overview'} onclick={() => activeTab = 'overview'}>Overview</button>
-        <button class="tab" class:tab-active={activeTab === 'stories'} onclick={() => activeTab = 'stories'}>Story Bank</button>
-      </div>
-
-      {#if activeTab === 'overview'}
-        {#if companyBrief}
+      {#if companyBrief}
           <CompanyBriefPanel brief={companyBrief} />
         {/if}
 
@@ -153,19 +166,19 @@
         {#if jdKeywords.length > 0}
           <div class="section-block">
             <div class="section-block-label">Keywords to mention</div>
-            <div class="keyword-chips">
-              {#each jdKeywords as kw}
-                <span class="kw-chip">{kw}</span>
-              {/each}
-            </div>
+            <KeywordTrackerPanel keywords={jdKeywords} mentionedSet={new Set()} />
           </div>
         {/if}
 
         {#if predictedQuestions.length > 0}
+          {@const firstIsQuestion = predictedQuestions[0]?.includes('?')}
           <div class="predicted">
             <h3>Predicted Interview Questions</h3>
+            {#if !firstIsQuestion && predictedQuestions.length > 1}
+              <p class="predicted-context">{predictedQuestions[0]}</p>
+            {/if}
             <ol class="questions-list">
-              {#each predictedQuestions as q}
+              {#each (firstIsQuestion ? predictedQuestions : predictedQuestions.slice(1)) as q}
                 <li>{q}</li>
               {/each}
             </ol>
@@ -178,13 +191,13 @@
             <pre>{systemPromptPreview}</pre>
           </details>
         {/if}
-      {:else}
-        <StoryBankPanel mode="setup" />
-      {/if}
 
       <div class="action-row">
-        <button onclick={startInterview} class="btn-primary">Start Interview →</button>
-        <button onclick={startPractice} class="btn-secondary">Practice First</button>
+        <button onclick={() => { setupDone = false; }} class="btn-back">← Edit Setup</button>
+        <div class="action-row-right">
+          <button onclick={startPractice} class="btn-secondary">Practice First</button>
+          <button onclick={startInterview} class="btn-primary">Start Interview →</button>
+        </div>
       </div>
     </div>
   {:else}
@@ -193,7 +206,7 @@
       <textarea
         id="job-desc"
         bind:value={jobDescription}
-        rows={6}
+        rows={4}
         placeholder="Paste the full job description here..."
       ></textarea>
     </div>
@@ -221,7 +234,7 @@
           {/if}
           <div class="interviewer-row">
             <textarea
-              rows={4}
+              rows={3}
               value={text}
               oninput={(e) => updateInterviewer(i, (e.target as HTMLTextAreaElement).value)}
               placeholder="Paste the interviewer's LinkedIn profile text here..."
@@ -246,10 +259,32 @@
       <textarea
         id="interviewee-linkedin"
         bind:value={intervieweeLinkedin}
-        rows={4}
+        rows={3}
         placeholder="Paste your own LinkedIn profile text here so the AI knows your background in depth..."
       ></textarea>
       <small>Helps the AI reference your experience accurately when coaching your answers</small>
+    </div>
+
+    <div class="field">
+      <div class="field-header">
+        <span class="field-label">Portfolio / Personal Website(s)</span>
+        <button type="button" class="btn-add" onclick={addPortfolio}>+ Add URL</button>
+      </div>
+      {#each portfolioUrls as url, i (i)}
+        <div class="portfolio-row">
+          <input
+            type="url"
+            value={url}
+            oninput={(e) => updatePortfolio(i, (e.target as HTMLInputElement).value)}
+            placeholder="https://yourportfolio.com"
+            class="portfolio-input"
+          />
+          {#if portfolioUrls.length > 1}
+            <button type="button" class="btn-remove" onclick={() => removePortfolio(i)}>✕</button>
+          {/if}
+        </div>
+      {/each}
+      <small>We'll crawl each URL to help the AI reference your projects and experience accurately</small>
     </div>
 
     <div class="field">
@@ -257,7 +292,7 @@
       <textarea
         id="extra"
         bind:value={extraExperience}
-        rows={4}
+        rows={3}
         placeholder="Add any extra context, achievements, or talking points..."
       ></textarea>
       <div class="file-row">
@@ -278,11 +313,13 @@
 </div>
 
 <style>
-  .setup-form { max-width: 720px; margin: 0 auto; padding: 2rem; scroll-margin-top: 1rem; }
+  .setup-form { max-width: 720px; margin: 0 auto; padding: 1rem 2rem 2rem; scroll-margin-top: 1rem; }
   .setup-success {
     padding: 0.75rem 1rem; background: #052e16; border: 1px solid #166534;
     border-radius: 0.5rem; color: #4ade80; font-size: 0.875rem; font-weight: 500;
   }
+  .btn-back { background: none; border: 1px solid #1e293b; color: #60a5fa; font-size: var(--fs-sm); font-weight: 600; cursor: pointer; padding: 0.5rem 1rem; border-radius: 0.5rem; white-space: nowrap; }
+  .btn-back:hover { border-color: #60a5fa; }
   .loading-note { margin-top: 0.5rem; color: #64748b; font-size: var(--fs-base); }
   h2 { font-size: 1.75rem; margin-bottom: 0.5rem; color: #f1f5f9; }
   .subtitle { color: #94a3b8; margin-bottom: 2rem; }
@@ -300,13 +337,19 @@
     width: 100%; padding: 0.75rem;
     background: #1e293b; border: 1px solid #334155;
     border-radius: 0.5rem; color: #e2e8f0;
-    font-size: var(--fs-base); resize: vertical;
+    font-size: var(--fs-base);
+  }
+  textarea {
+    resize: vertical;
+    min-height: 5rem;
   }
   input[type='file'] { color: #94a3b8; }
   .file-row { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem; flex-wrap: wrap; }
   .file-label { font-size: var(--fs-base); color: #64748b; white-space: nowrap; }
   .file-chosen { font-size: var(--fs-base); color: #60a5fa; }
   small { display: block; margin-top: 0.25rem; color: #64748b; font-size: var(--fs-base); }
+  .portfolio-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem; }
+  .portfolio-input { flex: 1; padding: 0.5rem 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; color: #e2e8f0; font-size: var(--fs-base); }
   .interviewer-entry { margin-bottom: 0.75rem; }
   .interviewer-label { font-size: var(--fs-sm); color: #60a5fa; font-weight: 600; margin-bottom: 0.25rem; }
   .interviewer-row { display: flex; gap: 0.5rem; align-items: flex-start; }
@@ -344,19 +387,15 @@
   .btn-primary:hover:not(:disabled) { background: #2563eb; }
   .btn-primary:disabled { background: #1e3a5f; cursor: not-allowed; }
   .post-setup { display: flex; flex-direction: column; gap: 1.25rem; }
-  .tab-bar { display: flex; gap: 0.25rem; border-bottom: 1px solid #1e293b; padding-bottom: 0.5rem; }
-  .tab { padding: 0.3rem 0.9rem; background: transparent; border: 1px solid #1e293b; border-radius: 0.375rem; color: #475569; font-size: var(--fs-base); cursor: pointer; transition: all 0.15s; }
-  .tab:hover { border-color: #334155; color: #94a3b8; }
-  .tab.tab-active { background: #1e293b; border-color: #334155; color: #e2e8f0; }
   .section-block { display: flex; flex-direction: column; gap: 0.4rem; }
   .section-block-label { font-size: var(--fs-sm); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #475569; }
-  .keyword-chips { display: flex; flex-wrap: wrap; gap: 0.3rem 0.4rem; }
-  .kw-chip { font-size: var(--fs-sm); padding: 0.15rem 0.5rem; background: #0f172a; border: 1px solid #1e293b; border-radius: 9999px; color: #60a5fa; }
   .predicted { background: #1e293b; border-radius: 0.5rem; padding: 1.25rem; }
-  .predicted h3 { font-size: var(--fs-base); color: #60a5fa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.75rem; }
+  .predicted h3 { font-size: var(--fs-base); color: #60a5fa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.5rem; }
+  .predicted-context { font-size: var(--fs-sm); color: #64748b; font-style: italic; margin: 0 0 0.75rem; }
   .questions-list { margin: 0; padding-left: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
   .questions-list li { color: #cbd5e1; font-size: var(--fs-base); line-height: 1.5; }
-  .action-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .action-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; border-top: 1px solid #1e293b; padding-top: 1.25rem; margin-top: 0.5rem; }
+  .action-row-right { display: flex; align-items: center; gap: 0.75rem; margin-left: auto; }
   .btn-secondary {
     padding: 0.75rem 2rem; background: transparent; color: #60a5fa;
     border: 2px solid #3b82f6; border-radius: 0.5rem; font-size: 1rem;

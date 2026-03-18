@@ -43,8 +43,7 @@ export interface SuggestionEntry {
   streaming: boolean;
   tag?: QuestionTag;
   redFlag?: RedFlag;
-  matchedStories?: { id: string; title: string; result: string }[];
-  answerFeedback?: AnswerFeedback;
+answerFeedback?: AnswerFeedback;
   vocalFeedback?: VocalSentiment;
   confidenceScore?: number;
   matchedKeywords?: string[];

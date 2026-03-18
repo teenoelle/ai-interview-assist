@@ -17,10 +17,10 @@ export function tagQuestion(q: string): QuestionTag {
 }
 
 export const TAG_CONFIG: Record<QuestionTag, { label: string; color: string; bg: string }> = {
-  behavioral: { label: 'Story',     color: '#a78bfa', bg: '#1a0f33' },
-  technical:  { label: 'Technical', color: '#60a5fa', bg: '#0a1525' },
-  culture:    { label: 'Culture',   color: '#34d399', bg: '#0a1f15' },
-  salary:     { label: 'Salary',    color: '#fbbf24', bg: '#1a1200' },
-  closing:    { label: 'Closing',   color: '#94a3b8', bg: '#0f172a' },
-  general:    { label: 'General',   color: '#64748b', bg: '#0d1117' },
+  behavioral: { label: 'Q: Story',     color: '#a78bfa', bg: '#1a0f33' },
+  technical:  { label: 'Q: Technical', color: '#60a5fa', bg: '#0a1525' },
+  culture:    { label: 'Q: Culture',   color: '#34d399', bg: '#0a1f15' },
+  salary:     { label: 'Q: Salary',    color: '#fbbf24', bg: '#1a1200' },
+  closing:    { label: 'Q: Closing',   color: '#94a3b8', bg: '#0f172a' },
+  general:    { label: 'Q: General',   color: '#64748b', bg: '#0d1117' },
 };

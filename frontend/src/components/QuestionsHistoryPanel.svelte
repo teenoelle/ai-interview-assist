@@ -2,11 +2,20 @@
   import type { SuggestionEntry } from '../lib/types';
   import { TAG_CONFIG } from '../lib/questionTagger';
 
-  const { suggestions, currentIndex, onJump } = $props<{
+  const { suggestions, currentIndex, onJump, scrollToLatestKey = 0 } = $props<{
     suggestions: SuggestionEntry[];
     currentIndex: number;
     onJump: (i: number) => void;
+    scrollToLatestKey?: number;
   }>();
+
+  let listEl: HTMLElement | undefined = $state();
+
+  $effect(() => {
+    if (scrollToLatestKey && listEl) {
+      listEl.scrollTop = listEl.scrollHeight;
+    }
+  });
 
   function shortQ(q: string, max = 55): string {
     return q.length > max ? q.slice(0, max) + '…' : q;
@@ -17,7 +26,7 @@
   {#if suggestions.length === 0}
     <p class="qhist-empty">Questions will appear here as they are detected.</p>
   {:else}
-    <div class="qhist-list">
+    <div class="qhist-list" bind:this={listEl}>
       {#each suggestions as entry, i (i)}
         <button
           class="qhist-item"
@@ -27,6 +36,7 @@
         >
           <div class="qhist-top">
             <span class="qhist-num">Q{i + 1}</span>
+            {#if i === currentIndex}<span class="qhist-current-badge">▶ Now</span>{/if}
             {#if entry.tag}
               {@const tc = TAG_CONFIG[entry.tag]}
               <span class="qhist-tag" style="color: {tc.color}; background: {tc.bg}">{tc.label}</span>
@@ -101,9 +111,10 @@
     border-color: #1e2d45;
   }
   .qhist-item.active {
-    background: #071a0f;
+    background: #0a1f12;
     border-color: #166534;
-    border-left: 3px solid #4ade80;
+    border-left: 4px solid #4ade80;
+    box-shadow: 0 0 0 1px #14532d;
   }
 
   .qhist-top {
@@ -121,7 +132,12 @@
     letter-spacing: 0.04em;
     flex-shrink: 0;
   }
-  .qhist-item.active .qhist-num { color: #4ade80; }
+  .qhist-item.active .qhist-num { color: #4ade80; font-size: 0.65em; }
+  .qhist-current-badge {
+    font-size: 0.55em; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+    color: #4ade80; background: #14532d; border-radius: 0.2em; padding: 0.1em 0.4em;
+    flex-shrink: 0;
+  }
 
   .qhist-tag {
     font-size: 0.52em;
@@ -156,7 +172,7 @@
     overflow-wrap: break-word;
     word-break: break-word;
   }
-  .qhist-item.active .qhist-q { color: #f87171; }
+  .qhist-item.active .qhist-q { color: #fca5a5; font-weight: 600; }
 
   .qhist-redflag {
     font-size: 0.6em;

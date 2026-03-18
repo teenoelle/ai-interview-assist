@@ -25,12 +25,13 @@
     } catch { expandedCues = { ...expandedCues, [cue]: { sentence: '', loading: false } }; }
   }
 
-  const { suggestions, onClear, teleprompter = false, jumpSignal = null, cueExpandSignal = null } = $props<{
+  const { suggestions, onClear, teleprompter = false, jumpSignal = null, cueExpandSignal = null, onPinnedChange } = $props<{
     suggestions: SuggestionEntry[];
     onClear: () => void;
     teleprompter?: boolean;
     jumpSignal?: { idx: number; key: number } | null;
     cueExpandSignal?: { cueIdx: number; key: number } | null;
+    onPinnedChange?: (pinned: boolean) => void;
   }>();
 
   // -1 = pinned to latest; >= 0 = viewing specific entry
@@ -47,6 +48,10 @@
     if (historyIndex === -1) lastSeenCount = suggestions.length;
   });
 
+  $effect(() => {
+    onPinnedChange?.(historyIndex === -1);
+  });
+
   // Handle external jump signal from parent (QuestionsHistoryPanel)
   $effect(() => {
     if (jumpSignal != null) {
@@ -61,6 +66,14 @@
     const cues = parseCues(body);
     const cue = cues[cueExpandSignal.cueIdx];
     if (cue) expandCue(current.question, cue.text);
+  });
+
+  // Collapsed state per question entry (collapsed = body hidden)
+  let collapsed = $state<boolean[]>([]);
+  $effect(() => {
+    if (collapsed.length < suggestions.length) {
+      collapsed = [...collapsed, ...new Array(suggestions.length - collapsed.length).fill(false)];
+    }
   });
 
   // Expanded state per entry
@@ -171,17 +184,6 @@
 
       {@const parsed = parseSuggestion(current.suggestion)}
       <div class="tp-card">
-        {#if current.matchedStories && current.matchedStories.length > 0}
-          <div class="tp-stories">
-            <span class="tp-stories-label">Stories</span>
-            {#each current.matchedStories as s}
-              <div class="tp-story-chip" title={s.result}>
-                <span class="tp-story-title">{s.title}</span>
-                <span class="tp-story-result">{s.result.length > 60 ? s.result.slice(0, 60) + '…' : s.result}</span>
-              </div>
-            {/each}
-          </div>
-        {/if}
         {#if current.redFlag}
           <div class="tp-redflag">
             <span class="redflag-cat">{current.redFlag.category}</span>
@@ -195,39 +197,26 @@
           <!-- ACKNOWLEDGE section -->
           {#if parsed.acknowledge}
             <div class="tp-sec tp-sec-ack">
-              <div class="tp-sec-row">
-                <span class="cue-badge cue-ack">Acknowledge</span>
-                <span class="tp-ack-text">{parsed.acknowledge}</span>
-              </div>
-            </div>
-          {/if}
-
-          <!-- AFFIRM section -->
-          {#if parsed.affirm}
-            <div class="tp-sec tp-sec-affirm">
-              <div class="tp-sec-row">
-                <span class="cue-badge cue-affirm">Affirm</span>
-                <span class="tp-affirm-text">{parsed.affirm}</span>
-              </div>
+              <span class="cue-badge cue-ack">Acknowledge</span>
+              <span class="tp-ack-text">{parsed.acknowledge}</span>
             </div>
           {/if}
 
           <!-- ANSWER section (includes cue points) -->
           <div class="tp-sec tp-sec-say">
-            <div class="tp-sec-row">
-              <span class="cue-badge">{parsed.cue}</span>
-              <span class="tp-tell">{parsed.tell}{#if current.streaming && !parsed.body}<span class="cursor">|</span>{/if}</span>
-            </div>
+            <span class="cue-badge">{parsed.cue}</span>
+            <span class="tp-tell">{parsed.tell}{#if current.streaming && !parsed.body}<span class="cursor">|</span>{/if}</span>
             {#if parsed.body}
               {@const cues = parseCues(parsed.body)}
               {#if cues.length > 0}
                 <div class="tp-cues">
                   {#each cues as cue}
                     {@const isOpen = !!openCues[cue.text]}
+                    {@const _km = cue.text.match(/^\[([^\]]+)\]\s*(.*)/s)}
                     <div class="tp-cue-block" class:tp-cue-open={isOpen}>
                       <button class="tp-cue-toggle" onclick={() => { const opening = !isOpen; toggleCueOpen(cue.text); if (opening) expandCue(current.question, cue.text); }}>
-                        <span class="cue-label-sm">{cue.label}</span>
-                        <span class="tp-cue-preview">{cue.text}</span>
+                        <span class="cue-label-sm" class:cue-label-example={cue.typeTag === 'Example' || cue.typeTag === 'Story' || cue.label === 'Example' || cue.label === 'Story'}>{cue.typeTag || (cue.label === 'General' ? 'Point' : cue.label)}</span>
+                        <span class="tp-cue-preview">{#if _km}<span class="tp-cue-kw">{_km[1]}</span> {_km[2]}{:else}{cue.text}{/if}</span>
                         <span class="tp-cue-chevron">{isOpen ? '▾' : '▸'}</span>
                       </button>
                       {#if isOpen}
@@ -235,7 +224,7 @@
                           {#if expandedCues[cue.text]?.loading}
                             <div class="cue-sentence cue-loading">…</div>
                           {:else if expandedCues[cue.text]?.sentence}
-                            <div class="cue-sentence">{expandedCues[cue.text].sentence}</div>
+                            <div class="cue-sentence">{#each expandedCues[cue.text].sentence.split(/(?<=[.!?])\s+/) as s}{s.trim()}<br/>{/each}</div>
                           {:else}
                             <div class="cue-sentence cue-loading">Loading…</div>
                           {/if}
@@ -263,19 +252,18 @@
           <!-- ASK section -->
           {#if parsed.asks.length > 0}
             <div class="tp-sec tp-sec-ask">
-              <div class="tp-sec-row">
-                <span class="cue-badge cue-ask">Ask</span>
-              </div>
+              <span class="cue-badge cue-ask">Ask</span>
               <div class="tp-cues">
                 {#each parsed.asks as ask, i}
-                  {@const isAskOpen = !!openAsks[`${i}`]}
-                  <div class="tp-cue-block tp-cue-block-ask" class:tp-cue-open={isAskOpen}>
-                    <button class="tp-cue-toggle" onclick={() => toggleAsk(`${i}`)}>
+                  {@const askKey = `tp-ask-${currentIndex}-${i}`}
+                  {@const askOpen = !!openCues[askKey]}
+                  <div class="tp-cue-block tp-cue-block-ask" class:tp-cue-open={askOpen}>
+                    <button class="tp-cue-toggle" onclick={() => toggleCueOpen(askKey)}>
                       <span class="cue-label-sm cue-label-ask">Q{i + 1}</span>
                       <span class="tp-cue-preview tp-ask-preview">{ask.topic}</span>
-                      <span class="tp-cue-chevron">{isAskOpen ? '▾' : '▸'}</span>
+                      <span class="tp-cue-chevron">{askOpen ? '▾' : '▸'}</span>
                     </button>
-                    {#if isAskOpen}
+                    {#if askOpen}
                       <div class="tp-cue-body">
                         <div class="ask-sentence">{ask.question}</div>
                       </div>
@@ -291,7 +279,7 @@
       <div class="tp-empty">Waiting for a question...</div>
     {/if}
 
-    <span class="tp-hint">Acknowledge = their pain point · Affirm = your alignment · Answer = speak · Ask = follow-up</span>
+    <span class="tp-hint">Acknowledge = their pain point · Answer = speak · Ask = follow-up</span>
   </div>
 
 {:else}
@@ -322,7 +310,9 @@
                 {@const tc = TAG_CONFIG[entry.tag]}
                 <span class="entry-tag" style="color: {tc.color}; background: {tc.bg}">{tc.label}</span>
               {/if}
+              <button class="entry-collapse-btn" onclick={() => { collapsed[i] = !collapsed[i]; collapsed = [...collapsed]; }} title={collapsed[i] ? 'Expand' : 'Collapse'}>{collapsed[i] ? '▸' : '▾'}</button>
             </div>
+            {#if !collapsed[i]}
             {#if entry.redFlag}
               <div class="entry-redflag">
                 <span class="redflag-cat">{entry.redFlag.category}</span>
@@ -335,27 +325,14 @@
               <!-- ACKNOWLEDGE -->
               {#if parsed.acknowledge}
                 <div class="e-sec e-sec-ack">
-                  <div class="e-sec-row">
-                    <span class="cue-badge cue-ack">Acknowledge</span>
-                    <span class="affirm-text">{parsed.acknowledge}</span>
-                  </div>
-                </div>
-              {/if}
-              <!-- AFFIRM -->
-              {#if parsed.affirm}
-                <div class="e-sec e-sec-affirm">
-                  <div class="e-sec-row">
-                    <span class="cue-badge cue-affirm">Affirm</span>
-                    <span class="affirm-text">{parsed.affirm}</span>
-                  </div>
+                  <span class="cue-badge cue-ack">Acknowledge</span>
+                  <span class="affirm-text">{parsed.acknowledge}</span>
                 </div>
               {/if}
               <!-- ANSWER -->
               <div class="e-sec e-sec-say">
-                <div class="e-sec-row">
-                  <span class="cue-badge" class:cue-ask={parsed.cue === 'Ask'}>{parsed.cue}</span>
-                  <span class="tell-text">{parsed.tell}{#if entry.streaming && !parsed.body}<span class="cursor">|</span>{/if}</span>
-                </div>
+                <span class="cue-badge" class:cue-ask={parsed.cue === 'Ask'}>{parsed.cue}</span>
+                <span class="tell-text">{parsed.tell}{#if entry.streaming && !parsed.body}<span class="cursor">|</span>{/if}</span>
                 {#if parsed.body}
                   <button class="expand-btn" onclick={() => toggleExpand(i)}>
                     {expanded[i] ? '▴ Less' : '▾ More context'}
@@ -376,14 +353,15 @@
                   </div>
                   <div class="tp-cues">
                     {#each parsed.asks as ask, ai}
-                      {@const isAskOpen = !!openAsks[`${i}-${ai}`]}
-                      <div class="tp-cue-block tp-cue-block-ask" class:tp-cue-open={isAskOpen}>
-                        <button class="tp-cue-toggle" onclick={() => toggleAsk(`${i}-${ai}`)}>
+                      {@const askKey = `e-ask-${i}-${ai}`}
+                      {@const askOpen = !!openCues[askKey]}
+                      <div class="tp-cue-block tp-cue-block-ask" class:tp-cue-open={askOpen}>
+                        <button class="tp-cue-toggle" onclick={() => toggleCueOpen(askKey)}>
                           <span class="cue-label-sm cue-label-ask">Q{ai + 1}</span>
                           <span class="tp-cue-preview tp-ask-preview">{ask.topic}</span>
-                          <span class="tp-cue-chevron">{isAskOpen ? '▾' : '▸'}</span>
+                          <span class="tp-cue-chevron">{askOpen ? '▾' : '▸'}</span>
                         </button>
-                        {#if isAskOpen}
+                        {#if askOpen}
                           <div class="tp-cue-body">
                             <div class="ask-sentence">{ask.question}</div>
                           </div>
@@ -393,6 +371,7 @@
                   </div>
                 </div>
               {/if}
+            {/if}
             {/if}
           </div>
         {/each}
@@ -505,7 +484,6 @@
   .tp-tell {
     color: #ffffff;
     font-size: var(--fs-lg);
-    font-weight: 600;
     line-height: 1.5;
     flex: 1;
     overflow-wrap: break-word;
@@ -554,12 +532,15 @@
   }
   .tp-cue-toggle:hover { background: #071a0f; }
   .cue-label-sm {
-    font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
+    font-size: var(--fs-sm); font-weight: 800; text-transform: uppercase;
     letter-spacing: 0.07em; color: #4ade80; flex-shrink: 0;
   }
   .tp-cue-preview {
-    flex: 1; font-size: var(--fs-base); color: #3d8c52;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    flex: 1; font-size: var(--fs-lg); color: #3d8c52;
+    white-space: normal; overflow-wrap: break-word; word-break: break-word;
+  }
+  .tp-cue-kw {
+    font-weight: 700; color: #86efac;
   }
   .tp-cue-chevron { font-size: var(--fs-sm); color: #2d6e40; flex-shrink: 0; }
   .tp-cue-body {
@@ -574,10 +555,12 @@
   }
   .cue-sentence {
     padding: 0.3rem 0.4rem;
-    background: #07101e; border-left: 2px solid #3b82f6;
-    border-radius: 0 0.25rem 0.25rem 0; color: #93c5fd;
-    font-size: var(--fs-base); line-height: 1.5;
+    background: #061209; border-left: 2px solid #22c55e;
+    border-radius: 0 0.25rem 0.25rem 0; color: #f1f5f9;
+    font-size: var(--fs-lg); line-height: 1.5; font-weight: 400;
+    overflow-wrap: break-word;
   }
+  .cue-label-example { }
   .cue-loading { color: #334155; }
 
   /* Ask cue-block theming (amber) */
@@ -589,8 +572,9 @@
     text-overflow: unset !important;
   }
   .ask-sentence {
-    color: #fde68a; font-size: var(--fs-lg); line-height: 1.5;
-    overflow-wrap: break-word; padding: 0.1rem 0;
+    padding: 0.3rem 0.4rem; background: #060300; border-left: 2px solid #92400e;
+    border-radius: 0 0.25rem 0.25rem 0; color: #f1f5f9;
+    font-size: var(--fs-lg); line-height: 1.5; font-weight: 400; overflow-wrap: break-word;
   }
 
   .tp-hint {
@@ -619,24 +603,6 @@
     margin-left: auto; padding-top: 0.05rem; font-variant-numeric: tabular-nums;
   }
 
-  /* Story matches */
-  .tp-stories {
-    display: flex; flex-direction: column; gap: 0.25rem;
-    padding: 0.4rem 0.6rem;
-    background: #0a0f1a; border: 1px solid #1a2535;
-    border-left: 2px solid #7c3aed; border-radius: 0.35rem;
-  }
-  .tp-stories-label {
-    font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
-    letter-spacing: 0.08em; color: #6d28d9; margin-bottom: 0.1rem;
-  }
-  .tp-story-chip {
-    display: flex; flex-direction: column; gap: 0.1rem;
-    padding: 0.25rem 0.4rem; background: #100d1a;
-    border-radius: 0.25rem; border: 1px solid #2d1f4a;
-  }
-  .tp-story-title { font-size: var(--fs-sm); font-weight: 700; color: #c084fc; }
-  .tp-story-result { font-size: var(--fs-sm); color: #7a6a8a; font-style: italic; line-height: 1.3; }
 
   .tp-redflag {
     display: flex; flex-direction: column; gap: 0.15rem;
@@ -715,16 +681,18 @@
   .e-sec-affirm { background: #071520; border-left-color: #0e7490; }
   .e-sec-say    { background: #060e0a; border-left-color: #166534; }
   .e-sec-ask    { background: #0e0700; border-left-color: #92400e; }
-  .e-sec-row { display: flex; align-items: flex-start; gap: 0.5rem; }
+  .affirm-text, .tell-text {
+    color: #f1f5f9; font-size: var(--fs-lg); font-weight: 400;
+    line-height: 1.5; overflow-wrap: break-word; word-break: break-word;
+    margin-top: 0.15rem;
+  }
 
-  .affirm-text {
-    color: #ffffff; font-size: var(--fs-lg); line-height: 1.4;
-    flex: 1; overflow-wrap: break-word;
+  .entry-collapse-btn {
+    margin-left: auto; background: none; border: none;
+    color: #334155; font-size: var(--fs-sm); cursor: pointer; padding: 0 0.2rem;
+    flex-shrink: 0; line-height: 1;
   }
-  .tell-text {
-    color: #ffffff; font-size: var(--fs-lg); font-weight: 600;
-    line-height: 1.5; flex: 1; overflow-wrap: break-word; word-break: break-word;
-  }
+  .entry-collapse-btn:hover { color: #64748b; }
 
   .expand-btn {
     background: none; border: none; color: #1e4a2a;

@@ -1,35 +1,48 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { countFillers, totalFillers } from '../lib/filler';
-  import { parseSuggestion } from '../lib/parseSuggestion';
+  import { parseSuggestion, parseCues } from '../lib/parseSuggestion';
+  import * as ttsClient from '../lib/ttsClient';
+  import type { CombinedVoice } from '../lib/ttsClient';
 
-  const { questions, systemPrompt, onStartInterview } = $props<{
+  const { questions, systemPrompt, onStartInterview, onBackToSetup } = $props<{
     questions: string[];
     systemPrompt: string;
     onStartInterview: () => void;
+    onBackToSetup?: () => void;
   }>();
 
-  // Voice settings (shared with interview TTS via localStorage)
-  let voices = $state<SpeechSynthesisVoice[]>([]);
-  let voiceURI = $state(localStorage.getItem('tts-voice') ?? '');
+  // Font picker (mirrors app.svelte FONTS)
+  const FONTS = [
+    { id: 'Inter', label: 'Inter' },
+    { id: 'DM Sans', label: 'DM Sans' },
+    { id: 'Plus Jakarta Sans', label: 'Plus Jakarta Sans' },
+    { id: 'IBM Plex Sans', label: 'IBM Plex Sans' },
+    { id: 'Outfit', label: 'Outfit' },
+    { id: 'system-ui', label: 'System Default' },
+  ] as const;
+  let appFont = $state(localStorage.getItem('app-font') ?? 'Inter');
+  $effect(() => {
+    const stack = appFont === 'system-ui'
+      ? 'system-ui, -apple-system, sans-serif'
+      : `'${appFont}', system-ui, sans-serif`;
+    document.documentElement.style.setProperty('--ff-base', stack);
+    localStorage.setItem('app-font', appFont);
+  });
+
+  // Voice settings
+  let voices = $state<CombinedVoice[]>([]);
+  let voiceId = $state(localStorage.getItem('tts-voice-id') ?? '');
   let voiceRate = $state(Math.max(0.7, Number(localStorage.getItem('tts-rate') ?? 1.5)));
   let voiceVolume = $state(Math.max(0.1, Number(localStorage.getItem('tts-volume') ?? 1.0)));
 
-  function loadVoices() {
-    const v = speechSynthesis.getVoices();
-    if (v.length > 0) {
-      voices = v;
-      if (!voiceURI || !v.find(x => x.voiceURI === voiceURI)) voiceURI = v[0]?.voiceURI ?? '';
-    }
-  }
-
-  onMount(() => {
-    loadVoices();
-    speechSynthesis.addEventListener('voiceschanged', loadVoices);
-    return () => speechSynthesis.removeEventListener('voiceschanged', loadVoices);
+  onMount(async () => {
+    const all = await ttsClient.loadAllVoices();
+    voices = all;
+    if (!voiceId || !all.find(v => v.id === voiceId)) voiceId = all[0]?.id ?? '';
   });
 
-  $effect(() => { localStorage.setItem('tts-voice', voiceURI); });
+  $effect(() => { localStorage.setItem('tts-voice-id', voiceId); });
   $effect(() => { localStorage.setItem('tts-rate', String(voiceRate)); });
   $effect(() => { localStorage.setItem('tts-volume', String(voiceVolume)); });
 
@@ -38,32 +51,25 @@
   // Poll to reset button label after speech ends naturally
   $effect(() => {
     const id = setInterval(() => {
-      if (readOn && !speechSynthesis.speaking) readOn = false;
+      if (readOn && !ttsClient.isSpeaking()) readOn = false;
     }, 250);
     return () => clearInterval(id);
   });
 
   function speak(text: string) {
-    const utt = new SpeechSynthesisUtterance(text);
-    const v = voices.find(x => x.voiceURI === voiceURI);
-    if (v) utt.voice = v;
-    utt.rate = voiceRate;
-    utt.volume = voiceVolume;
-    speechSynthesis.cancel();
-    speechSynthesis.speak(utt);
+    ttsClient.speak(text, voiceId, voiceRate, voiceVolume);
   }
 
   function speakSay(text: string) {
     if (readOn) {
       readOn = false;
-      speechSynthesis.cancel();
+      ttsClient.stopSpeaking();
       return;
     }
     readOn = true;
     const parsed = parseSuggestion(text);
-    const cap = (s: string) => (s.match(/^[^.!?]+[.!?]/)?.[0]?.trim() ?? s).split(/\s+/).slice(0, 15).join(' ');
-    const parts = [parsed.affirm, parsed.tell].filter(Boolean).map(cap);
-    speak(parts.join(' '));
+    if (!parsed.acknowledge) { readOn = false; return; }
+    ttsClient.speak(parsed.acknowledge, voiceId, voiceRate, voiceVolume);
   }
 
 
@@ -89,6 +95,8 @@
   // Expanded cue sentences: key = `${questionIdx}-${cueIdx}`
   let expandedCues = $state<Record<string, string>>({});
   let loadingCue = $state<string | null>(null);
+  let openCues = $state<Record<string, boolean>>({});
+  function toggleCueOpen(key: string) { openCues = { ...openCues, [key]: !openCues[key] }; }
 
   async function toggleCue(qIdx: number, cueIdx: number, cue: string) {
     const key = `${qIdx}-${cueIdx}`;
@@ -197,22 +205,28 @@
     loadingVocal = null;
   }
 
-  async function getHint() {
-    if (hints[currentIdx] || loadingHint) return;
+  async function getHint(idx = currentIdx) {
+    if (hints[idx] || loadingHint) return;
     loadingHint = true;
     try {
       const resp = await fetch('/api/practice-question', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: currentQuestion }),
+        body: JSON.stringify({ question: questions[idx] }),
       });
       if (resp.ok) {
         const data = await resp.json();
-        hints = { ...hints, [currentIdx]: data.suggestion };
+        hints = { ...hints, [idx]: data.suggestion };
       }
     } catch { /* ignore */ }
     loadingHint = false;
   }
+
+  // Auto-load hint for the current question when it changes
+  $effect(() => {
+    const idx = currentIdx;
+    if (questions.length > 0 && !hints[idx]) getHint(idx);
+  });
 
   async function scoreAnswer(idx: number) {
     const answer = answers[idx];
@@ -270,33 +284,59 @@
       <h2>Practice Mode</h2>
       <p class="subtitle">Review predicted questions and prepare your answers before the interview</p>
     </div>
-    <div class="header-actions">
-      {#if questions.length > 0}
-        <button class="prep-all-btn" onclick={getAllHints} disabled={loadingAll}>
-          {loadingAll ? '⟳ Loading all...' : '⚡ Prep all questions'}
-        </button>
-      {/if}
-      <button class="start-btn" onclick={onStartInterview}>I'm Ready — Start Interview →</button>
-    </div>
+    {#if questions.length > 0}
+      <button class="prep-all-btn" onclick={getAllHints} disabled={loadingAll}>
+        {loadingAll ? '⟳ Loading all...' : '⚡ Prep all questions'}
+      </button>
+    {/if}
   </div>
 
   <!-- Voice controls -->
   <div class="voice-bar">
     <span class="voice-bar-label">Voice</span>
-    <select class="voice-select" bind:value={voiceURI}>
-      {#each voices as v}
-        <option value={v.voiceURI}>{v.name} ({v.lang})</option>
-      {/each}
+    <select class="voice-select" bind:value={voiceId}>
+      {#if voices.filter(v => v.source === 'piper').length > 0}
+        <optgroup label="Piper (Neural)">
+          {#each voices.filter(v => v.source === 'piper') as v}
+            <option value={v.id}>{v.name}</option>
+          {/each}
+        </optgroup>
+      {/if}
+      {#if voices.filter(v => v.source === 'os').length > 0}
+        <optgroup label="Windows (SAPI)">
+          {#each voices.filter(v => v.source === 'os') as v}
+            <option value={v.id}>{v.name}</option>
+          {/each}
+        </optgroup>
+      {/if}
+      {#if voices.filter(v => v.source === 'browser').length > 0}
+        <optgroup label="Browser">
+          {#each voices.filter(v => v.source === 'browser') as v}
+            <option value={v.id}>{v.name}</option>
+          {/each}
+        </optgroup>
+      {/if}
     </select>
     <label class="voice-slider-label" title="Speed">
       <span class="voice-val">{voiceRate.toFixed(1)}×</span>
-      <input type="range" min="0.7" max="4.0" step="0.1" bind:value={voiceRate} class="voice-slider" />
+      <input type="range" min="0.7" max="4.0" step="0.1" bind:value={voiceRate} class="voice-slider"
+        oninput={(e) => { const v = Number((e.target as HTMLInputElement).value); if (Math.abs(v - 1) < 0.08) voiceRate = 1; }} />
     </label>
     <label class="voice-slider-label" title="Volume">
       <span class="voice-val">{Math.round(voiceVolume * 100)}%</span>
-      <input type="range" min="0.1" max="1" step="0.05" bind:value={voiceVolume} class="voice-slider" />
+      <input type="range" min="0.1" max="4" step="0.05" bind:value={voiceVolume} class="voice-slider"
+        oninput={(e) => {
+          const v = Number((e.target as HTMLInputElement).value);
+          if (Math.abs(v - 1) < 0.08) { voiceVolume = 1; return; }
+          if (v < 1) { const snapped = Math.round(v / 0.05) * 0.05; if (Math.abs(v - snapped) < 0.026) voiceVolume = snapped; }
+        }} />
     </label>
     <button class="voice-test-btn" onclick={() => speak("Hi, I'm excited to be here today.")}>▶ Test</button>
+    <select class="font-select" bind:value={appFont} title="App font">
+      {#each FONTS as f}
+        <option value={f.id}>{f.label}</option>
+      {/each}
+    </select>
   </div>
 
   {#if questions.length === 0}
@@ -309,56 +349,76 @@
 
     <div class="question-card">
       <p class="question-text">{currentQuestion}</p>
-      {#if hints[currentIdx]}
-        <div class="hint-loaded-badge">✓ Hints loaded</div>
-      {/if}
-      <button class="hint-btn" onclick={getHint} disabled={loadingHint || !!hints[currentIdx]}>
-        {loadingHint ? 'Loading...' : hints[currentIdx] ? 'Suggestions loaded' : '💡 Get suggestions'}
-      </button>
-      {#if hints[currentIdx]}
+      {#if loadingHint && !hints[currentIdx]}
+        <div class="hint-loading-inline">Loading suggestions…</div>
+      {:else if hints[currentIdx]}
         {@const parsed = parseSuggestion(hints[currentIdx])}
         <div class="hints-card">
           <div class="h-read-row">
-            <button class="read-btn" class:active={readOn} onclick={() => speakSay(hints[currentIdx])}>{readOn ? '⏹ Stop' : '🔊 Read Say'}</button>
+            <button class="read-btn" class:active={readOn} onclick={() => speakSay(hints[currentIdx])}>{readOn ? '⏹ Stop' : '🔊 Read'}</button>
           </div>
-          {#if parsed.affirm}
-            <div class="h-affirm-row">
-              <span class="h-cue-badge h-cue-affirm">Affirm</span>
-              <span class="h-speak-text">{parsed.affirm}</span>
+
+          {#if parsed.acknowledge}
+            <div class="h-sec h-sec-ack">
+              <span class="h-cue-badge h-cue-ack">Acknowledge</span>
+              <span class="h-speak-text">{parsed.acknowledge}</span>
             </div>
           {/if}
-          <div class="h-say-row">
-            <span class="h-cue-badge">Say</span>
+
+          <div class="h-sec h-sec-say">
+            <span class="h-cue-badge">{parsed.cue}</span>
             <span class="h-speak-text h-speak-main">{parsed.tell}</span>
-          </div>
-          {#if parsed.cues.length > 0}
-            <div class="h-cues-section">
-              <span class="h-cues-label">Your talking points · tap to expand</span>
-              {#each parsed.cues as c, ci}
-                {@const key = `${currentIdx}-${ci}`}
-                {@const expanded = expandedCues[key]}
-                {@const loading = loadingCue === key}
-                <button class="h-cue-line" class:h-cue-active={!!expanded} onclick={() => toggleCue(currentIdx, ci, c)}>
-                  <span class="h-cue-dot">·</span>
-                  <span class="h-cue-short">{c}</span>
-                  {#if loading}<span class="h-cue-loading">…</span>{/if}
-                </button>
-                {#if expanded}
-                  <div class="h-cue-expanded">{expanded}</div>
-                {/if}
-              {/each}
-            </div>
-          {/if}
-          {#if parsed.asks.length > 0}
-            <div class="h-asks-group">
-              <span class="h-cues-label">Ask them (choose one)</span>
-              {#each parsed.asks as ask, ai}
-                {#if ai > 0}<div class="h-ask-or">or</div>{/if}
-                <div class="h-ask-row">
-                  <span class="h-cue-badge h-cue-ask">Ask</span>
-                  <span class="h-speak-text">{ask.question}</span>
+            {#if parsed.body}
+              {@const cues = parseCues(parsed.body)}
+              {#if cues.length > 0}
+                <div class="h-cues-section">
+                  {#each cues as c, ci}
+                    {@const isOpen = !!openCues[`${currentIdx}-${ci}`]}
+                    <div class="h-cue-block" class:h-cue-open={isOpen}>
+                      <button class="h-cue-toggle" onclick={() => { const opening = !isOpen; toggleCueOpen(`${currentIdx}-${ci}`); if (opening) toggleCue(currentIdx, ci, c.text); }}>
+                        <span class="h-cue-label" class:h-cue-label-example={c.typeTag === 'Example' || c.typeTag === 'Story' || c.label === 'Example' || c.label === 'Story'}>{c.typeTag || (c.label === 'General' ? 'Point' : c.label)}</span>
+                        <span class="h-cue-preview">{c.text}</span>
+                        <span class="h-cue-chevron">{isOpen ? '▾' : '▸'}</span>
+                      </button>
+                      {#if isOpen}
+                        <div class="h-cue-body">
+                          {#if loadingCue === `${currentIdx}-${ci}`}
+                            <div class="h-cue-sentence h-cue-loading">…</div>
+                          {:else if expandedCues[`${currentIdx}-${ci}`]}
+                            <div class="h-cue-sentence">{#each expandedCues[`${currentIdx}-${ci}`].split(/(?<=[.!?])\s+/) as s}{s.trim()}<br/>{/each}</div>
+                          {:else}
+                            <div class="h-cue-sentence h-cue-loading">Loading…</div>
+                          {/if}
+                        </div>
+                      {/if}
+                    </div>
+                  {/each}
                 </div>
-              {/each}
+              {/if}
+            {/if}
+          </div>
+
+          {#if parsed.asks.length > 0}
+            <div class="h-sec h-sec-ask">
+              <span class="h-cue-badge h-cue-ask">Ask</span>
+              <div class="h-cues-section">
+                {#each parsed.asks as ask, ai}
+                  {@const askKey = `ask-${currentIdx}-${ai}`}
+                  {@const askOpen = !!openCues[askKey]}
+                  <div class="h-cue-block h-cue-block-ask" class:h-cue-open={askOpen}>
+                    <button class="h-cue-toggle" onclick={() => toggleCueOpen(askKey)}>
+                      <span class="h-cue-label h-cue-label-ask">Q{ai + 1}</span>
+                      <span class="h-cue-preview h-ask-preview">{ask.topic}</span>
+                      <span class="h-cue-chevron">{askOpen ? '▾' : '▸'}</span>
+                    </button>
+                    {#if askOpen}
+                      <div class="h-cue-body">
+                        <div class="h-ask-sentence">{ask.question}</div>
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
             </div>
           {/if}
         </div>
@@ -505,6 +565,16 @@
       </div>
     {/if}
   {/if}
+
+  <!-- Bottom navigation bar — consistent with setup overview -->
+  <div class="practice-action-row">
+    {#if onBackToSetup}
+      <button class="btn-back" onclick={onBackToSetup}>← Overview</button>
+    {/if}
+    <div class="practice-action-right">
+      <button class="start-btn" onclick={onStartInterview}>Start Interview →</button>
+    </div>
+  </div>
 </div>
 
 <style>
@@ -515,6 +585,10 @@
   .practice-header {
     display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
   }
+  .back-btn { background: none; border: 1px solid #1e293b; color: #60a5fa; font-size: var(--fs-sm); font-weight: 600; cursor: pointer; padding: 0.5rem 1rem; border-radius: 0.5rem; white-space: nowrap; }
+  .back-btn:hover { border-color: #60a5fa; }
+  .practice-action-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.5rem 0 0.5rem; border-top: 1px solid #1e293b; margin-top: 1rem; }
+  .practice-action-right { display: flex; align-items: center; gap: 0.75rem; margin-left: auto; }
   h2 { font-size: 1.5rem; font-weight: 800; color: #f1f5f9; margin: 0 0 0.25rem; }
   .subtitle { color: #64748b; font-size: 0.875rem; margin: 0; }
   .header-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
@@ -531,75 +605,81 @@
   }
   .prep-all-btn:hover:not(:disabled) { border-color: #60a5fa; color: #60a5fa; }
   .prep-all-btn:disabled { opacity: 0.5; cursor: default; }
-  .progress { font-size: var(--fs-sm); color: #475569; text-align: center; }
+  .progress { font-size: var(--fs-sm); color: #60a5fa; text-align: center; font-weight: 700; letter-spacing: 0.04em; }
   .question-card {
     background: #0f172a; border: 1px solid #334155; border-left: 3px solid #3b82f6;
     border-radius: 0.75rem; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;
   }
-  .question-text { font-size: 1.2rem; font-weight: 600; color: #f1f5f9; line-height: 1.5; margin: 0; font-style: normal; }
+  .question-text { font-size: 0.9rem; font-weight: 500; color: #f87171; line-height: 1.5; margin: 0; font-style: normal; }
   .hint-loaded-badge { align-self: flex-start; font-size: var(--fs-sm); color: #22c55e; font-weight: 600; }
-  .hint-btn {
-    align-self: flex-start; padding: 0.4rem 1rem;
-    background: transparent; border: 1px solid #3b82f6; border-radius: 0.375rem;
-    color: #60a5fa; font-size: var(--fs-base); cursor: pointer; transition: all 0.15s;
-  }
-  .hint-btn:hover:not(:disabled) { background: #1e3a5f; }
-  .hint-btn:disabled { opacity: 0.5; cursor: default; }
+  .hint-loading-inline { color: #475569; font-size: var(--fs-sm); font-style: italic; }
   .hints-card {
     background: #07101e; border: 1px solid #1a2d4a; border-radius: 0.6rem;
-    padding: 0.85rem 1rem; display: flex; flex-direction: column; gap: 0.6rem;
+    padding: 0.75rem; display: flex; flex-direction: column; gap: 0.4rem;
   }
+  /* Section blocks matching interview mode */
+  .h-sec {
+    display: flex; flex-direction: column; gap: 0.35rem;
+    padding: 0.45rem 0.6rem; border-radius: 0.4rem;
+    border-left: 3px solid transparent;
+  }
+  .h-sec-ack    { background: #110823; border-left-color: #6d28d9; }
+  .h-sec-affirm { background: #071520; border-left-color: #0e7490; }
+  .h-sec-say    { background: #060e0a; border-left-color: #166534; }
+  .h-sec-ask    { background: #0e0700; border-left-color: #92400e; }
+  .font-select {
+    padding: 0.2rem 0.4rem; background: #0a0f1a; border: 1px solid #1e293b;
+    border-radius: 0.3rem; color: #64748b; font-size: var(--fs-sm); cursor: pointer;
+    font-family: inherit; margin-left: auto;
+  }
+  .font-select:hover { border-color: #334155; color: #94a3b8; }
+
   /* Cue badges */
   .h-cue-badge {
-    display: inline-block; padding: 0.12rem 0.5rem;
+    display: inline-block; padding: 0.1rem 0.45rem; min-width: 6.2rem; text-align: center;
     background: #14532d; color: #4ade80; border-radius: 0.25rem;
     font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
     letter-spacing: 0.06em; flex-shrink: 0; margin-top: 0.1rem;
   }
-  .h-cue-badge.h-cue-ask { background: #3b0764; color: #c084fc; }
-  .h-cue-badge.h-cue-affirm { background: #134e4a; color: #2dd4bf; }
-
-  /* Speakable rows — what the interviewee actually says */
-  .h-affirm-row, .h-say-row, .h-ask-row {
-    display: flex; align-items: flex-start; gap: 0.6rem;
-    padding: 0.45rem 0.6rem; border-radius: 0.4rem;
-  }
-  .h-affirm-row { background: #071a18; border-left: 2px solid #0d4a44; }
-  .h-say-row    { background: #091520; border-left: 2px solid #1d4ed8; }
-  .h-ask-row    { background: #160a2a; border-left: 2px solid #7c3aed; }
-  .h-asks-group { display: flex; flex-direction: column; gap: 0.25rem; }
-  .h-ask-or { font-size: var(--fs-xs); color: #334155; text-align: center; text-transform: uppercase; letter-spacing: 0.08em; }
+  .h-cue-badge.h-cue-ask    { background: #422006; color: #fbbf24; }
+  .h-cue-badge.h-cue-affirm { background: #164e63; color: #67e8f9; }
+  .h-cue-badge.h-cue-ack    { background: #2e1065; color: #c084fc; }
 
   /* Spoken text */
-  .h-speak-text { color: #e2e8f0; font-size: 0.95rem; line-height: 1.5; flex: 1; }
-  .h-speak-main { font-size: var(--fs-lg); font-weight: 600; color: #f1f5f9; }
+  .h-speak-text { color: #e2e8f0; font-size: var(--fs-lg); line-height: 1.5; flex: 1; }
+  .h-speak-main { font-weight: 600; color: #f1f5f9; }
 
-  /* Coaching cues — memory prompts, NOT spoken */
-  .h-cues-section {
-    background: #0a0f1a; border: 1px dashed #1e293b; border-radius: 0.35rem;
-    padding: 0.5rem 0.65rem; display: flex; flex-direction: column; gap: 0.3rem;
+
+  /* Cue blocks — matching interview teleprompter */
+  .h-cues-section { display: flex; flex-direction: column; gap: 0.2rem; border-top: 1px solid #0d2010; padding-top: 0.35rem; }
+  .h-cue-block { border-radius: 0.3rem; border: 1px solid #0d2010; overflow: hidden; background: #040b06; }
+  .h-cue-block.h-cue-open { border-color: #14532d; }
+  .h-cue-block-ask { border-color: #2d1200; background: #060300; }
+  .h-cue-block-ask.h-cue-open { border-color: #78350f; }
+  .h-cue-toggle {
+    display: flex; align-items: center; gap: 0.4rem;
+    width: 100%; padding: 0.28rem 0.5rem;
+    background: none; border: none; cursor: pointer; text-align: left;
   }
-  .h-cues-label {
-    font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.08em; color: #334155; margin-bottom: 0.2rem;
+  .h-cue-toggle:hover { background: #071a0f; }
+  .h-cue-label {
+    font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.07em; color: #4ade80; flex-shrink: 0;
   }
-  .h-cue-line {
-    display: flex; align-items: baseline; gap: 0.4rem;
-    font-size: var(--fs-base); color: #64748b; line-height: 1.4;
-    background: none; border: none; text-align: left; cursor: pointer;
-    padding: 0.2rem 0.3rem; border-radius: 0.25rem; width: 100%;
-    transition: background 0.15s, color 0.15s;
+  .h-cue-label-ask { color: #fbbf24 !important; }
+  .h-cue-preview { flex: 1; font-size: var(--fs-base); color: #3d8c52; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .h-ask-preview { color: #7c4a1a !important; white-space: normal !important; overflow: visible !important; text-overflow: unset !important; }
+  .h-cue-chevron { font-size: var(--fs-sm); color: #2d6e40; flex-shrink: 0; }
+  .h-cue-body { display: flex; flex-direction: column; padding: 0.1rem 0.5rem 0.35rem; border-top: 1px solid #0d2010; }
+  .h-cue-sentence {
+    padding: 0.3rem 0.4rem; background: #061209; border-left: 2px solid #22c55e;
+    border-radius: 0 0.25rem 0.25rem 0; color: #f1f5f9; font-size: var(--fs-lg); line-height: 1.5; font-weight: 400;
   }
-  .h-cue-line:hover { background: #111827; color: #94a3b8; }
-  .h-cue-line.h-cue-active { color: #93c5fd; }
-  .h-cue-dot { color: #334155; flex-shrink: 0; }
-  .h-cue-short { flex: 1; }
-  .h-cue-loading { color: #475569; font-style: italic; font-size: var(--fs-base); }
-  .h-cue-expanded {
-    margin-left: 1.1rem; padding: 0.4rem 0.6rem;
-    background: #0d1a2e; border-left: 2px solid #3b82f6;
-    border-radius: 0.3rem; font-size: var(--fs-base); color: #e2e8f0;
-    line-height: 1.5;
+  .h-cue-label-example { background: #1a3a1a !important; color: #86efac !important; }
+  .h-cue-loading { color: #334155; }
+  .h-ask-sentence {
+    padding: 0.3rem 0.4rem; background: #060300; border-left: 2px solid #92400e;
+    border-radius: 0 0.25rem 0.25rem 0; color: #f1f5f9; font-size: var(--fs-lg); line-height: 1.5; font-weight: 400; overflow-wrap: break-word;
   }
   .answer-section { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.5rem; }
   .record-row { display: flex; align-items: center; gap: 0.6rem; }
@@ -673,8 +753,12 @@
     width: 8px; height: 8px; border-radius: 50%;
     background: #1e293b; border: none; cursor: pointer; transition: all 0.15s;
   }
-  .dot.active { background: #3b82f6; transform: scale(1.3); }
+  .dot.active {
+    background: #3b82f6; transform: scale(1.6);
+    box-shadow: 0 0 0 2px #1d4ed8;
+  }
   .dot.hinted { background: #22c55e; }
+  .dot.active.hinted { background: #3b82f6; }
   .summary-card {
     background: #0a0f1a; border: 1px solid #1e293b; border-left: 3px solid #22c55e;
     border-radius: 0.6rem; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;

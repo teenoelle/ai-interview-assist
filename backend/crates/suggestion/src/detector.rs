@@ -1,5 +1,15 @@
 pub fn is_question(text: &str) -> bool {
     let text = text.trim();
+    // Filter preamble lines like "Here are 8 interview questions..."
+    let lower_start = text.to_lowercase();
+    if lower_start.starts_with("here are")
+        || lower_start.starts_with("here is")
+        || lower_start.starts_with("the following")
+        || lower_start.starts_with("these are")
+        || lower_start.starts_with("below are")
+    {
+        return false;
+    }
     if text.ends_with('?') {
         return true;
     }

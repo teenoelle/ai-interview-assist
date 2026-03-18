@@ -84,11 +84,11 @@
   .profiles-chevron { font-size: var(--fs-xs); color: #334155; }
   .profiles { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.5rem 0.75rem 0.75rem; border-top: 1px solid #0f1e33; }
   .profile-card { background: #060e1a; border: 1px solid #1a2d4a; border-radius: 0.4rem; padding: 0.6rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }
-  .profile-header { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; cursor: pointer; user-select: none; }
+  .profile-header { display: flex; align-items: baseline; gap: 0.5rem; cursor: pointer; user-select: none; min-width: 0; }
+  .profile-role { font-size: var(--fs-sm); color: #93c5fd; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .profile-header:hover .profile-name { color: #93c5fd; }
   .profile-name { font-size: var(--fs-base); font-weight: 700; color: #60a5fa; transition: color 0.12s; }
   .card-chevron { font-size: var(--fs-xs); color: #334155; margin-left: auto; flex-shrink: 0; }
-  .profile-role { font-size: var(--fs-sm); color: #93c5fd; }
   .profile-field { display: flex; flex-direction: column; gap: 0.1rem; }
   .profile-field-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #475569; }
   .profile-field-value { font-size: var(--fs-sm); color: #94a3b8; line-height: 1.4; }

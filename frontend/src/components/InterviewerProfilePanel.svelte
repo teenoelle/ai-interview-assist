@@ -23,7 +23,6 @@
     <button class="profiles-toggle" onclick={() => expanded = !expanded}>
       <div class="profiles-toggle-inner">
         <span class="profiles-label-header">Interviewers</span>
-        <span class="profiles-names">{interviewers.map(i => i.name).filter(Boolean).join(' · ')}</span>
       </div>
       <span class="profiles-chevron">{expanded ? '▴' : '▾'}</span>
     </button>
@@ -92,7 +91,7 @@
   .profile-field { display: flex; flex-direction: column; gap: 0.1rem; }
   .profile-field-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #475569; }
   .profile-field-value { font-size: var(--fs-sm); color: #94a3b8; line-height: 1.4; }
-  .rapport-section { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.35rem 0.5rem; background: #060e1a; border-left: 2px solid #1e40af; border-radius: 0.25rem; }
+  .rapport-section { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.35rem 0.5rem; background: #060e1a; border-left: 2px solid #60a5fa; border-radius: 0.25rem; }
   .rapport-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #475569; }
   .rapport-tips-list { display: flex; flex-direction: column; gap: 0.25rem; }
   .rapport-tip { display: flex; flex-direction: column; gap: 0.05rem; }

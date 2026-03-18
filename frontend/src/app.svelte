@@ -1776,7 +1776,7 @@ Ask: team | How long have you been with the team?`;
   .history-btn {
     padding: 0.3rem 0.8rem; background: transparent;
     border: 1px solid #334155; border-radius: 0.375rem;
-    color: #64748b; font-size: var(--fs-sm); cursor: pointer; white-space: nowrap;
+    color: #64748b; font-size: var(--fs-base); cursor: pointer; white-space: nowrap;
   }
   .history-btn:hover { border-color: #60a5fa; color: #60a5fa; }
 
@@ -1821,7 +1821,7 @@ Ask: team | How long have you been with the team?`;
   .voice-pick-btn {
     padding: 0.2rem 0.35rem; background: transparent;
     border: 1px solid #334155; border-radius: 0.25rem;
-    color: #64748b; font-size: var(--fs-sm); cursor: pointer;
+    color: #64748b; font-size: var(--fs-base); cursor: pointer;
   }
   .voice-menu {
     position: absolute; top: calc(100% + 4px); right: 0; z-index: 200;
@@ -1834,7 +1834,7 @@ Ask: team | How long have you been with the team?`;
     color: #94a3b8;
     border: 1px solid #1e293b;
     border-radius: 0.25rem;
-    font-size: var(--fs-xs);
+    font-size: var(--fs-sm);
     padding: 0.15rem 0.3rem;
     cursor: pointer;
     height: 1.6rem;
@@ -1842,7 +1842,7 @@ Ask: team | How long have you been with the team?`;
   .font-select:hover { border-color: #334155; color: #cbd5e1; }
 
   .voice-group-label {
-    padding: 0.2rem 0.75rem 0.1rem; font-size: 0.6rem; font-weight: 800;
+    padding: 0.2rem 0.75rem 0.1rem; font-size: var(--fs-xs); font-weight: 800;
     text-transform: uppercase; letter-spacing: 0.08em; color: #475569;
   }
   .voice-row {
@@ -1866,7 +1866,7 @@ Ask: team | How long have you been with the team?`;
   .voice-test-inline-btn {
     flex-shrink: 0; padding: 0.2rem 0.55rem; background: transparent;
     border: 1px solid #334155; border-radius: 0.25rem;
-    color: #60a5fa; font-size: var(--fs-sm); cursor: pointer; transition: all 0.15s;
+    color: #60a5fa; font-size: var(--fs-base); cursor: pointer; transition: all 0.15s;
   }
   .voice-test-inline-btn:hover { background: #1e3a5f; border-color: #3b82f6; }
 

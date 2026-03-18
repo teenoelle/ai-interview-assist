@@ -75,7 +75,7 @@
   .qhist-empty {
     color: #334155;
     font-style: italic;
-    font-size: 0.78em;
+    font-size: var(--fs-sm);
     text-align: center;
     padding: 2rem 0.75rem;
     line-height: 1.5;
@@ -125,22 +125,22 @@
   }
 
   .qhist-num {
-    font-size: 0.6em;
+    font-size: var(--fs-xs);
     font-weight: 800;
     color: #334155;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     flex-shrink: 0;
   }
-  .qhist-item.active .qhist-num { color: #4ade80; font-size: 0.65em; }
+  .qhist-item.active .qhist-num { color: #4ade80; }
   .qhist-current-badge {
-    font-size: 0.55em; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+    font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
     color: #4ade80; background: #14532d; border-radius: 0.2em; padding: 0.1em 0.4em;
     flex-shrink: 0;
   }
 
   .qhist-tag {
-    font-size: 0.52em;
+    font-size: var(--fs-xs);
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -166,7 +166,7 @@
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
   .qhist-q {
-    font-size: 0.72em;
+    font-size: var(--fs-sm);
     color: #c87070;
     line-height: 1.35;
     overflow-wrap: break-word;
@@ -175,7 +175,7 @@
   .qhist-item.active .qhist-q { color: #fca5a5; font-weight: 600; }
 
   .qhist-redflag {
-    font-size: 0.6em;
+    font-size: var(--fs-xs);
     color: #b45309;
     font-weight: 600;
   }
@@ -187,7 +187,7 @@
     margin-top: 0.1rem;
   }
   .fb-chip {
-    font-size: 0.55em;
+    font-size: var(--fs-xs);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;

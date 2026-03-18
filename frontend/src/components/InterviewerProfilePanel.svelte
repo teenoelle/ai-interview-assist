@@ -12,6 +12,9 @@
     collapsedCards = s;
   }
 
+  function firstName(name: string) { return name.trim().split(/\s+/)[0] ?? ''; }
+  function lastName(name: string) { const p = name.trim().split(/\s+/); return p.length > 1 ? p.slice(1).join(' ') : ''; }
+
   function parseTip(tip: string): { keyword: string; text: string } {
     const m = tip.match(/^\[([^\]]+)\]\s*(.*)/s);
     return m ? { keyword: m[1], text: m[2].trim() } : { keyword: '', text: tip };
@@ -34,8 +37,12 @@
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="profile-header" onclick={() => toggleCard(i)} role="button" tabindex="0"
           onkeydown={(e) => e.key === 'Enter' && toggleCard(i)}>
-          <span class="profile-name">{iv.name}</span>
-          {#if iv.role}<span class="profile-role">{iv.role}</span>{/if}
+          <div class="profile-name-block">
+            <span class="profile-name">
+              <span class="name-first">{firstName(iv.name)}</span>{#if lastName(iv.name)} <span class="name-last">{lastName(iv.name)}</span>{/if}
+            </span>
+            {#if iv.role}<span class="profile-role">{iv.role}</span>{/if}
+          </div>
           <span class="card-chevron">{cardCollapsed ? '▾' : '▴'}</span>
         </div>
         {#if !cardCollapsed}
@@ -83,11 +90,14 @@
   .profiles-chevron { font-size: var(--fs-xs); color: #334155; }
   .profiles { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.5rem 0.75rem 0.75rem; border-top: 1px solid #0f1e33; }
   .profile-card { background: #060e1a; border: 1px solid #1a2d4a; border-radius: 0.4rem; padding: 0.6rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }
-  .profile-header { display: flex; align-items: baseline; gap: 0.5rem; cursor: pointer; user-select: none; min-width: 0; }
-  .profile-role { font-size: var(--fs-sm); color: #93c5fd; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .profile-header:hover .profile-name { color: #93c5fd; }
-  .profile-name { font-size: var(--fs-base); font-weight: 700; color: #60a5fa; transition: color 0.12s; }
-  .card-chevron { font-size: var(--fs-xs); color: #334155; margin-left: auto; flex-shrink: 0; }
+  .profile-header { display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer; user-select: none; min-width: 0; }
+  .profile-name-block { display: flex; flex-direction: column; gap: 0.1rem; flex: 1; min-width: 0; }
+  .profile-name { font-size: var(--fs-base); font-weight: 700; }
+  .name-first { color: #60a5fa; }
+  .profile-header:hover .name-first { color: #93c5fd; }
+  .name-last { color: #e2e8f0; }
+  .profile-role { font-size: var(--fs-sm); color: #93c5fd; line-height: 1.3; }
+  .card-chevron { font-size: var(--fs-xs); color: #334155; flex-shrink: 0; padding-top: 0.15rem; }
   .profile-field { display: flex; flex-direction: column; gap: 0.1rem; }
   .profile-field-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #475569; }
   .profile-field-value { font-size: var(--fs-sm); color: #94a3b8; line-height: 1.4; }

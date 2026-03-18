@@ -4,6 +4,13 @@
   }>();
 
   let expanded = $state(true);
+  let collapsedCards = $state(new Set<number>());
+
+  function toggleCard(i: number) {
+    const s = new Set(collapsedCards);
+    s.has(i) ? s.delete(i) : s.add(i);
+    collapsedCards = s;
+  }
 
   function parseTip(tip: string): { keyword: string; text: string } {
     const m = tip.match(/^\[([^\]]+)\]\s*(.*)/s);
@@ -22,37 +29,43 @@
     </button>
     {#if expanded}
   <div class="profiles">
-    {#each interviewers as iv}
+    {#each interviewers as iv, i}
+      {@const cardCollapsed = collapsedCards.has(i)}
       <div class="profile-card">
-        <div class="profile-header">
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="profile-header" onclick={() => toggleCard(i)} role="button" tabindex="0"
+          onkeydown={(e) => e.key === 'Enter' && toggleCard(i)}>
           <span class="profile-name">{iv.name}</span>
           {#if iv.role}<span class="profile-role">{iv.role}</span>{/if}
+          <span class="card-chevron">{cardCollapsed ? '▾' : '▴'}</span>
         </div>
-        {#if iv.background}
-          <div class="profile-field">
-            <span class="profile-field-label">Background</span>
-            <span class="profile-field-value">{iv.background}</span>
-          </div>
-        {/if}
-        {#if iv.tenure}
-          <div class="profile-field">
-            <span class="profile-field-label">Tenure</span>
-            <span class="profile-field-value">{iv.tenure}</span>
-          </div>
-        {/if}
-        {#if iv.rapport_tips?.length > 0}
-          <div class="rapport-section">
-            <span class="rapport-label">Rapport Tips</span>
-            <div class="rapport-tips-list">
-              {#each iv.rapport_tips as tip}
-                {@const p = parseTip(tip)}
-                <div class="rapport-tip">
-                  {#if p.keyword}<span class="rapport-kw">{p.keyword}</span>{/if}
-                  <span class="rapport-text">{p.text}</span>
-                </div>
-              {/each}
+        {#if !cardCollapsed}
+          {#if iv.background}
+            <div class="profile-field">
+              <span class="profile-field-label">Background</span>
+              <span class="profile-field-value">{iv.background}</span>
             </div>
-          </div>
+          {/if}
+          {#if iv.tenure}
+            <div class="profile-field">
+              <span class="profile-field-label">Tenure</span>
+              <span class="profile-field-value">{iv.tenure}</span>
+            </div>
+          {/if}
+          {#if iv.rapport_tips?.length > 0}
+            <div class="rapport-section">
+              <span class="rapport-label">Rapport Tips</span>
+              <div class="rapport-tips-list">
+                {#each iv.rapport_tips as tip}
+                  {@const p = parseTip(tip)}
+                  <div class="rapport-tip">
+                    {#if p.keyword}<span class="rapport-kw">{p.keyword}</span>{/if}
+                    <span class="rapport-text">{p.text}</span>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/if}
         {/if}
       </div>
     {/each}
@@ -71,8 +84,10 @@
   .profiles-chevron { font-size: var(--fs-xs); color: #334155; }
   .profiles { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.5rem 0.75rem 0.75rem; border-top: 1px solid #0f1e33; }
   .profile-card { background: #060e1a; border: 1px solid #1a2d4a; border-radius: 0.4rem; padding: 0.6rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }
-  .profile-header { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
-  .profile-name { font-size: var(--fs-base); font-weight: 700; color: #e2e8f0; }
+  .profile-header { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; cursor: pointer; user-select: none; }
+  .profile-header:hover .profile-name { color: #93c5fd; }
+  .profile-name { font-size: var(--fs-base); font-weight: 700; color: #60a5fa; transition: color 0.12s; }
+  .card-chevron { font-size: var(--fs-xs); color: #334155; margin-left: auto; flex-shrink: 0; }
   .profile-role { font-size: var(--fs-sm); color: #93c5fd; }
   .profile-field { display: flex; flex-direction: column; gap: 0.1rem; }
   .profile-field-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #475569; }

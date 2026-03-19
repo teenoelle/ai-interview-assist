@@ -1374,12 +1374,6 @@ Ask: team | How long have you been with the team?`;
                       <video bind:this={webcamEl} class="selfview" autoplay muted playsinline
                         style="transform: translate({sVid.panX}px, {sVid.panY}px) scale({sVid.zoom}) scaleX(-1); transform-origin: center;"
                       ></video>
-                      <div class="selfview-zoom-btns">
-                        <button class="sv-zoom-btn" onclick={(e) => { e.stopPropagation(); sVid.zoom = Math.max(1, sVid.zoom / 1.4); if (sVid.zoom < 1.05) { sVid.zoom = 1; sVid.panX = 0; sVid.panY = 0; } }} title="Zoom out">−</button>
-                        <span class="sv-zoom-val">{sVid.zoom > 1.05 ? `${sVid.zoom.toFixed(1)}×` : '1×'}</span>
-                        <button class="sv-zoom-btn" onclick={(e) => { e.stopPropagation(); sVid.zoom = Math.min(5, sVid.zoom * 1.4); }} title="Zoom in">+</button>
-                        {#if sVid.zoom > 1.05}<button class="sv-zoom-btn sv-zoom-reset" onclick={(e) => { e.stopPropagation(); vidReset(sVid); }} title="Reset zoom">↺</button>{/if}
-                      </div>
                     </div>
                     <div class="selfview-label">You</div>
                     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -2342,17 +2336,7 @@ Ask: team | How long have you been with the team?`;
     width: 100%; height: 100%; object-fit: contain;
     background: #0a1525; display: block; transform-origin: center;
   }
-  .selfview-zoom-btns {
-    position: absolute; bottom: 0.3rem; left: 50%; transform: translateX(-50%);
-    display: flex; align-items: center; gap: 0.2rem; padding: 0.15rem 0.5rem;
-    background: rgba(6,14,26,0.82); border-radius: 0.3rem;
-    opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 10;
-  }
-  .selfview-zoom-shell:hover .selfview-zoom-btns { opacity: 1; pointer-events: auto; }
-  .sv-zoom-btn { background: #0d1a2b; border: 1px solid #1e293b; border-radius: 0.25rem; color: #475569; font-size: var(--fs-xs); padding: 0.05rem 0.35rem; cursor: pointer; line-height: 1.4; }
-  .sv-zoom-btn:hover { border-color: #3b82f6; color: #93c5fd; }
-  .sv-zoom-reset { color: #60a5fa; }
-  .sv-zoom-val { font-size: var(--fs-xs); color: #334155; min-width: 2.2em; text-align: center; font-variant-numeric: tabular-nums; }
+  .sv-zoom-btn { display: none; }
   .selfview-label { font-size: var(--fs-xs); color: #334155; text-transform: uppercase; letter-spacing: 0.08em; padding: 0.15rem 0.75rem; }
   .selfview-resize-handle { touch-action: none; }
 

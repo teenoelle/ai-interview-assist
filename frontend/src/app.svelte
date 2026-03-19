@@ -112,6 +112,13 @@
   // Sync crop rect to capture instance whenever either changes
   $effect(() => { captureInst?.setCropRect(cropRect); });
 
+  // Rolling exponential moving average of system audio energy (RMS)
+  let sysEnergyEma = $state(0);
+  function updateSysEnergy(sys: number) {
+    // EMA alpha=0.15: smooths rapid fluctuations while tracking sustained speech energy
+    sysEnergyEma = sysEnergyEma * 0.85 + sys * 0.15;
+  }
+
   // Webcam self-view
   let webcamStream = $state<MediaStream | null>(null);
   let webcamEl: HTMLVideoElement | undefined = $state();
@@ -425,15 +432,15 @@
   // Section drag-to-reorder (within and between right sub-panels)
   type SectionId = 'screen-preview' | 'personality' | 'sentiment-bar' | 'body-language' |
     'energy-coach' | 'fillers' | 'salary-coach' | 'next-question' | 'keywords' |
-    'company-brief' | 'interviewer-profiles' | 'stats' | 'rate-limits';
+    'company-brief' | 'interviewer-profiles' | 'stats' | 'rate-limits' | 'answer-score';
   interface SectionSlot { panel: string; id: SectionId; }
   const DEFAULT_SECTION_LAYOUT: SectionSlot[] = [
     { panel: 'sentiment', id: 'screen-preview' },
     { panel: 'sentiment', id: 'personality' },
-    { panel: 'sentiment', id: 'body-language' },
     { panel: 'sentiment', id: 'sentiment-bar' },
-    { panel: 'sentiment', id: 'energy-coach' },
+    { panel: 'sentiment', id: 'body-language' },
     { panel: 'sentiment', id: 'stats' },
+    { panel: 'sentiment', id: 'answer-score' },
     { panel: 'coaching', id: 'salary-coach' },
     { panel: 'coaching', id: 'next-question' },
     { panel: 'coaching', id: 'company-brief' },
@@ -445,7 +452,7 @@
     'body-language': 'Body Language', 'energy-coach': 'Pace', 'fillers': 'Fillers',
     'salary-coach': 'Salary', 'next-question': 'Next Q', 'keywords': 'Keywords',
     'company-brief': 'Company', 'interviewer-profiles': 'Interviewers',
-    'stats': 'Stats', 'rate-limits': 'Model Usage',
+    'stats': 'Stats', 'rate-limits': 'Model Usage', 'answer-score': 'Answer Score',
   };
   let sectionLayout = $state<SectionSlot[]>(loadSectionLayout(DEFAULT_SECTION_LAYOUT));
   let draggingSection = $state<SectionId | null>(null);
@@ -817,7 +824,7 @@ Ask: team | How long have you been with the team?`;
             interviewerRaisedKeywords = updated;
             keywordQuestionMap = updatedMap;
           }
-          const tone = analyzeAudioTone(event.text);
+          const tone = analyzeAudioTone(event.text, sysEnergyEma);
           audioEmotion = tone.emotion;
           audioReason = tone.reason;
           audioEmotionHistory = [...audioEmotionHistory.slice(-4), tone.emotion];
@@ -1181,6 +1188,7 @@ Ask: team | How long have you been with the team?`;
             onCapture={(v) => { capturing = v; if (v) ttsEnabled = true; if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); } }}
             onStreams={(screen, webcam) => { screenStream = screen; webcamStream = webcam; }}
             onReady={(cap) => { captureInst = cap; }}
+            onLevel={(_mic, sys) => updateSysEnergy(sys)}
           />
         </div>
       </header>
@@ -1475,6 +1483,7 @@ Ask: team | How long have you been with the team?`;
                     <div class="personality-strip" style="border-color: {personality.color}">
                       <span class="personality-label" style="color: {personality.color}">{personality.label}</span>
                       <span class="personality-desc">{personality.description}</span>
+                      <span class="personality-tip">💡 {personality.tip}</span>
                     </div>
                   {/if}
                 {:else if sid === 'sentiment-bar'}
@@ -1492,30 +1501,10 @@ Ask: team | How long have you been with the team?`;
                       {/each}
                     </div>
                   {/if}
-                  {@const latestWithFeedback = suggestions.slice().reverse().find(s => s.answerFeedback || s.vocalFeedback)}
-                  {#if latestWithFeedback}
-                    <div class="answer-score-panel">
-                      {#if latestWithFeedback.answerFeedback}
-                        <div class="ascore-row">
-                          {#if latestWithFeedback.answerFeedback.missed_followup}<span class="ascore-badge ascore-warn">No follow-up</span>{/if}
-                          {#if latestWithFeedback.answerFeedback.missed_metric}<span class="ascore-badge ascore-warn">Add a metric</span>{/if}
-                        </div>
-                        <p class="ascore-coaching">{latestWithFeedback.answerFeedback.coaching}</p>
-                      {/if}
-                      {#if latestWithFeedback.vocalFeedback}
-                        <div class="ascore-vocal-row">
-                          <span class="ascore-vocal-score" style="color: {latestWithFeedback.vocalFeedback.confidence_score >= 70 ? '#4ade80' : latestWithFeedback.vocalFeedback.confidence_score >= 45 ? '#f59e0b' : '#f87171'}">{latestWithFeedback.vocalFeedback.confidence_score}%</span>
-                          <span class="ascore-vocal-tone">{latestWithFeedback.vocalFeedback.tone}</span>
-                          {#if latestWithFeedback.vocalFeedback.fillers_noted}<span class="ascore-vocal-fillers">{latestWithFeedback.vocalFeedback.fillers_noted}</span>{/if}
-                        </div>
-                        <p class="ascore-coaching">{latestWithFeedback.vocalFeedback.coaching}</p>
-                      {/if}
-                    </div>
-                  {/if}
                 {:else if sid === 'body-language'}
                   <BodyLanguagePanel emotion={emotion} coaching={coaching} coachingWhy={coachingWhy} />
                 {:else if sid === 'energy-coach'}
-                  <EnergyCoachPanel wpm={paceReading.wordsPerMinute} status={paceReading.status} tip={paceReading.tip} energySignal={energySignal} />
+                  <!-- merged into stats section -->
                 {:else if sid === 'fillers'}
                   <!-- merged into stats section -->
                 {:else if sid === 'salary-coach'}
@@ -1549,6 +1538,18 @@ Ask: team | How long have you been with the team?`;
                       <span class="side-label">You / Them</span>
                       <span class="side-value" style="color: {ratioColor}">{youPct > 0 ? `${youPct}% / ${interviewerPct}%` : '—'}</span>
                     </div>
+                    <div class="side-stat" title="Your speaking pace in words per minute">
+                      <span class="side-label">Pace</span>
+                      <span class="side-value" style="color: {paceReading.status === 'good' ? '#22c55e' : paceReading.status === 'fast' ? '#f59e0b' : paceReading.status === 'slow' ? '#60a5fa' : '#334155'}">
+                        {paceReading.status !== 'idle' ? `${paceReading.wordsPerMinute} wpm` : '—'}
+                      </span>
+                      {#if paceReading.status !== 'idle' && paceReading.status !== 'good' && paceReading.tip}
+                        <span class="side-pace-tip" style="color: {paceReading.status === 'fast' ? '#f59e0b' : '#60a5fa'}">{paceReading.tip}</span>
+                      {/if}
+                    </div>
+                    {#if energySignal}
+                      <div class="side-energy-signal">{energySignal}</div>
+                    {/if}
                     <div class="side-stat" title="Filler word count — words to avoid">
                       <span class="side-label">Fillers</span>
                       <span class="side-value" class:filler-active={fillerTotal > 0} style="color: {fillerTotal > 0 ? '#f59e0b' : '#475569'}">
@@ -1569,6 +1570,29 @@ Ask: team | How long have you been with the team?`;
                       </span>
                     </div>
                   </div>
+                {:else if sid === 'answer-score'}
+                  {#if suggestions.some(s => s.answerFeedback || s.vocalFeedback)}
+                    {@const latestWithFeedback = suggestions.slice().reverse().find(s => s.answerFeedback || s.vocalFeedback)}
+                    {#if latestWithFeedback}
+                      <div class="answer-score-panel">
+                        {#if latestWithFeedback.answerFeedback}
+                          <div class="ascore-row">
+                            {#if latestWithFeedback.answerFeedback.missed_followup}<span class="ascore-badge ascore-warn">No follow-up</span>{/if}
+                            {#if latestWithFeedback.answerFeedback.missed_metric}<span class="ascore-badge ascore-warn">Add a metric</span>{/if}
+                          </div>
+                          <p class="ascore-coaching">{latestWithFeedback.answerFeedback.coaching}</p>
+                        {/if}
+                        {#if latestWithFeedback.vocalFeedback}
+                          <div class="ascore-vocal-row">
+                            <span class="ascore-vocal-score" style="color: {latestWithFeedback.vocalFeedback.confidence_score >= 70 ? '#4ade80' : latestWithFeedback.vocalFeedback.confidence_score >= 45 ? '#f59e0b' : '#f87171'}">{latestWithFeedback.vocalFeedback.confidence_score}%</span>
+                            <span class="ascore-vocal-tone">{latestWithFeedback.vocalFeedback.tone}</span>
+                            {#if latestWithFeedback.vocalFeedback.fillers_noted}<span class="ascore-vocal-fillers">{latestWithFeedback.vocalFeedback.fillers_noted}</span>{/if}
+                          </div>
+                          <p class="ascore-coaching">{latestWithFeedback.vocalFeedback.coaching}</p>
+                        {/if}
+                      </div>
+                    {/if}
+                  {/if}
                 {:else if sid === 'rate-limits'}
                   <div class="side-section">
                     <button class="side-section-toggle" onclick={() => { modelUsageExpanded = !modelUsageExpanded; localStorage.setItem('model-usage-expanded', String(modelUsageExpanded)); }}>
@@ -1817,6 +1841,20 @@ Ask: team | How long have you been with the team?`;
     color: #64748b;
     line-height: 1.3;
     font-style: italic;
+  }
+  .personality-tip {
+    font-size: var(--fs-sm);
+    color: #94a3b8;
+    line-height: 1.4;
+    margin-top: 0.25rem;
+    padding-top: 0.25rem;
+    border-top: 1px solid #1e293b;
+  }
+  .side-pace-tip { font-size: var(--fs-xs); font-style: italic; color: inherit; margin-left: 0.25rem; }
+  .side-energy-signal {
+    font-size: var(--fs-sm); color: #f59e0b; font-style: italic;
+    padding: 0.15rem 0.4rem; background: #1a0f00; border-left: 2px solid #92400e;
+    border-radius: 0.2rem; margin: 0.1rem 0.5rem;
   }
 
   /* TTS */

@@ -2,10 +2,11 @@
   import { MediaCapture } from '../lib/capture';
   import AudioMeter from './AudioMeter.svelte';
   type StreamsReadyCallback = (screen: MediaStream, webcam: MediaStream | null) => void;
-  const { onCapture, onStreams, onReady } = $props<{
+  const { onCapture, onStreams, onReady, onLevel: onLevelProp } = $props<{
     onCapture: (active: boolean) => void;
     onStreams?: StreamsReadyCallback;
     onReady?: (cap: MediaCapture) => void;
+    onLevel?: (mic: number, sys: number) => void;
   }>();
 
   let capture: MediaCapture | null = $state(null);
@@ -28,7 +29,7 @@
     } else {
       try {
         capture = new MediaCapture();
-        capture.onLevel((mic, sys) => { micLevel = mic; systemLevel = sys; });
+        capture.onLevel((mic, sys) => { micLevel = mic; systemLevel = sys; onLevelProp?.(mic, sys); });
         if (onStreams) capture.onStreamsReady(onStreams);
         await capture.start();
         active = true;

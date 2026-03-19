@@ -109,6 +109,8 @@
   // Capture instance (for triggerFrameCapture)
   let captureInst = $state<MediaCapture | null>(null);
   let lastSentimentTrigger = 0;
+  // Sync crop rect to capture instance whenever either changes
+  $effect(() => { captureInst?.setCropRect(cropRect); });
 
   // Webcam self-view
   let webcamStream = $state<MediaStream | null>(null);
@@ -124,15 +126,8 @@
     if (screenEl) { screenEl.srcObject = screenStream ?? null; if (screenStream) screenEl.play().catch(() => {}); }
   });
 
-  // Interviewer face crop (persisted)
-  let cropRect = $state<{x:number;y:number;w:number;h:number}|null>(() => {
-    try {
-      const r = JSON.parse(localStorage.getItem(SK.cropRect) ?? 'null');
-      if (r && typeof r.x === 'number' && typeof r.y === 'number' && typeof r.w === 'number' && typeof r.h === 'number'
-          && r.w > 0.01 && r.h > 0.01 && r.w <= 1 && r.h <= 1) return r;
-      return null;
-    } catch { return null; }
-  });
+  // Interviewer face crop — always starts null (full screen) regardless of saved value
+  let cropRect = $state<{x:number;y:number;w:number;h:number}|null>(null);
   let videoNaturalAR = $state(16/9);
   let showCropPicker = $state(false);
   let pickerDrag = $state<{sx:number;sy:number;cx:number;cy:number}|null>(null);
@@ -1379,12 +1374,12 @@ Ask: team | How long have you been with the team?`;
                       <video bind:this={webcamEl} class="selfview" autoplay muted playsinline
                         style="transform: translate({sVid.panX}px, {sVid.panY}px) scale({sVid.zoom}) scaleX(-1); transform-origin: center;"
                       ></video>
-                    </div>
-                    <div class="selfview-zoom-btns">
-                      <button class="sv-zoom-btn" onclick={(e) => { e.stopPropagation(); sVid.zoom = Math.max(1, sVid.zoom / 1.4); if (sVid.zoom < 1.05) { sVid.zoom = 1; sVid.panX = 0; sVid.panY = 0; } }} title="Zoom out">−</button>
-                      <span class="sv-zoom-val">{sVid.zoom > 1.05 ? `${sVid.zoom.toFixed(1)}×` : '1×'}</span>
-                      <button class="sv-zoom-btn" onclick={(e) => { e.stopPropagation(); sVid.zoom = Math.min(5, sVid.zoom * 1.4); }} title="Zoom in">+</button>
-                      {#if sVid.zoom > 1.05}<button class="sv-zoom-btn sv-zoom-reset" onclick={(e) => { e.stopPropagation(); vidReset(sVid); }} title="Reset zoom">↺</button>{/if}
+                      <div class="selfview-zoom-btns">
+                        <button class="sv-zoom-btn" onclick={(e) => { e.stopPropagation(); sVid.zoom = Math.max(1, sVid.zoom / 1.4); if (sVid.zoom < 1.05) { sVid.zoom = 1; sVid.panX = 0; sVid.panY = 0; } }} title="Zoom out">−</button>
+                        <span class="sv-zoom-val">{sVid.zoom > 1.05 ? `${sVid.zoom.toFixed(1)}×` : '1×'}</span>
+                        <button class="sv-zoom-btn" onclick={(e) => { e.stopPropagation(); sVid.zoom = Math.min(5, sVid.zoom * 1.4); }} title="Zoom in">+</button>
+                        {#if sVid.zoom > 1.05}<button class="sv-zoom-btn sv-zoom-reset" onclick={(e) => { e.stopPropagation(); vidReset(sVid); }} title="Reset zoom">↺</button>{/if}
+                      </div>
                     </div>
                     <div class="selfview-label">You</div>
                     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -2253,6 +2248,7 @@ Ask: team | How long have you been with the team?`;
     overflow: hidden;
     border-radius: 0.375rem;
     border: 1px solid #1e293b;
+    position: relative;
   }
   .selfview-zoom-shell.selfview-zoomed {
     overflow: hidden;
@@ -2346,7 +2342,13 @@ Ask: team | How long have you been with the team?`;
     width: 100%; height: 100%; object-fit: contain;
     background: #0a1525; display: block; transform-origin: center;
   }
-  .selfview-zoom-btns { display: flex; align-items: center; gap: 0.2rem; padding: 0.15rem 0.5rem; background: #060e1a; }
+  .selfview-zoom-btns {
+    position: absolute; bottom: 0.3rem; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 0.2rem; padding: 0.15rem 0.5rem;
+    background: rgba(6,14,26,0.82); border-radius: 0.3rem;
+    opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 10;
+  }
+  .selfview-zoom-shell:hover .selfview-zoom-btns { opacity: 1; pointer-events: auto; }
   .sv-zoom-btn { background: #0d1a2b; border: 1px solid #1e293b; border-radius: 0.25rem; color: #475569; font-size: var(--fs-xs); padding: 0.05rem 0.35rem; cursor: pointer; line-height: 1.4; }
   .sv-zoom-btn:hover { border-color: #3b82f6; color: #93c5fd; }
   .sv-zoom-reset { color: #60a5fa; }

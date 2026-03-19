@@ -113,6 +113,12 @@ export class MediaCapture {
   }
 
   private _captureFrameFn: (() => Promise<void>) | null = null;
+  private _cropRect: { x: number; y: number; w: number; h: number } | null = null;
+
+  /** Update the crop rect used for sentiment frame capture. Pass null for full frame. */
+  public setCropRect(rect: { x: number; y: number; w: number; h: number } | null) {
+    this._cropRect = rect;
+  }
 
   /** Trigger an immediate sentiment frame capture (e.g. when interviewer starts talking). */
   public triggerFrameCapture() {
@@ -133,7 +139,17 @@ export class MediaCapture {
 
     const captureFrame = async () => {
       if (video.readyState >= 2 && video.videoWidth > 0) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const crop = this._cropRect;
+        if (crop) {
+          // Draw only the cropped region (interviewer face) scaled to canvas size
+          const sw = video.videoWidth * crop.w;
+          const sh = video.videoHeight * crop.h;
+          const sx = video.videoWidth * crop.x;
+          const sy = video.videoHeight * crop.y;
+          ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+        } else {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        }
         const blob = await new Promise<Blob | null>((resolve) =>
           canvas.toBlob(resolve, 'image/jpeg', 0.7)
         );

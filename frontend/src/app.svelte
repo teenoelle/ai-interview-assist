@@ -466,11 +466,17 @@
     { panel: 'coaching', id: 'rate-limits' },
   ];
   const SECTION_LABELS: Record<string, string> = {
-    'screen-preview': 'Screen', 'personality': 'Personality', 'sentiment-bar': 'Sentiment',
-    'body-language': 'Body Language', 'energy-coach': 'Pace', 'fillers': 'Fillers',
+    'screen-preview': 'Interviewer Video', 'personality': 'Interviewer Personality', 'sentiment-bar': 'Interviewer Mood',
+    'body-language': 'Your Body Language', 'energy-coach': 'Pace', 'fillers': 'Fillers',
     'salary-coach': 'Salary', 'next-question': 'Next Q', 'keywords': 'Keywords',
     'company-brief': 'Company', 'interviewer-profiles': 'Interviewers',
-    'stats': 'Stats', 'rate-limits': 'Model Usage', 'answer-score': 'Answer Score',
+    'stats': 'Your Stats', 'rate-limits': 'Model Usage', 'answer-score': 'Your Answer Score',
+  };
+  const SECTION_ROLE: Record<string, 'interviewer' | 'you' | 'coaching'> = {
+    'screen-preview': 'interviewer', 'personality': 'interviewer', 'sentiment-bar': 'interviewer',
+    'body-language': 'you', 'stats': 'you', 'answer-score': 'you', 'energy-coach': 'you', 'fillers': 'you',
+    'salary-coach': 'coaching', 'next-question': 'coaching', 'keywords': 'coaching',
+    'company-brief': 'coaching', 'interviewer-profiles': 'coaching', 'rate-limits': 'coaching',
   };
   let sectionLayout = $state<SectionSlot[]>(loadSectionLayout(DEFAULT_SECTION_LAYOUT));
   let draggingSection = $state<SectionId | null>(null);
@@ -1553,15 +1559,25 @@ Ask: team | How long have you been with the team?`;
       </div>
 
       {#snippet sectionList(panelId: string)}
+        {@const panelSections = sectionLayout.filter(s => s.panel === panelId && s.id !== 'keywords')}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="section-drop-zone" ondragover={(e) => { e.preventDefault(); }} ondrop={(e) => onPanelEmptyDrop(panelId, e)}>
-          {#each sectionLayout.filter(s => s.panel === panelId && s.id !== 'keywords') as slot (slot.id)}
+          {#each panelSections as slot, i (slot.id)}
             {@const sid = slot.id}
+            {@const myRole = SECTION_ROLE[sid] ?? 'coaching'}
+            {@const prevRole = i > 0 ? (SECTION_ROLE[panelSections[i-1].id] ?? 'coaching') : null}
+            {#if prevRole !== myRole}
+              <div class="group-divider group-divider-{myRole}">
+                {myRole === 'interviewer' ? '👤 Reading the Room' : myRole === 'you' ? '✅ Your Performance' : '🎯 Coaching'}
+              </div>
+            {/if}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div class="section-wrapper"
               class:drop-above={sectionDropTarget?.id === sid && sectionDropTarget.pos === 'above'}
               class:drop-below={sectionDropTarget?.id === sid && sectionDropTarget.pos === 'below'}
               class:section-dragging={draggingSection === sid}
+              class:section-interviewer={myRole === 'interviewer'}
+              class:section-you={myRole === 'you'}
               ondragover={(e) => onSectionDragOver(sid, e)}
               ondragleave={onSectionDragLeave}
               ondrop={(e) => onSectionDrop(sid, panelId, e)}>
@@ -1579,16 +1595,21 @@ Ask: team | How long have you been with the team?`;
                   <div class="section-drag-handle" draggable={true} ondragstart={(e) => onSectionDragStart(sid, e)} ondragend={onSectionDragEnd}>⠿</div>
                   <button class="section-collapse-btn" onclick={() => toggleSectionCollapse(sid)}>▾</button>
                 </div>
+                {#if myRole === 'interviewer' || myRole === 'you'}
+                  <div class="section-role-badge role-{myRole}">
+                    {myRole === 'interviewer' ? 'Interviewer' : 'You'}
+                  </div>
+                {/if}
                 {#if sid === 'screen-preview'}
                   {#if emotion}
-                    <div class="coaching-log-emotion-only">{emotion}</div>
+                    <div class="coaching-log-emotion-only"><span class="subject-label">Interviewer:</span> {emotion}</div>
                   {/if}
                 {:else if sid === 'personality'}
                   {#if personality}
                     <div class="personality-strip" style="border-color: {personality.color}">
                       <span class="personality-label" style="color: {personality.color}">{personality.label}</span>
                       <span class="personality-desc">{personality.description}</span>
-                      <span class="personality-tip">💡 {personality.tip}</span>
+                      <span class="personality-tip"><span class="tip-for-you">For you:</span> {personality.tip}</span>
                     </div>
                   {/if}
                 {:else if sid === 'sentiment-bar'}
@@ -1598,9 +1619,10 @@ Ask: team | How long have you been with the team?`;
                       {#each coachingLog.slice().reverse() as entry, i}
                         <div class="coaching-log-entry" class:coaching-log-latest={i === 0}>
                           <div class="coaching-log-meta">
-                            <span class="coaching-log-emotion">{entry.emotion}</span>
+                            <span class="coaching-log-emotion">They: {entry.emotion}</span>
                             <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
                           </div>
+                          <span class="coaching-log-for-you">For you:</span>
                           <span class="coaching-log-text">{entry.text}</span>
                         </div>
                       {/each}
@@ -1721,7 +1743,7 @@ Ask: team | How long have you been with the team?`;
               {/if}
             </div>
           {/each}
-          {#if sectionLayout.filter(s => s.panel === panelId && s.id !== 'keywords').length === 0}
+          {#if panelSections.length === 0}
             <div class="section-empty-hint">Drop sections here</div>
           {/if}
         </div>
@@ -2215,6 +2237,36 @@ Ask: team | How long have you been with the team?`;
   .section-wrapper.section-dragging { opacity: 0.35; }
   .section-wrapper.drop-above { border-top: 2px solid #3b82f6; }
   .section-wrapper.drop-below { border-bottom: 2px solid #3b82f6; }
+  .section-wrapper.section-interviewer { border-left: 3px solid rgba(239, 68, 68, 0.35); }
+  .section-wrapper.section-you { border-left: 3px solid rgba(245, 158, 11, 0.3); }
+
+  .section-role-badge {
+    position: absolute;
+    top: 3px;
+    right: 2px;
+    font-size: 0.57rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    opacity: 0.45;
+    pointer-events: none;
+  }
+  .role-interviewer { color: #ef4444; }
+  .role-you { color: #f59e0b; }
+
+  .group-divider {
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    padding: 0.5rem 0.5rem 0.15rem;
+    margin-top: 0.1rem;
+    border-top: 1px solid #1e293b;
+  }
+  .group-divider:first-child { border-top: none; margin-top: 0; padding-top: 0.15rem; }
+  .group-divider-interviewer { color: rgba(239, 68, 68, 0.6); }
+  .group-divider-you { color: rgba(245, 158, 11, 0.6); }
+  .group-divider-coaching { color: #334155; }
 
   /* Collapsed section bar */
   .section-collapsed-bar {
@@ -2556,6 +2608,9 @@ Ask: team | How long have you been with the team?`;
     font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.07em; color: #f59e0b; padding: 0.25rem 0.6rem;
   }
+  .subject-label { color: #64748b; font-weight: 600; text-transform: uppercase; font-size: var(--fs-xs); letter-spacing: 0.06em; }
+  .tip-for-you { color: #22c55e; font-weight: 700; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; }
+  .coaching-log-for-you { font-size: var(--fs-xs); color: #4ade80; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-top: 0.1rem; }
 
   .rapport-coaching { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.35rem 0.5rem; background: #071a0f; border-left: 2px solid #14532d; border-radius: 0.25rem; margin-top: 0.35rem; }
   .rapport-coaching-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #4ade80; }

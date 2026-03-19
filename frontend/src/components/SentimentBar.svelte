@@ -30,7 +30,7 @@
 <div class="sentiment-bar">
   <!-- Video Sentiment -->
   <div class="section-label">
-    <span class="label-icon">📷</span> Visual
+    <span class="label-icon">📷</span> Their face
   </div>
   {#if videoEmotion}
     <div class="emotion" style="--color: {videoConfig.color}">
@@ -48,7 +48,7 @@
 
   <!-- Audio Sentiment -->
   <div class="section-label" style="margin-top: 0.65rem;">
-    <span class="label-icon">🎙️</span> Voice
+    <span class="label-icon">🎙️</span> Their voice
   </div>
   {#if audioEmotion && audioConfig}
     <div class="emotion" style="--color: {audioConfig.color}">

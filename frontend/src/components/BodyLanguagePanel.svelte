@@ -146,7 +146,7 @@
       <div class="ai-tip-header">
         <span class="ai-tip-icon">💡</span>
         <span class="ai-tip-label" class:urgent-label={urgent}>
-          {urgent ? `⚠ Still ${emotion} (${consecutiveCount} reads)` : 'Right now'}
+          {urgent ? `⚠ Still ${emotion} (${consecutiveCount} reads)` : 'For you'}
         </span>
       </div>
       <div class="ai-tip-text">{coaching}</div>

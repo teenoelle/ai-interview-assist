@@ -37,7 +37,7 @@
   import type { CompanyBrief, InterviewerSummary } from './lib/api';
   import { fetchUsage } from './lib/api';
   import { parseSuggestion } from './lib/parseSuggestion';
-  import { EMOTION_COLORS, emotionColor } from './lib/emotions';
+  import { EMOTION_COLORS, EMOTION_CONFIG, emotionColor } from './lib/emotions';
   import '@fontsource/inter/400.css';
   import '@fontsource/inter/600.css';
   import '@fontsource/inter/700.css';
@@ -1616,16 +1616,25 @@ Ask: team | How long have you been with the team?`;
                             s.has(entry.time) ? s.delete(entry.time) : s.add(entry.time);
                             expandedCoachingEntries = s;
                           }}>
-                          <div class="coaching-log-meta">
-                            <span class="coaching-log-emotion">
-                              <span class="coaching-log-who">Interviewer:</span>
-                              <span style="color: {emotionColor(entry.emotion)}">{entry.emotion}</span>
+                          {#if i === 0}
+                            <!-- Latest: icon + emotion, no timestamp -->
+                            <div class="coaching-log-meta">
+                              <span class="coaching-log-emotion">
+                                <span class="coaching-log-icon">{EMOTION_CONFIG[entry.emotion]?.icon ?? ''}</span>
+                                <span style="color: {emotionColor(entry.emotion)}">{entry.emotion}</span>
+                              </span>
+                            </div>
+                            <span class="coaching-log-text coaching-log-text-latest" class:coaching-log-clickable={!!entry.why}>
+                              <span class="tip-label">Tip</span> {entry.text}
                             </span>
-                            <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
-                          </div>
-                          <span class="coaching-log-text" class:coaching-log-clickable={!!entry.why}>
-                            <span class="tip-label">Tip</span> {entry.text}
-                          </span>
+                          {:else}
+                            <!-- History: no icon, no Tip label, timestamp, dimmer -->
+                            <div class="coaching-log-meta">
+                              <span style="color: {emotionColor(entry.emotion)}" class="coaching-log-emotion-hist">{entry.emotion}</span>
+                              <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
+                            </div>
+                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!entry.why}>{entry.text}</span>
+                          {/if}
                           {#if entry.why && expandedCoachingEntries.has(entry.time)}
                             <span class="coaching-log-why">{entry.why}</span>
                           {/if}
@@ -2638,30 +2647,39 @@ Ask: team | How long have you been with the team?`;
     resize: vertical; min-height: 4rem;
   }
   .coaching-log-entry {
-    display: flex; flex-direction: column; gap: 0.1rem;
-    padding: 0.35rem 0.6rem;
+    display: flex; flex-direction: column; gap: 0.15rem;
+    padding: 0.3rem 0.55rem;
     border-radius: 0.35rem;
-    border-left: 2px solid #2a1a00;
-    opacity: 0.5;
-    transition: opacity 0.2s;
+    border-left: 2px solid #1a1200;
   }
   .coaching-log-entry.coaching-log-latest {
     border-left-color: #92400e;
-    opacity: 1;
     background: #150e00;
+    padding: 0.45rem 0.65rem;
   }
   .coaching-log-meta {
     display: flex; align-items: center; justify-content: space-between;
   }
+  .coaching-log-icon { font-size: 0.85rem; margin-right: 0.2rem; }
   .coaching-log-emotion {
     font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
-    letter-spacing: 0.07em;
+    letter-spacing: 0.07em; display: flex; align-items: center;
+  }
+  .coaching-log-emotion-hist {
+    font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; opacity: 0.6;
   }
   .coaching-log-ago {
-    font-size: var(--fs-xs); color: #475569; font-family: var(--ff-mono);
+    font-size: var(--fs-xs); color: #334155; font-family: var(--ff-mono);
   }
+  /* Latest tip — prominent */
   .coaching-log-text {
     font-size: var(--fs-sm); color: #fb923c; line-height: 1.4;
+  }
+  .coaching-log-text-latest { font-size: var(--fs-base); }
+  /* History tips — muted */
+  .coaching-log-text-hist {
+    font-size: var(--fs-xs); color: #64748b; line-height: 1.35;
   }
   .coaching-log-emotion-only {
     font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
@@ -2669,7 +2687,6 @@ Ask: team | How long have you been with the team?`;
   }
   .subject-label { color: #64748b; font-weight: 600; text-transform: uppercase; font-size: var(--fs-xs); letter-spacing: 0.06em; }
   .tip-label { color: #4ade80; font-weight: 700; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; }
-  .coaching-log-who { color: #ef4444; }
   .coaching-log-why { font-size: var(--fs-xs); color: #475569; font-style: italic; line-height: 1.35; display: block; margin-top: 0.1rem; }
   .coaching-log-clickable { cursor: pointer; text-decoration-line: underline; text-decoration-style: dotted; text-decoration-color: #334155; }
   .sp-header {

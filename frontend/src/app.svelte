@@ -901,7 +901,7 @@ Ask: team | How long have you been with the team?`;
             })
               .then(r => r.ok ? r.json() : null)
               .then(vf => {
-                if (vf) suggestions = suggestions.map((s, i) => i === capturedQIdx ? { ...s, vocalFeedback: vf } : s);
+                if (vf) { suggestions = suggestions.map((s, i) => i === capturedQIdx ? { ...s, vocalFeedback: vf } : s); vocalWhyExpanded = false; }
               })
               .catch(() => {});
           }
@@ -1008,6 +1008,7 @@ Ask: team | How long have you been with the team?`;
                     suggestions = suggestions.map((s, i) =>
                       i === prevIdx ? { ...s, answerFeedback: fb } : s
                     );
+                    answerWhyExpanded = false;
                   }
                 })
                 .catch(() => {});
@@ -1770,26 +1771,32 @@ Ask: team | How long have you been with the team?`;
                   {#if suggestions.some(s => s.answerFeedback || s.vocalFeedback)}
                     {@const latestWithFeedback = suggestions.slice().reverse().find(s => s.answerFeedback || s.vocalFeedback)}
                     {#if latestWithFeedback}
-                      <div class="answer-score-panel">
-                        {#if latestWithFeedback.answerFeedback}
-                          <button class="ascore-row" onclick={() => answerWhyExpanded = !answerWhyExpanded}>
-                            {#if latestWithFeedback.answerFeedback.missed_followup}<span class="ascore-badge ascore-warn">No follow-up</span>{/if}
-                            {#if latestWithFeedback.answerFeedback.missed_metric}<span class="ascore-badge ascore-warn">Add a metric</span>{/if}
-                            <span class="ascore-vocal-chevron">{answerWhyExpanded ? '▾' : '▸'}</span>
-                          </button>
-                          {#if answerWhyExpanded}
-                            <p class="ascore-coaching">{latestWithFeedback.answerFeedback.coaching}</p>
-                          {/if}
-                        {/if}
+                      <div class="side-stats">
                         {#if latestWithFeedback.vocalFeedback}
-                          <button class="ascore-vocal-row" onclick={() => vocalWhyExpanded = !vocalWhyExpanded}>
-                            <span class="ascore-vocal-score" style="color: {latestWithFeedback.vocalFeedback.confidence_score >= 70 ? '#4ade80' : latestWithFeedback.vocalFeedback.confidence_score >= 45 ? '#f59e0b' : '#f87171'}">{latestWithFeedback.vocalFeedback.confidence_score}%</span>
-                            <span class="ascore-vocal-tone">{latestWithFeedback.vocalFeedback.tone}</span>
-                            {#if latestWithFeedback.vocalFeedback.fillers_noted}<span class="ascore-vocal-fillers">{latestWithFeedback.vocalFeedback.fillers_noted}</span>{/if}
+                          {@const vf = latestWithFeedback.vocalFeedback}
+                          {@const scoreColor = vf.confidence_score >= 70 ? '#4ade80' : vf.confidence_score >= 45 ? '#f59e0b' : '#f87171'}
+                          <button class="side-stat ascore-stat-btn" onclick={() => vocalWhyExpanded = !vocalWhyExpanded}>
+                            <span class="side-label">Confidence</span>
+                            <span class="ascore-vocal-score" style="color: {scoreColor}">{vf.confidence_score}%</span>
+                            <span class="ascore-vocal-tone">{vf.tone}</span>
+                            {#if vf.fillers_noted}<span class="ascore-vocal-fillers">{vf.fillers_noted}</span>{/if}
                             <span class="ascore-vocal-chevron">{vocalWhyExpanded ? '▾' : '▸'}</span>
                           </button>
                           {#if vocalWhyExpanded}
-                            <p class="ascore-coaching">{latestWithFeedback.vocalFeedback.coaching}</p>
+                            <p class="ascore-coaching">{vf.coaching}</p>
+                          {/if}
+                        {/if}
+                        {#if latestWithFeedback.answerFeedback}
+                          {@const af = latestWithFeedback.answerFeedback}
+                          <button class="side-stat ascore-stat-btn" onclick={() => answerWhyExpanded = !answerWhyExpanded}>
+                            <span class="side-label">Answer</span>
+                            {#if af.missed_followup}<span class="ascore-badge ascore-warn">No follow-up</span>{/if}
+                            {#if af.missed_metric}<span class="ascore-badge ascore-warn">Add metric</span>{/if}
+                            {#if !af.missed_followup && !af.missed_metric}<span class="side-value" style="color: #4ade80">✓</span>{/if}
+                            <span class="ascore-vocal-chevron">{answerWhyExpanded ? '▾' : '▸'}</span>
+                          </button>
+                          {#if answerWhyExpanded}
+                            <p class="ascore-coaching">{af.coaching}</p>
                           {/if}
                         {/if}
                       </div>
@@ -2910,6 +2917,8 @@ Ask: team | How long have you been with the team?`;
     background: #0d0d1a; border: 1px solid #1e1a2a;
     border-left: 3px solid #7c3aed; border-radius: 0.4rem;
   }
+  .ascore-stat-btn { background: none; border: none; padding: 0.35rem 0.5rem; cursor: pointer; text-align: left; width: 100%; gap: 0.4rem; }
+  .ascore-stat-btn:hover { background: #0d1525; }
   .ascore-row { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; background: none; border: none; padding: 0; cursor: pointer; width: 100%; text-align: left; }
   .ascore-badge {
     padding: 0.1rem 0.4rem; border-radius: 0.2rem;

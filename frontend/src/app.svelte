@@ -1594,11 +1594,6 @@ Ask: team | How long have you been with the team?`;
                   <div class="section-drag-handle" draggable={true} ondragstart={(e) => onSectionDragStart(sid, e)} ondragend={onSectionDragEnd}>⠿</div>
                   <button class="section-collapse-btn" onclick={() => toggleSectionCollapse(sid)}>▾</button>
                 </div>
-                {#if myRole === 'interviewer' || myRole === 'you'}
-                  <div class="section-role-badge role-{myRole}">
-                    {myRole === 'interviewer' ? 'Interviewer' : 'You'}
-                  </div>
-                {/if}
                 {#if sid === 'screen-preview'}
                 {:else if sid === 'personality'}
                   {#if personality}

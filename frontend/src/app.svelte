@@ -1706,18 +1706,14 @@ Ask: team | How long have you been with the team?`;
                       <span class="side-label">You / Them</span>
                       <span class="side-value" style="color: {ratioColor}">{youPct > 0 ? `${youPct}% / ${interviewerPct}%` : '—'}</span>
                     </div>
-                    <div class="side-stat" title="Your speaking pace in words per minute">
-                      <span class="side-label">Pace</span>
-                      <span class="side-value" style="color: {paceReading.status === 'good' ? '#22c55e' : paceReading.status === 'fast' ? '#f59e0b' : paceReading.status === 'slow' ? '#60a5fa' : '#334155'}">
-                        {paceReading.status !== 'idle' ? `${paceReading.wordsPerMinute} wpm` : '—'}
-                      </span>
-                      {#if paceReading.status !== 'idle' && paceReading.status !== 'good' && paceReading.tip}
-                        <span class="side-pace-tip" style="color: {paceReading.status === 'fast' ? '#f59e0b' : '#60a5fa'}">{paceReading.tip}</span>
-                      {/if}
+                    <div class="side-stat side-stat-pace" title="Your speaking pace in words per minute">
+                      <EnergyCoachPanel
+                        wpm={paceReading.wordsPerMinute}
+                        status={paceReading.status}
+                        tip={paceReading.tip}
+                        {energySignal}
+                      />
                     </div>
-                    {#if energySignal}
-                      <div class="side-energy-signal">{energySignal}</div>
-                    {/if}
                     <div class="side-stat" title="Filler word count — words to avoid">
                       <span class="side-label">Fillers</span>
                       <span class="side-value" class:filler-active={fillerTotal > 0} style="color: {fillerTotal > 0 ? '#f59e0b' : '#475569'}">

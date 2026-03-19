@@ -1613,7 +1613,7 @@ Ask: team | How long have you been with the team?`;
                     </div>
                   {/if}
                 {:else if sid === 'sentiment-bar'}
-                  <SentimentBar videoEmotion={emotion} videoReason={emotionReason} {audioEmotion} {audioReason} />
+                  <SentimentBar videoEmotion={emotion} {audioEmotion} {coachingWhy} />
                   {#if coachingLog.length > 0}
                     <div class="coaching-log coaching-log-sentiment">
                       {#each coachingLog.slice().reverse() as entry, i}
@@ -1629,16 +1629,7 @@ Ask: team | How long have you been with the team?`;
                     </div>
                   {/if}
                 {:else if sid === 'body-language'}
-                  <BodyLanguagePanel
-                    emotion={emotion} liveEmotion={clientFaceEmotion}
-                    coaching={coaching} coachingWhy={coachingWhy}
-                    consecutiveCount={consecutiveEmotionCount}
-                    fillerTotal={fillerTotal}
-                    {speakerMode}
-                    triggerCounts={blTriggerCounts}
-                    {presenceIssues}
-                    {presencePositive}
-                  />
+                  <BodyLanguagePanel {speakerMode} {presenceIssues} />
                 {:else if sid === 'energy-coach'}
                   <!-- merged into stats section -->
                 {:else if sid === 'fillers'}

@@ -73,6 +73,7 @@
   let showWhisper = $state(false);
   let emotionHistory = $state<string[]>([]);
   let vocalWhyExpanded = $state(false);
+  let expandedCoachingEntries = $state(new Set<number>());
 
   const EMOTION_COLORS: Record<string, string> = {
     engaged: '#22c55e', curious: '#3b82f6', neutral: '#94a3b8',
@@ -1612,20 +1613,35 @@ Ask: team | How long have you been with the team?`;
                     </div>
                   {/if}
                 {:else if sid === 'sentiment-bar'}
-                  <SentimentBar videoEmotion={emotion} {audioEmotion} />
+                  <div class="sp-header">Mood</div>
+                  <SentimentBar videoEmotion={emotion} {audioEmotion} {coachingWhy} />
                   <BodyLanguagePanel {speakerMode} {presenceIssues} />
                   {#if coachingLog.length > 0}
+                    <div class="sp-header sp-header-history">History</div>
                     <div class="coaching-log coaching-log-sentiment">
                       {#each coachingLog.slice().reverse() as entry, i}
-                        <div class="coaching-log-entry" class:coaching-log-latest={i === 0}>
+                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                        <div class="coaching-log-entry" class:coaching-log-latest={i === 0}
+                          onclick={() => {
+                            if (!entry.why) return;
+                            const s = new Set(expandedCoachingEntries);
+                            s.has(entry.time) ? s.delete(entry.time) : s.add(entry.time);
+                            expandedCoachingEntries = s;
+                          }}>
                           <div class="coaching-log-meta">
-                            <span class="coaching-log-emotion" style="color: {emotionColor(entry.emotion)}">Interviewer: {entry.emotion}</span>
+                            <span class="coaching-log-emotion">
+                              <span class="coaching-log-who">Interviewer:</span>
+                              <span style="color: {emotionColor(entry.emotion)}">{entry.emotion}</span>
+                            </span>
                             <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
                           </div>
                           <span class="coaching-log-for-you">For you:</span>
                           <span class="coaching-log-text">{entry.text}</span>
                           {#if entry.why}
-                            <span class="coaching-log-why">{entry.why}</span>
+                            <span class="coaching-log-expand-hint">{expandedCoachingEntries.has(entry.time) ? '▴ less' : '▾ why'}</span>
+                            {#if expandedCoachingEntries.has(entry.time)}
+                              <span class="coaching-log-why">{entry.why}</span>
+                            {/if}
                           {/if}
                         </div>
                       {/each}
@@ -2613,8 +2629,16 @@ Ask: team | How long have you been with the team?`;
   }
   .subject-label { color: #64748b; font-weight: 600; text-transform: uppercase; font-size: var(--fs-xs); letter-spacing: 0.06em; }
   .tip-for-you { color: #22c55e; font-weight: 700; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; }
+  .coaching-log-who { color: #ef4444; }
   .coaching-log-for-you { font-size: var(--fs-xs); color: #4ade80; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-top: 0.1rem; }
   .coaching-log-why { font-size: var(--fs-xs); color: #475569; font-style: italic; line-height: 1.35; display: block; margin-top: 0.1rem; }
+  .coaching-log-expand-hint { font-size: var(--fs-xs); color: #334155; display: block; margin-top: 0.1rem; cursor: pointer; }
+  .coaching-log-entry[onclick] { cursor: pointer; }
+  .sp-header {
+    font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #334155; padding: 0.3rem 0.75rem 0.1rem;
+  }
+  .sp-header-history { margin-top: 0.35rem; }
 
   .rapport-coaching { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.35rem 0.5rem; background: #071a0f; border-left: 2px solid #14532d; border-radius: 0.25rem; margin-top: 0.35rem; }
   .rapport-coaching-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #4ade80; }

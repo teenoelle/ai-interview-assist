@@ -2,9 +2,11 @@
   const {
     videoEmotion,
     audioEmotion,
+    coachingWhy,
   } = $props<{
     videoEmotion: string;
     audioEmotion?: string;
+    coachingWhy?: string;
   }>();
 
   const emotionConfig: Record<string, { color: string; icon: string; label: string }> = {
@@ -21,16 +23,16 @@
 
   const videoConfig = $derived(emotionConfig[videoEmotion] ?? emotionConfig['neutral']);
   const audioConfig = $derived(emotionConfig[audioEmotion ?? ''] ?? null);
+  const audioDiverges = $derived(audioEmotion && audioConfig && audioEmotion !== videoEmotion);
 
-  // Show audio divergence only when it differs from video
-  const audioDiverges = $derived(
-    audioEmotion && audioConfig && audioEmotion !== videoEmotion
-  );
+  let whyOpen = $state(false);
 </script>
 
 <div class="sentiment-bar">
   {#if videoEmotion}
-    <div class="emotion" style="--color: {videoConfig.color}">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="emotion" class:emotion-clickable={!!coachingWhy} style="--color: {videoConfig.color}"
+      onclick={() => { if (coachingWhy) whyOpen = !whyOpen; }}>
       <span class="icon">{videoConfig.icon}</span>
       <div class="emotion-detail">
         <div class="label-row">
@@ -40,7 +42,13 @@
               {audioConfig!.icon} {audioConfig!.label}
             </span>
           {/if}
+          {#if coachingWhy}
+            <span class="why-hint">{whyOpen ? '▴' : '▾'}</span>
+          {/if}
         </div>
+        {#if whyOpen && coachingWhy}
+          <span class="why">{coachingWhy}</span>
+        {/if}
       </div>
     </div>
   {:else}
@@ -50,7 +58,7 @@
 
 <style>
   .sentiment-bar {
-    padding: 0.75rem;
+    padding: 0.5rem 0.75rem 0.75rem;
   }
   .emotion {
     display: flex;
@@ -61,6 +69,8 @@
     border-radius: 0.6rem;
     border-left: 3px solid var(--color);
   }
+  .emotion-clickable { cursor: pointer; }
+  .emotion-clickable:hover { background: #243044; }
   .icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 0.05rem; }
   .emotion-detail {
     display: flex;
@@ -91,6 +101,14 @@
     padding: 0.05rem 0.3rem;
     cursor: help;
     opacity: 0.85;
+  }
+  .why-hint { font-size: var(--fs-xs); color: #334155; margin-left: auto; }
+  .why {
+    font-size: var(--fs-sm);
+    color: #475569;
+    line-height: 1.35;
+    font-style: italic;
+    padding-top: 0.15rem;
   }
   .empty {
     color: #334155;

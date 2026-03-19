@@ -43,7 +43,7 @@
             </span>
           {/if}
           {#if coachingWhy}
-            <span class="why-hint">{whyOpen ? '▴' : '▾'}</span>
+            <span class="why-hint">{whyOpen ? '▾' : '▸'}</span>
           {/if}
         </div>
         {#if whyOpen && coachingWhy}

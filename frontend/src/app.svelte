@@ -73,6 +73,7 @@
   let showWhisper = $state(false);
   let emotionHistory = $state<string[]>([]);
   let vocalWhyExpanded = $state(false);
+  let answerWhyExpanded = $state(false);
   let expandedCoachingEntries = $state(new Set<number>());
 
   const EMOTION_COLORS: Record<string, string> = {
@@ -1609,7 +1610,7 @@ Ask: team | How long have you been with the team?`;
                     <div class="personality-strip" style="border-color: {personality.color}">
                       <span class="personality-label" style="color: {personality.color}">{personality.label}</span>
                       <span class="personality-desc">{personality.description}</span>
-                      <span class="personality-tip"><span class="tip-for-you">For you:</span> {personality.tip}</span>
+                      <span class="personality-tip"><span class="tip-label">Tip</span> {personality.tip}</span>
                     </div>
                   {/if}
                 {:else if sid === 'sentiment-bar'}
@@ -1635,10 +1636,9 @@ Ask: team | How long have you been with the team?`;
                             </span>
                             <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
                           </div>
-                          <span class="coaching-log-for-you">For you:</span>
-                          <span class="coaching-log-text">{entry.text}</span>
+                          <span class="coaching-log-text"><span class="tip-label">Tip</span> {entry.text}</span>
                           {#if entry.why}
-                            <span class="coaching-log-expand-hint">{expandedCoachingEntries.has(entry.time) ? '▴ less' : '▾ why'}</span>
+                            <span class="coaching-log-expand-hint">{expandedCoachingEntries.has(entry.time) ? '▾' : '▸ why'}</span>
                             {#if expandedCoachingEntries.has(entry.time)}
                               <span class="coaching-log-why">{entry.why}</span>
                             {/if}
@@ -1722,18 +1722,21 @@ Ask: team | How long have you been with the team?`;
                     {#if latestWithFeedback}
                       <div class="answer-score-panel">
                         {#if latestWithFeedback.answerFeedback}
-                          <div class="ascore-row">
+                          <button class="ascore-row" onclick={() => answerWhyExpanded = !answerWhyExpanded}>
                             {#if latestWithFeedback.answerFeedback.missed_followup}<span class="ascore-badge ascore-warn">No follow-up</span>{/if}
                             {#if latestWithFeedback.answerFeedback.missed_metric}<span class="ascore-badge ascore-warn">Add a metric</span>{/if}
-                          </div>
-                          <p class="ascore-coaching">{latestWithFeedback.answerFeedback.coaching}</p>
+                            <span class="ascore-vocal-chevron">{answerWhyExpanded ? '▾' : '▸'}</span>
+                          </button>
+                          {#if answerWhyExpanded}
+                            <p class="ascore-coaching">{latestWithFeedback.answerFeedback.coaching}</p>
+                          {/if}
                         {/if}
                         {#if latestWithFeedback.vocalFeedback}
                           <button class="ascore-vocal-row" onclick={() => vocalWhyExpanded = !vocalWhyExpanded}>
                             <span class="ascore-vocal-score" style="color: {latestWithFeedback.vocalFeedback.confidence_score >= 70 ? '#4ade80' : latestWithFeedback.vocalFeedback.confidence_score >= 45 ? '#f59e0b' : '#f87171'}">{latestWithFeedback.vocalFeedback.confidence_score}%</span>
                             <span class="ascore-vocal-tone">{latestWithFeedback.vocalFeedback.tone}</span>
                             {#if latestWithFeedback.vocalFeedback.fillers_noted}<span class="ascore-vocal-fillers">{latestWithFeedback.vocalFeedback.fillers_noted}</span>{/if}
-                            <span class="ascore-vocal-chevron">{vocalWhyExpanded ? '▴' : '▾'}</span>
+                            <span class="ascore-vocal-chevron">{vocalWhyExpanded ? '▾' : '▸'}</span>
                           </button>
                           {#if vocalWhyExpanded}
                             <p class="ascore-coaching">{latestWithFeedback.vocalFeedback.coaching}</p>
@@ -2622,9 +2625,8 @@ Ask: team | How long have you been with the team?`;
     letter-spacing: 0.07em; color: #f59e0b; padding: 0.25rem 0.6rem;
   }
   .subject-label { color: #64748b; font-weight: 600; text-transform: uppercase; font-size: var(--fs-xs); letter-spacing: 0.06em; }
-  .tip-for-you { color: #22c55e; font-weight: 700; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; }
+  .tip-label { color: #4ade80; font-weight: 700; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; }
   .coaching-log-who { color: #ef4444; }
-  .coaching-log-for-you { font-size: var(--fs-xs); color: #4ade80; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-top: 0.1rem; }
   .coaching-log-why { font-size: var(--fs-xs); color: #475569; font-style: italic; line-height: 1.35; display: block; margin-top: 0.1rem; }
   .coaching-log-expand-hint { font-size: var(--fs-xs); color: #334155; display: block; margin-top: 0.1rem; cursor: pointer; }
   .coaching-log-entry[onclick] { cursor: pointer; }
@@ -2771,7 +2773,7 @@ Ask: team | How long have you been with the team?`;
     background: #0d0d1a; border: 1px solid #1e1a2a;
     border-left: 3px solid #7c3aed; border-radius: 0.4rem;
   }
-  .ascore-row { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .ascore-row { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; background: none; border: none; padding: 0; cursor: pointer; width: 100%; text-align: left; }
   .ascore-badge {
     padding: 0.1rem 0.4rem; border-radius: 0.2rem;
     font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;

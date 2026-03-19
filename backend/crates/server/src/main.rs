@@ -104,6 +104,7 @@ async fn main() -> anyhow::Result<()> {
         config.whisper_url.clone(),
         config.whisper_model.clone(),
         rate_limiter.clone(),
+        Some(call_counts.clone()),
     ));
 
     // System audio agent: meeting playback → "Interviewer" (+ heuristic/diarize refinement)
@@ -119,6 +120,7 @@ async fn main() -> anyhow::Result<()> {
         config.whisper_model.clone(),
         config.diarize_url.clone(),
         rate_limiter.clone(),
+        Some(call_counts.clone()),
     ));
 
     tokio::spawn(sentiment::run_agent(
@@ -147,6 +149,7 @@ async fn main() -> anyhow::Result<()> {
         config.ollama_url.clone(),
         config.ollama_models.clone(),
         rate_limiter.clone(),
+        Some(call_counts.clone()),
     ));
 
     let frontend_path = std::env::current_dir()

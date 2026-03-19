@@ -126,7 +126,12 @@
 
   // Interviewer face crop (persisted)
   let cropRect = $state<{x:number;y:number;w:number;h:number}|null>(() => {
-    try { return JSON.parse(localStorage.getItem(SK.cropRect) ?? 'null'); } catch { return null; }
+    try {
+      const r = JSON.parse(localStorage.getItem(SK.cropRect) ?? 'null');
+      if (r && typeof r.x === 'number' && typeof r.y === 'number' && typeof r.w === 'number' && typeof r.h === 'number'
+          && r.w > 0.01 && r.h > 0.01 && r.w <= 1 && r.h <= 1) return r;
+      return null;
+    } catch { return null; }
   });
   let videoNaturalAR = $state(16/9);
   let showCropPicker = $state(false);
@@ -151,7 +156,7 @@
   }
   function iVidResizeMove(e: PointerEvent) {
     if (!iVidResizing) return;
-    interviewerVidH = Math.max(60, iVidResizeStartH + (e.clientY - iVidResizeStartY));
+    interviewerVidH = Math.max(60, Math.min(600, iVidResizeStartH + (e.clientY - iVidResizeStartY)));
   }
   function iVidResizeUp() {
     if (!iVidResizing) return;
@@ -205,6 +210,7 @@
   let kwBarH = $state(Number(localStorage.getItem(SK.kwBarH) ?? 60));
 
   // Collapse state (persisted)
+  let modelUsageExpanded = $state(localStorage.getItem('model-usage-expanded') !== 'false');
   let collapsedSections = $state<Set<string>>(new Set(JSON.parse(localStorage.getItem(SK.collapsedSections) ?? '[]')));
   let collapsedPanels = $state<Set<string>>(new Set(JSON.parse(localStorage.getItem(SK.collapsedPanels) ?? '[]')));
   let collapsedCols = $state<Set<string>>(new Set(JSON.parse(localStorage.getItem(SK.collapsedCols) ?? '[]')));
@@ -429,8 +435,8 @@
   const DEFAULT_SECTION_LAYOUT: SectionSlot[] = [
     { panel: 'sentiment', id: 'screen-preview' },
     { panel: 'sentiment', id: 'personality' },
-    { panel: 'sentiment', id: 'sentiment-bar' },
     { panel: 'sentiment', id: 'body-language' },
+    { panel: 'sentiment', id: 'sentiment-bar' },
     { panel: 'sentiment', id: 'energy-coach' },
     { panel: 'sentiment', id: 'stats' },
     { panel: 'coaching', id: 'salary-coach' },
@@ -444,7 +450,7 @@
     'body-language': 'Body Language', 'energy-coach': 'Pace', 'fillers': 'Fillers',
     'salary-coach': 'Salary', 'next-question': 'Next Q', 'keywords': 'Keywords',
     'company-brief': 'Company', 'interviewer-profiles': 'Interviewers',
-    'stats': 'Stats', 'rate-limits': 'API Usage',
+    'stats': 'Stats', 'rate-limits': 'Model Usage',
   };
   let sectionLayout = $state<SectionSlot[]>(loadSectionLayout(DEFAULT_SECTION_LAYOUT));
   let draggingSection = $state<SectionId | null>(null);
@@ -541,6 +547,7 @@
     const parsed = parseSuggestion(text);
     if (!parsed.acknowledge) return;
     ttsClient.speak(parsed.acknowledge, ttsVoiceId, ttsRate, ttsVolume);
+    lastSpeechAt = Date.now();
   }
 
   // Audio sentiment (client-side, free — based on interviewer text)
@@ -602,6 +609,9 @@
     }
     return suggestion.split('\n')[0]?.trim() ?? '';
   }
+  const latestMissed = $derived(
+    suggestions.slice().reverse().find(s => s.confidenceScore != null && s.confidenceScore < 40 && s.missedKeywords?.length)
+  );
   const latestSuggestion = $derived(
     suggestions.length > 0 ? suggestions[suggestions.length - 1] : null
   );
@@ -902,10 +912,7 @@ Ask: team | How long have you been with the team?`;
         suggestions = suggestions.map((s, i) =>
           i === suggestions.length - 1 && s.streaming ? { ...s, suggestion: event.full_text, streaming: false } : s
         );
-        const sayLine = event.full_text.split('\n')[0]
-          ?.replace(/^(Say|Answer|Tell|Ask):\s*/i, '')
-          ?.trim();
-        if (sayLine) speakText(sayLine);
+        speakText(event.full_text);
         break;
       }
       case 'status':
@@ -1176,7 +1183,7 @@ Ask: team | How long have you been with the team?`;
           </div>
           <button class="debrief-btn" onclick={() => showDebrief = true}>End Interview</button>
           <CaptureButton
-            onCapture={(v) => { capturing = v; if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); } }}
+            onCapture={(v) => { capturing = v; if (v) ttsEnabled = true; if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); } }}
             onStreams={(screen, webcam) => { screenStream = screen; webcamStream = webcam; }}
             onReady={(cap) => { captureInst = cap; }}
           />
@@ -1279,7 +1286,7 @@ Ask: team | How long have you been with the team?`;
                     onpointermove={(e) => vidMove(iVid, iPan, e)}
                     onpointerup={() => vidUp(iPan)}
                     ondblclick={() => vidReset(iVid)}
-                    style="cursor:{iVid.zoom > 1 ? 'grab' : 'default'}{interviewerVidH ? `;height:${interviewerVidH}px` : ''}"
+                    style="cursor:{iVid.zoom > 1 ? 'grab' : 'default'}{interviewerVidH ? `;height:${interviewerVidH}px` : ';max-height:40vh'}"
                     title="Scroll to zoom · drag to pan · double-click to reset"
                   >
                     <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;transform:translate({iVid.panX}px,{iVid.panY}px) scale({iVid.zoom});transform-origin:center;pointer-events:none;">
@@ -1373,6 +1380,12 @@ Ask: team | How long have you been with the team?`;
                         style="transform: translate({sVid.panX}px, {sVid.panY}px) scale({sVid.zoom}) scaleX(-1); transform-origin: center;"
                       ></video>
                     </div>
+                    <div class="selfview-zoom-btns">
+                      <button class="sv-zoom-btn" onclick={(e) => { e.stopPropagation(); sVid.zoom = Math.max(1, sVid.zoom / 1.4); if (sVid.zoom < 1.05) { sVid.zoom = 1; sVid.panX = 0; sVid.panY = 0; } }} title="Zoom out">−</button>
+                      <span class="sv-zoom-val">{sVid.zoom > 1.05 ? `${sVid.zoom.toFixed(1)}×` : '1×'}</span>
+                      <button class="sv-zoom-btn" onclick={(e) => { e.stopPropagation(); sVid.zoom = Math.min(5, sVid.zoom * 1.4); }} title="Zoom in">+</button>
+                      {#if sVid.zoom > 1.05}<button class="sv-zoom-btn sv-zoom-reset" onclick={(e) => { e.stopPropagation(); vidReset(sVid); }} title="Reset zoom">↺</button>{/if}
+                    </div>
                     <div class="selfview-label">You</div>
                     <!-- svelte-ignore a11y_no_static_element_interactions -->
                     <div class="vid-resize-handle selfview-resize-handle"
@@ -1394,6 +1407,14 @@ Ask: team | How long have you been with the team?`;
                           class:tone-negative={t === 'skeptical' || t === 'wrapping up'}
                           class:tone-latest={i === nonNeutralTones.length - 1}
                           title={t}>{t.slice(0, 3)}</span>
+                      {/each}
+                    </div>
+                  {/if}
+                  {#if latestMissed}
+                    <div class="ascore-missed ascore-missed-coaching">
+                      <span class="ascore-missed-label">Not covered</span>
+                      {#each latestMissed.missedKeywords as kw}
+                        <span class="ascore-missed-kw">{kw}</span>
                       {/each}
                     </div>
                   {/if}
@@ -1459,15 +1480,6 @@ Ask: team | How long have you been with the team?`;
                 {#if sid === 'screen-preview'}
                   {#if emotion}
                     <div class="coaching-log-emotion-only">{emotion}</div>
-                  {/if}
-                  {@const latestMissed = suggestions.slice().reverse().find(s => s.confidenceScore != null && s.confidenceScore < 40 && s.missedKeywords?.length)}
-                  {#if latestMissed}
-                    <div class="ascore-missed">
-                      <span class="ascore-missed-label">Not covered</span>
-                      {#each latestMissed.missedKeywords as kw}
-                        <span class="ascore-missed-kw">{kw}</span>
-                      {/each}
-                    </div>
                   {/if}
                 {:else if sid === 'personality'}
                   {#if personality}
@@ -1569,7 +1581,15 @@ Ask: team | How long have you been with the team?`;
                     </div>
                   </div>
                 {:else if sid === 'rate-limits'}
-                  <RateLimitPanel {rateLimits} {callCounts} />
+                  <div class="side-section">
+                    <button class="side-section-toggle" onclick={() => { modelUsageExpanded = !modelUsageExpanded; localStorage.setItem('model-usage-expanded', String(modelUsageExpanded)); }}>
+                      <span class="side-section-label">Model Usage</span>
+                      <span class="side-section-chevron">{modelUsageExpanded ? '▴' : '▾'}</span>
+                    </button>
+                    {#if modelUsageExpanded}
+                      <RateLimitPanel {rateLimits} {callCounts} />
+                    {/if}
+                  </div>
                 {/if}
               {/if}
             </div>
@@ -1754,6 +1774,9 @@ Ask: team | How long have you been with the team?`;
 
   .side-section { display: flex; flex-direction: column; gap: 0.3rem; }
   .side-section-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #334155; }
+  .side-section-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; background: none; border: none; cursor: pointer; padding: 0; }
+  .side-section-toggle:hover .side-section-label { color: #475569; }
+  .side-section-chevron { font-size: var(--fs-xs); color: #1e293b; }
 
 
   .interview-layout { display: flex; flex-direction: column; height: 100vh; }
@@ -2232,7 +2255,7 @@ Ask: team | How long have you been with the team?`;
     border: 1px solid #1e293b;
   }
   .selfview-zoom-shell.selfview-zoomed {
-    overflow: visible;
+    overflow: hidden;
     z-index: 50;
     position: relative;
     border-color: #3b82f6;
@@ -2317,12 +2340,17 @@ Ask: team | How long have you been with the team?`;
     border-radius: 0; border: none;
   }
   .selfview-strip .selfview-zoom-shell.selfview-zoomed {
-    overflow: visible; border: none;
+    overflow: hidden; border: none;
   }
   .selfview {
     width: 100%; height: 100%; object-fit: contain;
     background: #0a1525; display: block; transform-origin: center;
   }
+  .selfview-zoom-btns { display: flex; align-items: center; gap: 0.2rem; padding: 0.15rem 0.5rem; background: #060e1a; }
+  .sv-zoom-btn { background: #0d1a2b; border: 1px solid #1e293b; border-radius: 0.25rem; color: #475569; font-size: var(--fs-xs); padding: 0.05rem 0.35rem; cursor: pointer; line-height: 1.4; }
+  .sv-zoom-btn:hover { border-color: #3b82f6; color: #93c5fd; }
+  .sv-zoom-reset { color: #60a5fa; }
+  .sv-zoom-val { font-size: var(--fs-xs); color: #334155; min-width: 2.2em; text-align: center; font-variant-numeric: tabular-nums; }
   .selfview-label { font-size: var(--fs-xs); color: #334155; text-transform: uppercase; letter-spacing: 0.08em; padding: 0.15rem 0.75rem; }
   .selfview-resize-handle { touch-action: none; }
 
@@ -2536,6 +2564,7 @@ Ask: team | How long have you been with the team?`;
   .ascore-warn { background: #431407; color: #fb923c; }
   .ascore-coaching { margin: 0; font-size: var(--fs-sm); color: #fb923c; line-height: 1.5; }
   .ascore-missed { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; }
+  .ascore-missed-coaching { padding: 0.4rem 0.5rem 0; }
   .ascore-missed-label { font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #f87171; }
   .ascore-missed-kw { font-size: var(--fs-xs); padding: 0.05rem 0.3rem; border-radius: 0.2rem; background: #2a0a0a; color: #fca5a5; border: 1px solid #7f1d1d; }
   .ascore-vocal-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }

@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 use common::messages::SetupPayload;
-use context::ai_helper::{generate_debrief, predict_questions, call_ai_simple, generate_company_brief, generate_interviewer_summary, extract_jd_keywords, assess_vocal_delivery, AiConfig};
+use context::ai_helper::{generate_debrief, predict_questions, call_ai_simple, call_ai_fast, generate_company_brief, generate_interviewer_summary, extract_jd_keywords, assess_vocal_delivery, AiConfig};
 use context::builder::build_system_prompt;
 use context::crawler::crawl_website;
 use context::linkedin::parse_all_linkedin_profiles;
@@ -538,9 +538,10 @@ pub async fn handle_expand_cue(
         ollama_model: &state.ollama_model,
         usage: Some(state.call_counts.clone()),
     };
-    let sentence = call_ai_simple(&cfg, &sp, &user_prompt)
+    let sentence = call_ai_fast(&cfg, &sp, &user_prompt)
         .await
         .unwrap_or_else(|_| req.cue.clone());
+    let sentence = if sentence.is_empty() { req.cue.clone() } else { sentence };
     Ok(Json(ExpandCueResponse { sentence }))
 }
 

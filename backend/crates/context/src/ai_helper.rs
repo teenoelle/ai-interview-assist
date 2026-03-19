@@ -195,6 +195,129 @@ pub async fn call_ai(cfg: &AiConfig<'_>, prompt: &str, max_tokens: u32) -> Resul
         .to_string())
 }
 
+/// Call AI with a system prompt, Groq-first order: Groq key1 → Groq key2 → Claude → Ollama → Gemini.
+/// Uses llama-3.1-8b-instant for sub-second latency on short-generation tasks.
+pub async fn call_ai_fast(cfg: &AiConfig<'_>, system_prompt: &str, user_prompt: &str) -> Result<String> {
+    let max_tokens = 400u32;
+
+    // Groq key1 — 8b-instant: fastest model on Groq (~200ms TTFT for short outputs)
+    if let Some(key) = cfg.groq_key {
+        let body = serde_json::json!({
+            "model": "llama-3.1-8b-instant",
+            "max_tokens": max_tokens,
+            "messages": [
+                { "role": "system", "content": system_prompt },
+                { "role": "user", "content": user_prompt }
+            ]
+        });
+        let resp = reqwest::Client::new()
+            .post("https://api.groq.com/openai/v1/chat/completions")
+            .header("Authorization", format!("Bearer {}", key))
+            .json(&body)
+            .timeout(std::time::Duration::from_secs(15))
+            .send()
+            .await;
+        if let Ok(r) = resp {
+            if r.status().is_success() {
+                if let Ok(j) = r.json::<serde_json::Value>().await {
+                    let text = j["choices"][0]["message"]["content"].as_str().unwrap_or("").trim().to_string();
+                    if !text.is_empty() {
+                        inc(&cfg.usage, "Groq");
+                        return Ok(text);
+                    }
+                }
+            } else {
+                tracing::debug!("Groq fast returned {}, trying key2", r.status());
+            }
+        }
+    }
+
+    // Groq key2
+    if let Some(key) = cfg.groq_key_2 {
+        let body = serde_json::json!({
+            "model": "llama-3.1-8b-instant",
+            "max_tokens": max_tokens,
+            "messages": [
+                { "role": "system", "content": system_prompt },
+                { "role": "user", "content": user_prompt }
+            ]
+        });
+        let resp = reqwest::Client::new()
+            .post("https://api.groq.com/openai/v1/chat/completions")
+            .header("Authorization", format!("Bearer {}", key))
+            .json(&body)
+            .timeout(std::time::Duration::from_secs(15))
+            .send()
+            .await;
+        if let Ok(r) = resp {
+            if r.status().is_success() {
+                if let Ok(j) = r.json::<serde_json::Value>().await {
+                    let text = j["choices"][0]["message"]["content"].as_str().unwrap_or("").trim().to_string();
+                    if !text.is_empty() {
+                        inc(&cfg.usage, "Groq #2");
+                        return Ok(text);
+                    }
+                }
+            }
+        }
+    }
+
+    // Claude Haiku — fallback
+    if let Some(key) = cfg.anthropic_key {
+        let body = json!({
+            "model": "claude-haiku-4-5-20251001",
+            "max_tokens": max_tokens,
+            "system": [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
+            "messages": [{ "role": "user", "content": user_prompt }]
+        });
+        let resp = reqwest::Client::new()
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", key)
+            .header("anthropic-version", "2023-06-01")
+            .header("anthropic-beta", "prompt-caching-2024-07-31")
+            .json(&body)
+            .timeout(std::time::Duration::from_secs(30))
+            .send()
+            .await?;
+        if resp.status().is_success() {
+            let j: Value = resp.json().await?;
+            inc(&cfg.usage, "Claude");
+            return Ok(j["content"][0]["text"].as_str().unwrap_or("").trim().to_string());
+        }
+        tracing::debug!("Claude returned {}, trying next provider", resp.status());
+    }
+
+    // Ollama (local, no quota)
+    if let Some(text) = try_ollama_text_with_system(cfg.ollama_url, cfg.ollama_model, system_prompt, user_prompt, max_tokens).await {
+        inc(&cfg.usage, "Ollama");
+        return Ok(text);
+    }
+
+    // Gemini fallback
+    let body = json!({
+        "system_instruction": { "parts": [{ "text": system_prompt }] },
+        "contents": [{ "role": "user", "parts": [{ "text": user_prompt }] }],
+        "generationConfig": { "maxOutputTokens": max_tokens }
+    });
+    let url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={}",
+        cfg.gemini_key
+    );
+    let resp = reqwest::Client::new()
+        .post(&url)
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(30))
+        .send()
+        .await?;
+    let j: Value = resp.json().await?;
+    inc(&cfg.usage, "Gemini");
+    Ok(j["candidates"][0]["content"]["parts"][0]["text"]
+        .as_str()
+        .unwrap_or("")
+        .trim()
+        .to_string())
+}
+
 /// Call AI with a system prompt: Claude Haiku → Groq key1 → Groq key2 → Ollama → Gemini.
 pub async fn call_ai_simple(cfg: &AiConfig<'_>, system_prompt: &str, user_prompt: &str) -> Result<String> {
     let max_tokens = 400u32;

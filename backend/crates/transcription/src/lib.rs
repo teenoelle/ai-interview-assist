@@ -11,6 +11,16 @@ use common::rate_limiter::{RateLimiter, with_retry};
 use common::providers::{is_quota_exhausted, is_rate_limit};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+type CallCounts = Arc<std::sync::Mutex<std::collections::HashMap<String, u64>>>;
+
+fn inc(counts: &Option<CallCounts>, name: &str) {
+    if let Some(map) = counts {
+        if let Ok(mut m) = map.lock() {
+            *m.entry(name.to_string()).or_insert(0) += 1;
+        }
+    }
+}
+
 // ── Transcription provider chain ──────────────────────────────────────────────
 
 async fn transcribe_with_fallback(
@@ -21,12 +31,13 @@ async fn transcribe_with_fallback(
     whisper_model: &str,
     pcm: &[u8],
     rate_limiter: &RateLimiter,
+    call_counts: &Option<CallCounts>,
 ) -> Result<String, anyhow::Error> {
     // 1. Local Whisper — completely free, no quota; silently skip if not running
     if let Some(url) = whisper_url {
         let endpoint = format!("{}/v1/audio/transcriptions", url.trim_end_matches('/'));
         match groq::transcribe_openai_asr(&endpoint, "", whisper_model, pcm).await {
-            Ok(text) => return Ok(text),
+            Ok(text) => { inc(call_counts, "Whisper (local)"); return Ok(text); }
             Err(e) => tracing::warn!("Local Whisper unavailable, trying Groq: {}", e),
         }
     }
@@ -34,7 +45,7 @@ async fn transcribe_with_fallback(
     // 2. Groq Whisper key 1
     if let Some(key) = groq_key {
         match groq::transcribe(key, pcm).await {
-            Ok(text) => return Ok(text),
+            Ok(text) => { inc(call_counts, "Groq Whisper"); return Ok(text); }
             Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
                 tracing::warn!("Groq key 1 transcription quota/rate-limit, trying key 2");
             }
@@ -45,7 +56,7 @@ async fn transcribe_with_fallback(
     // 2b. Groq Whisper key 2 — higher-limit secondary key
     if let Some(key) = groq_key_2 {
         match groq::transcribe(key, pcm).await {
-            Ok(text) => return Ok(text),
+            Ok(text) => { inc(call_counts, "Groq Whisper #2"); return Ok(text); }
             Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
                 tracing::warn!("Groq key 2 transcription quota/rate-limit, falling back to Gemini");
             }
@@ -62,7 +73,7 @@ async fn transcribe_with_fallback(
     .await;
 
     match result {
-        Ok(text) => return Ok(text),
+        Ok(text) => { inc(call_counts, "Gemini Transcription"); return Ok(text); }
         Err(e) if is_quota_exhausted(&e) => {
             tracing::warn!("Gemini transcription quota exhausted");
         }
@@ -286,6 +297,7 @@ pub async fn run_mic_agent(
     whisper_url: Option<String>,
     whisper_model: String,
     rate_limiter: RateLimiter,
+    call_counts: Option<CallCounts>,
 ) {
     let mut ring_buf = buffer::RingBuffer::new();
 
@@ -305,9 +317,10 @@ pub async fn run_mic_agent(
                     let etx = event_tx.clone();
                     let tr = transcript.clone();
                     let rl = rate_limiter.clone();
+                    let cc = call_counts.clone();
 
                     tokio::spawn(async move {
-                        match transcribe_with_fallback(&gkey, grkey.as_deref(), grkey2.as_deref(), wurl.as_deref(), &wmodel, &pcm, &rl).await {
+                        match transcribe_with_fallback(&gkey, grkey.as_deref(), grkey2.as_deref(), wurl.as_deref(), &wmodel, &pcm, &rl, &cc).await {
                             Ok(text) if !text.trim().is_empty() => {
                                 let ts = SystemTime::now()
                                     .duration_since(UNIX_EPOCH)
@@ -359,6 +372,7 @@ pub async fn run_agent(
     whisper_model: String,
     diarize_url: Option<String>,
     rate_limiter: RateLimiter,
+    call_counts: Option<CallCounts>,
 ) {
     let mut ring_buf = buffer::RingBuffer::new();
     let speaker_tracker: diarize::SharedTracker =
@@ -389,6 +403,7 @@ pub async fn run_agent(
                     let tracker = speaker_tracker.clone();
                     let ps = prev_speaker.clone();
                     let pwc = prev_word_count;
+                    let cc = call_counts.clone();
 
                     tokio::spawn(async move {
                         // Build WAV bytes once — used for diarization
@@ -396,7 +411,7 @@ pub async fn run_agent(
 
                         // Run transcription and diarization concurrently
                         let (transcription_result, diarization_result) = tokio::join!(
-                            transcribe_with_fallback(&gkey, grkey.as_deref(), grkey2.as_deref(), wurl.as_deref(), &wmodel, &segment_pcm, &rl),
+                            transcribe_with_fallback(&gkey, grkey.as_deref(), grkey2.as_deref(), wurl.as_deref(), &wmodel, &segment_pcm, &rl, &cc),
                             async {
                                 match (durl.as_deref(), wav_for_diarize) {
                                     (Some(url), Some(wav)) => {

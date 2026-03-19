@@ -13,7 +13,8 @@
   }
 
   async function expandCue(question: string, cue: string) {
-    if (expandedCues[cue]?.sentence) { expandedCues = { ...expandedCues, [cue]: { sentence: '', loading: false } }; return; }
+    if (expandedCues[cue]?.sentence) return; // already fetched — keep cached result
+    if (expandedCues[cue]?.loading) return;  // fetch already in flight
     expandedCues = { ...expandedCues, [cue]: { sentence: '', loading: true } };
     try {
       const r = await fetch('/api/expand-cue', {
@@ -21,8 +22,9 @@
         body: JSON.stringify({ question, cue }),
       });
       const d = r.ok ? await r.json() : null;
-      expandedCues = { ...expandedCues, [cue]: { sentence: d?.sentence ?? '', loading: false } };
-    } catch { expandedCues = { ...expandedCues, [cue]: { sentence: '', loading: false } }; }
+      const sentence = d?.sentence?.trim() ?? '';
+      expandedCues = { ...expandedCues, [cue]: { sentence: sentence || cue, loading: false } };
+    } catch { expandedCues = { ...expandedCues, [cue]: { sentence: cue, loading: false } }; }
   }
 
   const { suggestions, onClear, teleprompter = false, jumpSignal = null, cueExpandSignal = null, onPinnedChange } = $props<{
@@ -66,6 +68,18 @@
     const cues = parseCues(body);
     const cue = cues[cueExpandSignal.cueIdx];
     if (cue) expandCue(current.question, cue.text);
+  });
+
+  // Pre-fetch expanded sentences as soon as a suggestion finishes streaming
+  // so they're ready before the user clicks, regardless of capture state
+  $effect(() => {
+    if (!current || current.streaming) return;
+    const body = parseSuggestion(current.suggestion).body;
+    if (!body) return;
+    const cues = parseCues(body);
+    for (const cue of cues) {
+      expandCue(current.question, cue.text);
+    }
   });
 
   // Collapsed state per question entry (collapsed = body hidden)

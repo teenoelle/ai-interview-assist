@@ -3,6 +3,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use sentiment::gemini_vision::analyze_presence;
 use common::messages::SetupPayload;
 use context::ai_helper::{generate_debrief, predict_questions, call_ai_simple, call_ai_fast, generate_company_brief, generate_interviewer_summary, extract_jd_keywords, assess_vocal_delivery, AiConfig};
 use context::builder::build_system_prompt;
@@ -543,6 +544,31 @@ pub async fn handle_expand_cue(
         .unwrap_or_else(|_| req.cue.clone());
     let sentence = if sentence.is_empty() { req.cue.clone() } else { sentence };
     Ok(Json(ExpandCueResponse { sentence }))
+}
+
+#[derive(serde::Serialize)]
+pub struct PresenceCheckResponse {
+    pub issues: Vec<String>,
+    pub positive: Option<String>,
+}
+
+pub async fn handle_presence_check(
+    State(state): State<AppState>,
+    mut multipart: Multipart,
+) -> Result<Json<PresenceCheckResponse>, (StatusCode, String)> {
+    let mut jpeg_bytes = Vec::new();
+    while let Ok(Some(field)) = multipart.next_field().await {
+        if field.name() == Some("image") {
+            jpeg_bytes = field.bytes().await.unwrap_or_default().to_vec();
+        }
+    }
+    if jpeg_bytes.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "No image".to_string()));
+    }
+    let result = analyze_presence(&state.gemini_key, &jpeg_bytes)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(PresenceCheckResponse { issues: result.issues, positive: result.positive }))
 }
 
 pub async fn handle_usage(

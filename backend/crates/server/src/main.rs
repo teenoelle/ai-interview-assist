@@ -175,6 +175,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/keyword-definition", post(http_handler::handle_keyword_definition))
         .route("/api/expand-cue", post(http_handler::handle_expand_cue))
         .route("/api/next-steps", post(http_handler::handle_next_steps))
+        .route("/api/presence-check", post(http_handler::handle_presence_check))
         .route("/api/usage", get(http_handler::handle_usage))
         .route("/api/tts/voices", get(tts_handler::handle_tts_voices))
         .route("/api/tts/speak", post(tts_handler::handle_speak))

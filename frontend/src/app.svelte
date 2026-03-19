@@ -556,6 +556,53 @@
   let audioEmotion = $state('');
   let audioReason = $state('');
 
+  // Body language panel state
+  let consecutiveEmotionCount = $state(0);
+  let lastTrackedEmotion = $state('');
+  let blTriggerCounts = $state<Record<string, number>>(loadSetup('bl-trigger-counts', {}));
+  let answerNudgeVisible = $state(false);
+  let answerNudgeTimer: ReturnType<typeof setTimeout> | null = null;
+  let presenceIssues = $state<string[]>([]);
+  let presencePositive = $state<string | null>(null);
+
+  // Speaker mode for body-language hints
+  const speakerMode = $derived<'listening' | 'answering' | 'idle'>(
+    answerMs > 0 ? 'answering' :
+    (transcript.length > 0 && transcript[transcript.length - 1]?.speaker === 'Interviewer') ? 'listening' :
+    'idle'
+  );
+
+  // Webcam presence check (item 9)
+  async function checkPresence() {
+    const el = webcamEl;
+    if (!el || el.videoWidth === 0) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = 320; canvas.height = 240;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(el, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/jpeg', 0.7));
+    if (!blob) return;
+    const fd = new FormData();
+    fd.append('image', blob, 'webcam.jpg');
+    try {
+      const resp = await fetch('/api/presence-check', { method: 'POST', body: fd });
+      if (resp.ok) {
+        const data = await resp.json();
+        presenceIssues = data.issues ?? [];
+        presencePositive = data.positive ?? null;
+      }
+    } catch { /* silent — webcam analysis is best-effort */ }
+  }
+
+  // Run presence check periodically while capturing with webcam
+  $effect(() => {
+    if (!capturing || !webcamStream) return;
+    const timeout = setTimeout(checkPresence, 8000);
+    const interval = setInterval(checkPresence, 30000);
+    return () => { clearTimeout(timeout); clearInterval(interval); };
+  });
+
   // Font size
   let fontSize = $state(Number(localStorage.getItem(SK.fontSize) ?? 14));
   $effect(() => {
@@ -850,6 +897,32 @@ Ask: team | How long have you been with the team?`;
         }
         if (event.coaching_why) coachingWhy = event.coaching_why;
         emotionHistory = [...emotionHistory, event.emotion];
+        // Track consecutive reads of same emotion (item 3)
+        if (event.emotion === lastTrackedEmotion) {
+          consecutiveEmotionCount++;
+        } else {
+          consecutiveEmotionCount = 1;
+          lastTrackedEmotion = event.emotion;
+        }
+        // Track which body-language items get triggered (item 10)
+        {
+          const emotionTriggers: Record<string, string[]> = {
+            eye: ['skeptical', 'bored', 'confused'],
+            posture: ['bored', 'neutral', 'skeptical'],
+            nod: ['neutral', 'bored'],
+            hands: ['skeptical', 'confused'],
+            expression: ['bored', 'neutral', 'skeptical'],
+            pace: ['curious', 'engaged', 'skeptical'],
+          };
+          const updated = { ...blTriggerCounts };
+          for (const [id, triggers] of Object.entries(emotionTriggers)) {
+            if (triggers.includes(event.emotion)) {
+              updated[id] = (updated[id] ?? 0) + 1;
+            }
+          }
+          blTriggerCounts = updated;
+          localStorage.setItem('bl-trigger-counts', JSON.stringify(updated));
+        }
         break;
       case 'question_detected': {
         // Mark previous question as answered/unanswered
@@ -903,6 +976,10 @@ Ask: team | How long have you been with the team?`;
           }];
         }
         resetAnswerTimer();
+        // Answer moment nudge (item 5)
+        if (answerNudgeTimer) clearTimeout(answerNudgeTimer);
+        answerNudgeVisible = true;
+        answerNudgeTimer = setTimeout(() => { answerNudgeVisible = false; }, 4000);
         break;
       }
       case 'suggestion_token':
@@ -1395,6 +1472,14 @@ Ask: team | How long have you been with the team?`;
                 {/if}
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div class="right-panel-scroll" style="zoom: {rightTopZoom/100}" ondragover={(e) => { e.preventDefault(); }} ondrop={(e) => onPanelEmptyDrop('sentiment', e)}>
+                  {#if answerNudgeVisible}
+                    <div class="answer-nudge">
+                      <span class="answer-nudge-icon">🧘</span>
+                      <div class="answer-nudge-text">
+                        <strong>Breathe.</strong> Pause 1–2 seconds before answering.
+                      </div>
+                    </div>
+                  {/if}
                   {@render sectionList('sentiment')}
                   {#if nonNeutralTones.length > 1}
                     <div class="tone-history tone-history-bottom">
@@ -1502,7 +1587,15 @@ Ask: team | How long have you been with the team?`;
                     </div>
                   {/if}
                 {:else if sid === 'body-language'}
-                  <BodyLanguagePanel emotion={emotion} coaching={coaching} coachingWhy={coachingWhy} />
+                  <BodyLanguagePanel
+                    emotion={emotion} coaching={coaching} coachingWhy={coachingWhy}
+                    consecutiveCount={consecutiveEmotionCount}
+                    fillerTotal={fillerTotal}
+                    {speakerMode}
+                    triggerCounts={blTriggerCounts}
+                    {presenceIssues}
+                    {presencePositive}
+                  />
                 {:else if sid === 'energy-coach'}
                   <!-- merged into stats section -->
                 {:else if sid === 'fillers'}
@@ -2587,6 +2680,19 @@ Ask: team | How long have you been with the team?`;
   }
   .ascore-warn { background: #431407; color: #fb923c; }
   .ascore-coaching { margin: 0; font-size: var(--fs-sm); color: #fb923c; line-height: 1.5; }
+  .answer-nudge {
+    display: flex; align-items: center; gap: 0.5rem;
+    background: #0f1a2b; border: 1px solid #1e3a5f; border-left: 3px solid #3b82f6;
+    border-radius: 0.4rem; padding: 0.45rem 0.65rem; margin-bottom: 0.4rem;
+    animation: nudgefade 4s ease-out forwards;
+  }
+  .answer-nudge-icon { font-size: 1.1rem; flex-shrink: 0; }
+  .answer-nudge-text { font-size: var(--fs-sm); color: #93c5fd; line-height: 1.3; }
+  .answer-nudge-text strong { color: #e2e8f0; }
+  @keyframes nudgefade {
+    0%, 60% { opacity: 1; }
+    100% { opacity: 0; }
+  }
   .ascore-missed { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; }
   .ascore-missed-coaching { padding: 0.4rem 0.5rem 0; }
   .ascore-missed-label { font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #f87171; }

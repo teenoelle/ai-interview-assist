@@ -17,7 +17,7 @@
   import SalaryCoachPanel from './components/SalaryCoachPanel.svelte';
   import NextQuestionPanel from './components/NextQuestionPanel.svelte';
   import EnergyCoachPanel from './components/EnergyCoachPanel.svelte';
-  import { analyzeAudioTone } from './lib/audioTone';
+  import { analyzeAudioTone, type AudioFeatures } from './lib/audioTone';
   import { splitMultiQuestions, fmtTime, fmtAgo } from './lib/utils';
   import { computeConfidence } from './lib/confidence';
   import { SK, loadSectionLayout } from './lib/storageKeys';
@@ -115,9 +115,27 @@
   // Rolling exponential moving average of system audio energy (RMS)
   let sysEnergyEma = $state(0);
   function updateSysEnergy(sys: number) {
-    // EMA alpha=0.15: smooths rapid fluctuations while tracking sustained speech energy
     sysEnergyEma = sysEnergyEma * 0.85 + sys * 0.15;
   }
+
+  // Spectral audio features from AnalyserNode (item 8)
+  let latestAudioFeatures = $state<AudioFeatures>({});
+
+  // Client-side face emotion from MediaPipe (item 5)
+  let clientFaceEmotion = $state('');
+  let lastBackendSentimentTime = $state(0);
+
+  // Wire up captureInst callbacks for live emotion + audio features
+  $effect(() => {
+    if (!captureInst) return;
+    captureInst.onAudioFeatures(f => { latestAudioFeatures = f; });
+    captureInst.onLiveEmotion(emo => {
+      // Fill in between backend reads; backend takes precedence for 10s after it updates
+      if (Date.now() - lastBackendSentimentTime > 10000) {
+        clientFaceEmotion = emo;
+      }
+    });
+  });
 
   // Webcam self-view
   let webcamStream = $state<MediaStream | null>(null);
@@ -871,7 +889,7 @@ Ask: team | How long have you been with the team?`;
             interviewerRaisedKeywords = updated;
             keywordQuestionMap = updatedMap;
           }
-          const tone = analyzeAudioTone(event.text, sysEnergyEma);
+          const tone = analyzeAudioTone(event.text, sysEnergyEma, latestAudioFeatures);
           audioEmotion = tone.emotion;
           audioReason = tone.reason;
           audioEmotionHistory = [...audioEmotionHistory.slice(-4), tone.emotion];
@@ -885,6 +903,8 @@ Ask: team | How long have you been with the team?`;
         break;
       }
       case 'sentiment':
+        lastBackendSentimentTime = Date.now();
+        clientFaceEmotion = ''; // backend reading takes precedence now
         emotion = event.emotion;
         if (event.reason) emotionReason = event.reason;
         if (event.coaching) {
@@ -1588,7 +1608,8 @@ Ask: team | How long have you been with the team?`;
                   {/if}
                 {:else if sid === 'body-language'}
                   <BodyLanguagePanel
-                    emotion={emotion} coaching={coaching} coachingWhy={coachingWhy}
+                    emotion={emotion} liveEmotion={clientFaceEmotion}
+                    coaching={coaching} coachingWhy={coachingWhy}
                     consecutiveCount={consecutiveEmotionCount}
                     fillerTotal={fillerTotal}
                     {speakerMode}

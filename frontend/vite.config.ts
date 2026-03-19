@@ -3,6 +3,9 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 export default defineConfig({
   plugins: [svelte()],
+  optimizeDeps: {
+    exclude: ['@mediapipe/tasks-vision'],
+  },
   server: {
     port: 5173,
     proxy: {

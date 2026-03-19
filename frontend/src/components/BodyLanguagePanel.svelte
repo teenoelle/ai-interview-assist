@@ -1,6 +1,7 @@
 <script lang="ts">
   const {
     emotion,
+    liveEmotion = '',
     coaching,
     coachingWhy,
     consecutiveCount = 1,
@@ -11,6 +12,7 @@
     presencePositive = null,
   } = $props<{
     emotion: string;
+    liveEmotion?: string;  // fast client-side face detection, drives checklist highlights
     coaching?: string;
     coachingWhy?: string;
     consecutiveCount?: number;
@@ -20,6 +22,9 @@
     presenceIssues?: string[];
     presencePositive?: string | null;
   }>();
+
+  // Use liveEmotion for highlights when available, fall back to backend emotion
+  const highlightEmotion = $derived(liveEmotion || emotion);
 
   const items = [
     {
@@ -94,7 +99,7 @@
   let standingOpen = $state(false);
 
   function isEmotionHighlighted(item: typeof items[0]): boolean {
-    return item.trigger.includes(emotion);
+    return item.trigger.includes(highlightEmotion);
   }
 
   function isModeHighlighted(item: typeof items[0]): boolean {
@@ -117,7 +122,7 @@
     return null;
   }
 
-  const urgent = $derived(consecutiveCount >= 2 && emotion !== 'neutral' && emotion !== '');
+  const urgent = $derived(consecutiveCount >= 2 && highlightEmotion !== 'neutral' && highlightEmotion !== '');
 
   const highlighted = $derived(items.filter(i => isHighlighted(i)));
   const standing = $derived(items.filter(i => !isHighlighted(i)));

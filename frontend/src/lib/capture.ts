@@ -1,8 +1,11 @@
 import { AudioWebSocket, VideoWebSocket } from './websocket';
+import { FaceEmotionDetector } from './faceDetection';
 
 export type LevelCallback = (micLevel: number, systemLevel: number) => void;
-
 export type StreamsCallback = (screen: MediaStream, webcam: MediaStream | null) => void;
+export type AudioFeatures = { dominantBand: 'low' | 'mid' | 'high' | 'none'; flux: number };
+export type AudioFeaturesCallback = (features: AudioFeatures) => void;
+export type LiveEmotionCallback = (emotion: string) => void;
 
 export class MediaCapture {
   private systemStream: MediaStream | null = null;
@@ -14,13 +17,18 @@ export class MediaCapture {
   private micAudioWs: AudioWebSocket;
   private videoWs: VideoWebSocket;
   private videoInterval: ReturnType<typeof setInterval> | null = null;
+  private faceInterval: ReturnType<typeof setInterval> | null = null;
+  private analyserInterval: ReturnType<typeof setInterval> | null = null;
   private systemWorklet: AudioWorkletNode | null = null;
   private micWorklet: AudioWorkletNode | null = null;
+  private faceDetector: FaceEmotionDetector | null = null;
   private _paused = false;
   private _micLevel = 0;
   private _systemLevel = 0;
   private _levelCallback: LevelCallback | null = null;
   private _streamsCallback: StreamsCallback | null = null;
+  private _audioFeaturesCallback: AudioFeaturesCallback | null = null;
+  private _liveEmotionCallback: LiveEmotionCallback | null = null;
 
   public micActive = false;
 
@@ -32,6 +40,8 @@ export class MediaCapture {
 
   onLevel(cb: LevelCallback) { this._levelCallback = cb; }
   onStreamsReady(cb: StreamsCallback) { this._streamsCallback = cb; }
+  onAudioFeatures(cb: AudioFeaturesCallback) { this._audioFeaturesCallback = cb; }
+  onLiveEmotion(cb: LiveEmotionCallback) { this._liveEmotionCallback = cb; }
 
   get paused() { return this._paused; }
   pause()  { this._paused = true;  }
@@ -66,6 +76,12 @@ export class MediaCapture {
     await this.startSystemAudioCapture();
     if (this.micActive) await this.startMicCapture();
     this.startVideoCapture();
+    // Load face detector in background — silently degrades if unavailable
+    this.faceDetector = new FaceEmotionDetector();
+    this.faceDetector.init().catch(e => {
+      console.warn('Face detection unavailable:', e);
+      this.faceDetector = null;
+    });
     // Notify caller with both streams for display
     if (this._streamsCallback) {
       this._streamsCallback(this.systemStream!, this.webcamStream);
@@ -90,6 +106,35 @@ export class MediaCapture {
     };
     source.connect(this.systemWorklet);
     this.systemWorklet.connect(this.systemAudioCtx.destination);
+
+    // Item 8: AnalyserNode for real-time spectral features
+    const analyser = this.systemAudioCtx.createAnalyser();
+    analyser.fftSize = 256; // 128 bins, each ~62.5 Hz wide at 16 kHz
+    source.connect(analyser);
+    const freqBuf = new Uint8Array(analyser.frequencyBinCount);
+    let prevFreqBuf: Uint8Array | null = null;
+    this.analyserInterval = setInterval(() => {
+      analyser.getByteFrequencyData(freqBuf);
+      // Band averages: low=80-300 Hz (bins 1-4), mid=300-2kHz (5-32), high=2-4kHz (32-64)
+      const avg = (a: number, b: number) => {
+        let s = 0; for (let i = a; i < b; i++) s += freqBuf[i]; return s / (b - a);
+      };
+      const low = avg(1, 5), mid = avg(5, 32), high = avg(32, 64);
+      const total = low + mid + high;
+      let dominantBand: 'low' | 'mid' | 'high' | 'none' = 'none';
+      if (total > 8) {
+        dominantBand = low >= mid && low >= high ? 'low' : high >= low && high >= mid ? 'high' : 'mid';
+      }
+      // Spectral flux: normalised sum of absolute bin differences
+      let flux = 0;
+      if (prevFreqBuf) {
+        let diff = 0;
+        for (let i = 0; i < freqBuf.length; i++) diff += Math.abs(freqBuf[i] - prevFreqBuf[i]);
+        flux = Math.min(1, diff / (freqBuf.length * 30));
+      }
+      prevFreqBuf = new Uint8Array(freqBuf);
+      this._audioFeaturesCallback?.({ dominantBand, flux });
+    }, 250);
   }
 
   private async startMicCapture() {
@@ -129,8 +174,9 @@ export class MediaCapture {
     if (!this.systemStream) return;
     const videoTracks = this.systemStream.getVideoTracks();
     if (videoTracks.length === 0) return;
+    // Item 4: 320×180 canvas halves payload, keeps enough detail for vision models
     const canvas = document.createElement('canvas');
-    canvas.width = 640; canvas.height = 360;
+    canvas.width = 320; canvas.height = 180;
     const ctx = canvas.getContext('2d')!;
     const video = document.createElement('video');
     video.muted = true; video.autoplay = true; video.playsInline = true;
@@ -141,7 +187,6 @@ export class MediaCapture {
       if (video.readyState >= 2 && video.videoWidth > 0) {
         const crop = this._cropRect;
         if (crop) {
-          // Draw only the cropped region (interviewer face) scaled to canvas size
           const sw = video.videoWidth * crop.w;
           const sh = video.videoHeight * crop.h;
           const sx = video.videoWidth * crop.x;
@@ -158,14 +203,25 @@ export class MediaCapture {
     };
     this._captureFrameFn = captureFrame;
     video.addEventListener('loadeddata', () => captureFrame(), { once: true });
-    // Backup initial capture in case loadeddata already fired
     setTimeout(() => captureFrame(), 3000);
-    // 12s interval — fast enough to catch interviewer camera turning on mid-call
-    this.videoInterval = setInterval(captureFrame, 12000);
+    // Item 1: 6s interval (was 12s) for faster backend sentiment updates
+    this.videoInterval = setInterval(captureFrame, 6000);
+
+    // Item 5: client-side face detection on the cropped interviewer region (500ms)
+    this.faceInterval = setInterval(() => {
+      if (!this.faceDetector || !this._liveEmotionCallback) return;
+      if (video.readyState < 2 || video.videoWidth === 0) return;
+      const emo = this.faceDetector.analyzeFrame(video, this._cropRect);
+      if (emo) this._liveEmotionCallback(emo);
+    }, 500);
   }
 
   stop() {
     if (this.videoInterval) clearInterval(this.videoInterval);
+    if (this.faceInterval) clearInterval(this.faceInterval);
+    if (this.analyserInterval) clearInterval(this.analyserInterval);
+    this.faceDetector?.dispose();
+    this.faceDetector = null;
     this.systemWorklet?.disconnect();
     this.micWorklet?.disconnect();
     this.systemAudioCtx?.close();

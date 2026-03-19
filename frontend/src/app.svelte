@@ -72,6 +72,16 @@
   let showHistory = $state(false);
   let showWhisper = $state(false);
   let emotionHistory = $state<string[]>([]);
+  let vocalWhyExpanded = $state(false);
+
+  const EMOTION_COLORS: Record<string, string> = {
+    engaged: '#22c55e', curious: '#3b82f6', neutral: '#94a3b8',
+    skeptical: '#f59e0b', confused: '#f97316', bored: '#ef4444',
+    pleased: '#a78bfa', enthusiastic: '#10b981', 'wrapping up': '#6366f1',
+  };
+  function emotionColor(e: string): string {
+    return EMOTION_COLORS[e] ?? '#94a3b8';
+  }
 
   // Setup-time data (persisted via localStorage so they survive back-navigation and practice→interview flow)
   function loadSetup<T>(key: string, fallback: T): T {
@@ -1611,7 +1621,7 @@ Ask: team | How long have you been with the team?`;
                       {#each coachingLog.slice().reverse() as entry, i}
                         <div class="coaching-log-entry" class:coaching-log-latest={i === 0}>
                           <div class="coaching-log-meta">
-                            <span class="coaching-log-emotion">They: {entry.emotion}</span>
+                            <span class="coaching-log-emotion" style="color: {emotionColor(entry.emotion)}">Interviewer: {entry.emotion}</span>
                             <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
                           </div>
                           <span class="coaching-log-for-you">For you:</span>
@@ -1705,12 +1715,15 @@ Ask: team | How long have you been with the team?`;
                           <p class="ascore-coaching">{latestWithFeedback.answerFeedback.coaching}</p>
                         {/if}
                         {#if latestWithFeedback.vocalFeedback}
-                          <div class="ascore-vocal-row">
+                          <button class="ascore-vocal-row" onclick={() => vocalWhyExpanded = !vocalWhyExpanded}>
                             <span class="ascore-vocal-score" style="color: {latestWithFeedback.vocalFeedback.confidence_score >= 70 ? '#4ade80' : latestWithFeedback.vocalFeedback.confidence_score >= 45 ? '#f59e0b' : '#f87171'}">{latestWithFeedback.vocalFeedback.confidence_score}%</span>
                             <span class="ascore-vocal-tone">{latestWithFeedback.vocalFeedback.tone}</span>
                             {#if latestWithFeedback.vocalFeedback.fillers_noted}<span class="ascore-vocal-fillers">{latestWithFeedback.vocalFeedback.fillers_noted}</span>{/if}
-                          </div>
-                          <p class="ascore-coaching">{latestWithFeedback.vocalFeedback.coaching}</p>
+                            <span class="ascore-vocal-chevron">{vocalWhyExpanded ? '▴' : '▾'}</span>
+                          </button>
+                          {#if vocalWhyExpanded}
+                            <p class="ascore-coaching">{latestWithFeedback.vocalFeedback.coaching}</p>
+                          {/if}
                         {/if}
                       </div>
                     {/if}
@@ -2582,7 +2595,7 @@ Ask: team | How long have you been with the team?`;
   }
   .coaching-log-emotion {
     font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
-    letter-spacing: 0.07em; color: #f59e0b;
+    letter-spacing: 0.07em;
   }
   .coaching-log-ago {
     font-size: var(--fs-xs); color: #475569; font-family: var(--ff-mono);
@@ -2760,10 +2773,12 @@ Ask: team | How long have you been with the team?`;
   .ascore-missed-coaching { padding: 0.4rem 0.5rem 0; }
   .ascore-missed-label { font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #f87171; }
   .ascore-missed-kw { font-size: var(--fs-xs); padding: 0.05rem 0.3rem; border-radius: 0.2rem; background: #2a0a0a; color: #fca5a5; border: 1px solid #7f1d1d; }
-  .ascore-vocal-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .ascore-vocal-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; background: none; border: none; padding: 0; cursor: pointer; width: 100%; text-align: left; }
+  .ascore-vocal-row:hover .ascore-vocal-chevron { color: #64748b; }
   .ascore-vocal-score { font-size: var(--fs-sm); font-weight: 800; }
   .ascore-vocal-tone { font-size: var(--fs-sm); color: #94a3b8; }
   .ascore-vocal-fillers { font-size: var(--fs-xs); color: #f59e0b; }
+  .ascore-vocal-chevron { font-size: var(--fs-xs); color: #334155; margin-left: auto; }
 
   /* Tone history at bottom of right panel */
   .tone-history-bottom { margin-top: 0.5rem; padding: 0.2rem 0.75rem; }

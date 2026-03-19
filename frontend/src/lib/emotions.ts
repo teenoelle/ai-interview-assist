@@ -17,6 +17,9 @@ export function emotionColor(e: string): string {
   return EMOTION_COLORS[e] ?? '#94a3b8';
 }
 
+export const POSITIVE_EMOTIONS = new Set(['engaged', 'pleased', 'enthusiastic', 'curious']);
+export const NEGATIVE_EMOTIONS = new Set(['skeptical', 'bored', 'confused']);
+
 export const EMOTION_CONFIG: Record<string, { color: string; icon: string; label: string }> = {
   engaged:       { color: EMOTION_COLORS.engaged,           icon: '🎯', label: 'Engaged' },
   curious:       { color: EMOTION_COLORS.curious,           icon: '🔍', label: 'Curious' },

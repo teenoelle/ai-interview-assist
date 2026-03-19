@@ -37,7 +37,7 @@
   import type { CompanyBrief, InterviewerSummary } from './lib/api';
   import { fetchUsage } from './lib/api';
   import { parseSuggestion } from './lib/parseSuggestion';
-  import { EMOTION_COLORS, EMOTION_CONFIG, emotionColor } from './lib/emotions';
+  import { EMOTION_COLORS, EMOTION_CONFIG, emotionColor, POSITIVE_EMOTIONS, NEGATIVE_EMOTIONS } from './lib/emotions';
   import '@fontsource/inter/400.css';
   import '@fontsource/inter/600.css';
   import '@fontsource/inter/700.css';
@@ -588,6 +588,9 @@
   // Body language panel state
   let consecutiveEmotionCount = $state(0);
   let lastTrackedEmotion = $state('');
+  let transitionNote = $state<{ from: string; to: string } | null>(null);
+  let transitionTimer: ReturnType<typeof setTimeout> | null = null;
+  const positiveStreak = $derived(consecutiveEmotionCount >= 2 && POSITIVE_EMOTIONS.has(emotion));
   let blTriggerCounts = $state<Record<string, number>>(loadSetup('bl-trigger-counts', {}));
   let answerNudgeVisible = $state(false);
   let answerNudgeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -928,7 +931,16 @@ Ask: team | How long have you been with the team?`;
         }
         if (event.coaching_why) coachingWhy = event.coaching_why;
         emotionHistory = [...emotionHistory, event.emotion];
-        // Track consecutive reads of same emotion (item 3)
+        // Detect negative → positive transition before updating lastTrackedEmotion
+        if (NEGATIVE_EMOTIONS.has(lastTrackedEmotion) && POSITIVE_EMOTIONS.has(event.emotion)) {
+          if (transitionTimer) clearTimeout(transitionTimer);
+          transitionNote = { from: lastTrackedEmotion, to: event.emotion };
+          transitionTimer = setTimeout(() => { transitionNote = null; }, 10000);
+        } else if (transitionNote && !POSITIVE_EMOTIONS.has(event.emotion)) {
+          if (transitionTimer) clearTimeout(transitionTimer);
+          transitionNote = null;
+        }
+        // Track consecutive reads of same emotion
         if (event.emotion === lastTrackedEmotion) {
           consecutiveEmotionCount++;
         } else {
@@ -1513,6 +1525,15 @@ Ask: team | How long have you been with the team?`;
                       </div>
                     </div>
                   {/if}
+                  {#if transitionNote}
+                    <div class="transition-note">
+                      Turned it around — <span class="transition-from">{transitionNote.from}</span> → <span style="color: {emotionColor(transitionNote.to)}">{transitionNote.to}</span>
+                    </div>
+                  {:else if positiveStreak}
+                    <div class="positive-streak">
+                      ✓ Staying <span style="color: {emotionColor(emotion)}">{emotion}</span> — keep going
+                    </div>
+                  {/if}
                   {@render sectionList('sentiment')}
                   {#if nonNeutralTones.length > 1}
                     <div class="tone-history tone-history-bottom">
@@ -1610,6 +1631,7 @@ Ask: team | How long have you been with the team?`;
                       {#each coachingLog.slice().reverse() as entry, i}
                         <!-- svelte-ignore a11y_no_static_element_interactions -->
                         <div class="coaching-log-entry" class:coaching-log-latest={i === 0}
+                          class:coaching-log-latest-positive={i === 0 && POSITIVE_EMOTIONS.has(entry.emotion)}
                           onclick={() => {
                             if (!entry.why) return;
                             const s = new Set(expandedCoachingEntries);
@@ -1625,8 +1647,12 @@ Ask: team | How long have you been with the team?`;
                                 <span style="color: {emotionColor(entry.emotion)}">{entry.emotion}</span>
                               </span>
                             </div>
-                            <span class="coaching-log-text coaching-log-text-latest" class:coaching-log-clickable={!!entry.why}>
-                              <span class="tip-label">Tip</span> {entry.text}
+                            <span class="coaching-log-text coaching-log-text-latest"
+                              class:coaching-log-positive={POSITIVE_EMOTIONS.has(entry.emotion)}
+                              class:coaching-log-clickable={!!entry.why}>
+                              <span class="tip-label" class:tip-label-positive={POSITIVE_EMOTIONS.has(entry.emotion)}>
+                                {POSITIVE_EMOTIONS.has(entry.emotion) ? '✓' : 'Tip'}
+                              </span> {entry.text}
                             </span>
                           {:else}
                             <!-- History: no icon, no Tip label, timestamp, dimmer -->
@@ -2691,6 +2717,26 @@ Ask: team | How long have you been with the team?`;
   .tip-label { color: #4ade80; font-weight: 700; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; }
   .coaching-log-why { font-size: var(--fs-xs); color: #475569; font-style: italic; line-height: 1.35; display: block; margin-top: 0.1rem; }
   .coaching-log-clickable { cursor: pointer; text-decoration-line: underline; text-decoration-style: dotted; text-decoration-color: #334155; }
+  .coaching-log-latest-positive { border-left-color: #166534 !important; background: #060e0a !important; }
+  .coaching-log-positive { color: #4ade80 !important; }
+  .tip-label-positive { color: #22c55e !important; }
+  .transition-note {
+    margin: 0.4rem 0.5rem 0; padding: 0.4rem 0.65rem;
+    background: #071a0f; border-left: 3px solid #22c55e;
+    border-radius: var(--radius-md); font-size: var(--fs-sm); color: #4ade80;
+    flex-shrink: 0; animation: fadeInDown 0.3s ease-out;
+  }
+  .transition-from { color: #f59e0b; }
+  .positive-streak {
+    margin: 0.4rem 0.5rem 0; padding: 0.35rem 0.65rem;
+    background: #060e0a; border-left: 3px solid #166534;
+    border-radius: var(--radius-md); font-size: var(--fs-sm); color: #4ade80;
+    flex-shrink: 0;
+  }
+  @keyframes fadeInDown {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: none; }
+  }
   .sp-header {
     font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.08em; color: #334155; padding: 0.3rem 0.75rem 0.1rem;

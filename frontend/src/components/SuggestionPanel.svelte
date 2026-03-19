@@ -188,10 +188,13 @@
             <span class="tp-tag" style="color: {tc.color}; background: {tc.bg}">{tc.label}</span>
           {/if}
           {#if current.confidenceScore != null}
-            <span class="tp-conf-badge"
-              style="color: {current.confidenceScore >= 70 ? '#4ade80' : current.confidenceScore >= 40 ? '#f59e0b' : '#f87171'}">
-              {current.confidenceScore}%
-            </span>
+            {#key current.confidenceScore}
+              <span class="tp-conf-badge"
+                class:conf-good-pulse={current.confidenceScore >= 75}
+                style="color: {current.confidenceScore >= 70 ? '#4ade80' : current.confidenceScore >= 40 ? '#f59e0b' : '#f87171'}">
+                {current.confidenceScore}%
+              </span>
+            {/key}
           {/if}
         </div>
         <span class="tp-active-q-text">"{current.question}"</span>
@@ -609,6 +612,11 @@
     display: inline-block; padding: 0.08rem 0.4rem; border-radius: 0.2rem;
     font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
     letter-spacing: 0.07em; flex-shrink: 0; margin-top: 0.05rem;
+  }
+  .conf-good-pulse { animation: conf-glow 1.5s ease-out forwards; }
+  @keyframes conf-glow {
+    0%   { text-shadow: 0 0 10px #4ade80, 0 0 20px #4ade8055; transform: scale(1.2); }
+    100% { text-shadow: none; transform: scale(1); }
   }
   .tp-conf-badge {
     font-size: var(--fs-xs); font-weight: 800; flex-shrink: 0;

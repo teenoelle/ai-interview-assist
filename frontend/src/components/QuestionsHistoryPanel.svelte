@@ -52,10 +52,15 @@
           {#if entry.redFlag}
             <div class="qhist-redflag">⚠ {entry.redFlag.category}</div>
           {/if}
-          {#if entry.answerFeedback}
+          {#if entry.answerFeedback || (entry.answered === true && entry.vocalFeedback && entry.vocalFeedback.confidence_score >= 70)}
             <div class="qhist-feedback">
-              {#if entry.answerFeedback.missed_followup}<span class="fb-chip">No follow-up</span>{/if}
-              {#if entry.answerFeedback.missed_metric}<span class="fb-chip">No metric</span>{/if}
+              {#if entry.answerFeedback}
+                {#if entry.answerFeedback.missed_followup}<span class="fb-chip">No follow-up</span>{/if}
+                {#if entry.answerFeedback.missed_metric}<span class="fb-chip">No metric</span>{/if}
+              {/if}
+              {#if entry.answered === true && entry.vocalFeedback && entry.vocalFeedback.confidence_score >= 70}
+                <span class="fb-chip-good">✓ Strong</span>
+              {/if}
             </div>
           {/if}
         </button>
@@ -185,6 +190,16 @@
     gap: 0.25rem;
     flex-wrap: wrap;
     margin-top: 0.1rem;
+  }
+  .fb-chip-good {
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #4ade80;
+    background: #071a0f;
+    border-radius: 0.2em;
+    padding: 0.05em 0.35em;
   }
   .fb-chip {
     font-size: var(--fs-xs);

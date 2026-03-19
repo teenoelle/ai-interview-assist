@@ -37,6 +37,7 @@
   import type { CompanyBrief, InterviewerSummary } from './lib/api';
   import { fetchUsage } from './lib/api';
   import { parseSuggestion } from './lib/parseSuggestion';
+  import { EMOTION_COLORS, emotionColor } from './lib/emotions';
   import '@fontsource/inter/400.css';
   import '@fontsource/inter/600.css';
   import '@fontsource/inter/700.css';
@@ -76,14 +77,6 @@
   let answerWhyExpanded = $state(false);
   let expandedCoachingEntries = $state(new Set<number>());
 
-  const EMOTION_COLORS: Record<string, string> = {
-    engaged: '#22c55e', curious: '#3b82f6', neutral: '#94a3b8',
-    skeptical: '#f59e0b', confused: '#f97316', bored: '#ef4444',
-    pleased: '#a78bfa', enthusiastic: '#10b981', 'wrapping up': '#6366f1',
-  };
-  function emotionColor(e: string): string {
-    return EMOTION_COLORS[e] ?? '#94a3b8';
-  }
 
   // Setup-time data (persisted via localStorage so they survive back-navigation and practice→interview flow)
   function loadSetup<T>(key: string, fallback: T): T {
@@ -1905,13 +1898,52 @@ Ask: team | How long have you been with the team?`;
 
 <style>
   :root {
+    /* Typography */
     --ff-base: 'Inter', system-ui, sans-serif;
     --ff-mono: 'JetBrains Mono', 'Fira Code', monospace;
-    --fs-xs:   0.62rem;   /* badges, labels, metadata */
-    --fs-sm:   0.74rem;   /* coaching notes, hints, secondary */
-    --fs-base: 0.85rem;   /* body text, transcript, suggestion body */
-    --fs-lg:   1.0rem;    /* main spoken text (Say/Affirm) */
-    --fs-mono: 0.72rem;   /* timestamps, stat numbers */
+    --fs-xs:   0.62rem;
+    --fs-sm:   0.74rem;
+    --fs-base: 0.85rem;
+    --fs-lg:   1.0rem;
+    --fs-mono: 0.72rem;
+
+    /* Text colors */
+    --clr-text-primary:   #f1f5f9;
+    --clr-text-secondary: #94a3b8;
+    --clr-text-muted:     #475569;
+    --clr-text-dim:       #334155;
+
+    /* Speaker / brand colors */
+    --clr-speaker-you:  #4ade80;
+    --clr-speaker-them: #f87171;
+    --clr-green:        #22c55e;
+    --clr-blue:         #60a5fa;
+    --clr-purple:       #a78bfa;
+    --clr-amber:        #f59e0b;
+
+    /* Surface backgrounds */
+    --bg-surface:    #0f172a;
+    --bg-card:       #1e293b;
+    --bg-entry-you:  #0a1f14;
+    --bg-entry-them: #1a0a0a;
+
+    /* Section block colors (Acknowledge / Say / Ask) */
+    --bg-ack:     #110823;
+    --border-ack: #6d28d9;
+    --bg-say:     #060e0a;
+    --border-say: #166534;
+    --bg-ask:     #0e0700;
+    --border-ask: #92400e;
+
+    /* Borders */
+    --border-subtle: #1e293b;
+    --border-muted:  #334155;
+
+    /* Radius */
+    --radius-sm:   0.25rem;
+    --radius-md:   0.4rem;
+    --radius-lg:   0.5rem;
+    --radius-pill: 9999px;
   }
 
   main {
@@ -1925,6 +1957,24 @@ Ask: team | How long have you been with the team?`;
   :global(input), :global(select), :global(button), :global(textarea) {
     font-family: inherit;
   }
+
+  /* === Global utility classes === */
+  :global(.label-uppercase) {
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+  :global(.panel-empty) {
+    color: var(--clr-text-muted);
+    font-style: italic;
+    font-size: var(--fs-base);
+    text-align: center;
+    padding: 2rem 1rem;
+  }
+  :global(.text-secondary) { color: var(--clr-text-secondary); }
+  :global(.text-muted)     { color: var(--clr-text-muted); }
+  :global(.text-dim)       { color: var(--clr-text-dim); }
 
   .setup-container { max-width: 800px; margin: 0 auto; }
   .setup-usage { max-width: 800px; margin: 0 auto 2rem; padding: 0 2rem; }

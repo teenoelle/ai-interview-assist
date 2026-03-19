@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { EMOTION_CONFIG } from '../lib/emotions';
+
   const {
     videoEmotion,
     audioEmotion,
@@ -9,20 +11,8 @@
     coachingWhy?: string;
   }>();
 
-  const emotionConfig: Record<string, { color: string; icon: string; label: string }> = {
-    engaged:      { color: '#22c55e', icon: '🎯', label: 'Engaged' },
-    curious:      { color: '#3b82f6', icon: '🔍', label: 'Curious' },
-    neutral:      { color: '#94a3b8', icon: '😐', label: 'Neutral' },
-    skeptical:    { color: '#f59e0b', icon: '🤔', label: 'Skeptical' },
-    confused:     { color: '#f97316', icon: '😕', label: 'Confused' },
-    bored:        { color: '#ef4444', icon: '😑', label: 'Bored' },
-    pleased:      { color: '#a78bfa', icon: '😊', label: 'Pleased' },
-    enthusiastic: { color: '#10b981', icon: '✨', label: 'Enthusiastic' },
-    'wrapping up':{ color: '#6366f1', icon: '🏁', label: 'Wrapping Up' },
-  };
-
-  const videoConfig = $derived(emotionConfig[videoEmotion] ?? emotionConfig['neutral']);
-  const audioConfig = $derived(emotionConfig[audioEmotion ?? ''] ?? null);
+  const videoConfig = $derived(EMOTION_CONFIG[videoEmotion] ?? EMOTION_CONFIG['neutral']);
+  const audioConfig = $derived(EMOTION_CONFIG[audioEmotion ?? ''] ?? null);
   const audioDiverges = $derived(audioEmotion && audioConfig && audioEmotion !== videoEmotion);
 
   let whyOpen = $state(false);

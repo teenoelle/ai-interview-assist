@@ -2,6 +2,7 @@
   import type { SuggestionEntry } from '../lib/types';
   import { TAG_CONFIG } from '../lib/questionTagger';
   import { parseSuggestion, parseCues } from '../lib/parseSuggestion';
+  import PanelHeader from './PanelHeader.svelte';
 
   // Expand-cue state: cue text → { sentence, loading }
   let expandedCues = $state<Record<string, { sentence: string; loading: boolean }>>({});
@@ -299,15 +300,12 @@
 {:else}
   <!-- Standard panel mode -->
   <div class="suggestion-panel">
-    <div class="panel-header">
-      <div class="header-left">
-        <h3>AI Suggestions</h3>
-        <span class="glance-hint">Say = speak it · Ask = follow-up questions</span>
-      </div>
-      {#if suggestions.length > 0}
-        <button class="clear-btn" onclick={onClear}>Clear</button>
-      {/if}
-    </div>
+    <PanelHeader
+      title="AI Suggestions"
+      hint="Say = speak it · Ask = follow-up questions"
+      actionLabel={suggestions.length > 0 ? 'Clear' : undefined}
+      onAction={onClear}
+    />
 
     <div class="entries" bind:this={container}>
       {#if suggestions.length === 0}
@@ -445,10 +443,10 @@
     border-left: 3px solid transparent;
     flex-shrink: 0;
   }
-  .tp-sec-ack    { background: #110823; border-left-color: #6d28d9; }
-  .tp-sec-affirm { background: #071520; border-left-color: #0e7490; }
-  .tp-sec-say    { background: #060e0a; border-left-color: #166534; }
-  .tp-sec-ask    { background: #0e0700; border-left-color: #92400e; }
+  .tp-sec-ack    { background: var(--bg-ack);    border-left-color: var(--border-ack); }
+  .tp-sec-affirm { background: #071520;          border-left-color: #0e7490; }
+  .tp-sec-say    { background: var(--bg-say);    border-left-color: var(--border-say); }
+  .tp-sec-ask    { background: var(--bg-ask);    border-left-color: var(--border-ask); }
 
   .tp-sec-row {
     display: flex;
@@ -638,22 +636,6 @@
 
   /* === Standard panel mode === */
   .suggestion-panel { height: 100%; display: flex; flex-direction: column; }
-  .panel-header {
-    display: flex; align-items: flex-start; justify-content: space-between;
-    margin-bottom: 0.75rem; gap: 0.5rem;
-  }
-  .header-left { display: flex; flex-direction: column; gap: 0.15rem; }
-  .glance-hint { font-size: var(--fs-xs); color: #475569; font-style: italic; }
-  h3 {
-    font-size: var(--fs-base); font-weight: 600; color: #94a3b8;
-    text-transform: uppercase; letter-spacing: 0.05em; margin: 0;
-  }
-  .clear-btn {
-    padding: 0.15rem 0.6rem; background: transparent;
-    border: 1px solid #334155; border-radius: 0.25rem;
-    color: #64748b; font-size: var(--fs-sm); cursor: pointer;
-  }
-  .clear-btn:hover { border-color: #64748b; color: #94a3b8; }
 
   .entries { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; }
 
@@ -691,10 +673,10 @@
     padding: 0.45rem 0.6rem; border-radius: 0.4rem;
     border-left: 2px solid transparent;
   }
-  .e-sec-ack    { background: #110823; border-left-color: #6d28d9; }
-  .e-sec-affirm { background: #071520; border-left-color: #0e7490; }
-  .e-sec-say    { background: #060e0a; border-left-color: #166534; }
-  .e-sec-ask    { background: #0e0700; border-left-color: #92400e; }
+  .e-sec-ack    { background: var(--bg-ack);    border-left-color: var(--border-ack); }
+  .e-sec-affirm { background: #071520;          border-left-color: #0e7490; }
+  .e-sec-say    { background: var(--bg-say);    border-left-color: var(--border-say); }
+  .e-sec-ask    { background: var(--bg-ask);    border-left-color: var(--border-ask); }
   .affirm-text, .tell-text {
     color: #f1f5f9; font-size: var(--fs-lg); font-weight: 400;
     line-height: 1.5; overflow-wrap: break-word; word-break: break-word;

@@ -1617,9 +1617,10 @@ Ask: team | How long have you been with the team?`;
                             expandedCoachingEntries = s;
                           }}>
                           {#if i === 0}
-                            <!-- Latest: icon + emotion, no timestamp -->
+                            <!-- Latest: interviewer label + icon + emotion, no timestamp -->
                             <div class="coaching-log-meta">
                               <span class="coaching-log-emotion">
+                                <span class="coaching-log-who">Interviewer</span>
                                 <span class="coaching-log-icon">{EMOTION_CONFIG[entry.emotion]?.icon ?? ''}</span>
                                 <span style="color: {emotionColor(entry.emotion)}">{entry.emotion}</span>
                               </span>
@@ -2661,6 +2662,7 @@ Ask: team | How long have you been with the team?`;
     display: flex; align-items: center; justify-content: space-between;
   }
   .coaching-log-icon { font-size: 0.85rem; margin-right: 0.2rem; }
+  .coaching-log-who { color: #ef4444; font-weight: 800; margin-right: 0.35rem; }
   .coaching-log-emotion {
     font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
     letter-spacing: 0.07em; display: flex; align-items: center;

@@ -1614,11 +1614,8 @@ Ask: team | How long have you been with the team?`;
                     </div>
                   {/if}
                 {:else if sid === 'sentiment-bar'}
-                  <div class="sp-header">Mood</div>
-                  <SentimentBar videoEmotion={emotion} {audioEmotion} {coachingWhy} />
-                  <BodyLanguagePanel {speakerMode} {presenceIssues} />
+                  {#if presenceIssues.length > 0}<BodyLanguagePanel {presenceIssues} />{/if}
                   {#if coachingLog.length > 0}
-                    <div class="sp-header sp-header-history">History</div>
                     <div class="coaching-log coaching-log-sentiment">
                       {#each coachingLog.slice().reverse() as entry, i}
                         <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1636,12 +1633,11 @@ Ask: team | How long have you been with the team?`;
                             </span>
                             <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
                           </div>
-                          <span class="coaching-log-text"><span class="tip-label">Tip</span> {entry.text}</span>
-                          {#if entry.why}
-                            <span class="coaching-log-expand-hint">{expandedCoachingEntries.has(entry.time) ? '▾' : '▸ why'}</span>
-                            {#if expandedCoachingEntries.has(entry.time)}
-                              <span class="coaching-log-why">{entry.why}</span>
-                            {/if}
+                          <span class="coaching-log-text" class:coaching-log-clickable={!!entry.why}>
+                            <span class="tip-label">Tip</span> {entry.text}
+                          </span>
+                          {#if entry.why && expandedCoachingEntries.has(entry.time)}
+                            <span class="coaching-log-why">{entry.why}</span>
                           {/if}
                         </div>
                       {/each}
@@ -2628,8 +2624,7 @@ Ask: team | How long have you been with the team?`;
   .tip-label { color: #4ade80; font-weight: 700; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; }
   .coaching-log-who { color: #ef4444; }
   .coaching-log-why { font-size: var(--fs-xs); color: #475569; font-style: italic; line-height: 1.35; display: block; margin-top: 0.1rem; }
-  .coaching-log-expand-hint { font-size: var(--fs-xs); color: #334155; display: block; margin-top: 0.1rem; cursor: pointer; }
-  .coaching-log-entry[onclick] { cursor: pointer; }
+  .coaching-log-clickable { cursor: pointer; text-decoration-line: underline; text-decoration-style: dotted; text-decoration-color: #334155; }
   .sp-header {
     font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.08em; color: #334155; padding: 0.3rem 0.75rem 0.1rem;

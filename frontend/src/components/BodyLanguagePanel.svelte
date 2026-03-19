@@ -1,22 +1,12 @@
 <script lang="ts">
   const {
-    speakerMode = 'idle',
     presenceIssues = [],
   } = $props<{
-    speakerMode?: 'listening' | 'answering' | 'idle';
     presenceIssues?: string[];
   }>();
 </script>
 
 <div class="bl-panel">
-  <!-- Mode badge -->
-  {#if speakerMode !== 'idle'}
-    <div class="mode-badge" class:mode-listening={speakerMode === 'listening'} class:mode-answering={speakerMode === 'answering'}>
-      {speakerMode === 'listening' ? '👂 Listening mode' : '🎤 Answering mode'}
-    </div>
-  {/if}
-
-  <!-- Webcam presence issues -->
   {#if presenceIssues.length > 0}
     <div class="presence-section">
       <span class="presence-label">📷 Your camera</span>
@@ -32,24 +22,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
-    border-top: 1px solid #1e293b;
-    padding-top: 0.5rem;
   }
-
-  .mode-badge {
-    font-size: var(--fs-xs);
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    padding: 0.15rem 0.5rem;
-    border-radius: 0.25rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    align-self: flex-start;
-  }
-  .mode-listening { background: #0d1a2b; color: #60a5fa; border: 1px solid #1e3a5f; }
-  .mode-answering { background: #0f1a0f; color: #4ade80; border: 1px solid #14532d; }
 
   .presence-section {
     background: #0d1a0d;

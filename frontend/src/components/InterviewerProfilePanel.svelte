@@ -3,13 +3,13 @@
     interviewers: Array<{ name: string; role: string; background: string; tenure: string; rapport_tips: string[] }>;
   }>();
 
-  let expanded = $state(true);
-  let collapsedCards = $state(new Set<number>());
+  let expanded = $state(false);
+  let expandedCards = $state(new Set<number>());
 
   function toggleCard(i: number) {
-    const s = new Set(collapsedCards);
+    const s = new Set(expandedCards);
     s.has(i) ? s.delete(i) : s.add(i);
-    collapsedCards = s;
+    expandedCards = s;
   }
 
   function firstName(name: string) { return name.trim().split(/\s+/)[0] ?? ''; }
@@ -26,13 +26,14 @@
     <button class="profiles-toggle" onclick={() => expanded = !expanded}>
       <div class="profiles-toggle-inner">
         <span class="profiles-label-header">Interviewers</span>
+        {#if !expanded}<span class="profiles-names-preview">{interviewers.map(iv => firstName(iv.name)).join(' · ')}</span>{/if}
       </div>
       <span class="profiles-chevron">{expanded ? '▴' : '▾'}</span>
     </button>
     {#if expanded}
   <div class="profiles">
     {#each interviewers as iv, i}
-      {@const cardCollapsed = collapsedCards.has(i)}
+      {@const cardCollapsed = !expandedCards.has(i)}
       <div class="profile-card">
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="profile-header" onclick={() => toggleCard(i)} role="button" tabindex="0"
@@ -87,6 +88,7 @@
   .profiles-toggle-inner { display: flex; flex-direction: column; gap: 0.1rem; text-align: left; }
   .profiles-label-header { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #334155; }
   .profiles-names { font-size: var(--fs-base); font-weight: 700; color: #60a5fa; }
+  .profiles-names-preview { font-size: var(--fs-sm); color: #60a5fa; font-weight: 600; }
   .profiles-chevron { font-size: var(--fs-xs); color: #334155; }
   .profiles { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.5rem 0.75rem 0.75rem; border-top: 1px solid #0f1e33; }
   .profile-card { background: #060e1a; border: 1px solid #1a2d4a; border-radius: 0.4rem; padding: 0.6rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }

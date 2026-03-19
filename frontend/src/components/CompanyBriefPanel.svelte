@@ -3,7 +3,7 @@
     brief: { name: string; what_they_do: string; products: string[]; culture: string; recent_news: string; why_join: string } | null;
   }>();
 
-  let expanded = $state(true);
+  let expanded = $state(false);
 </script>
 
 {#if brief && brief.name}

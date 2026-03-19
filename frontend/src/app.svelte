@@ -459,8 +459,8 @@
   interface SectionSlot { panel: string; id: SectionId; }
   const DEFAULT_SECTION_LAYOUT: SectionSlot[] = [
     { panel: 'sentiment', id: 'screen-preview' },
-    { panel: 'coaching', id: 'personality' },
     { panel: 'sentiment', id: 'sentiment-bar' },
+    { panel: 'sentiment', id: 'personality' },
     { panel: 'sentiment', id: 'body-language' },
     { panel: 'sentiment', id: 'stats' },
     { panel: 'sentiment', id: 'answer-score' },
@@ -597,6 +597,7 @@
   let presenceIssues = $state<string[]>([]);
   let presencePositive = $state<string | null>(null);
   let prevPresenceHadIssues = false;
+  let lastPosturePositiveTime = 0;
 
   // Speaker mode for body-language hints
   const speakerMode = $derived<'listening' | 'answering' | 'idle'>(
@@ -624,10 +625,14 @@
         const data = await resp.json();
         const newIssues: string[] = data.issues ?? [];
         const positive: string | null = data.positive ?? null;
-        // Detect fix: previously had issues, now cleared
-        if (prevPresenceHadIssues && newIssues.length === 0) {
-          const fixText = positive || 'Body language improved';
+        // Note positive body language: on transition from issues, or proactively if looking good (throttled 5 min)
+        const now = Date.now();
+        const isPositiveCheck = newIssues.length === 0 && positive !== null;
+        const throttleOk = now - lastPosturePositiveTime > 5 * 60 * 1000;
+        if (isPositiveCheck && (prevPresenceHadIssues || throttleOk)) {
+          const fixText = positive || 'Body language looks good';
           coachingLog = [...coachingLog.slice(-4), { text: fixText, type: 'posture-fixed', emotion: '', time: Date.now() }];
+          lastPosturePositiveTime = now;
         }
         prevPresenceHadIssues = newIssues.length > 0;
         presenceIssues = newIssues;
@@ -1597,7 +1602,7 @@ Ask: team | How long have you been with the team?`;
             {@const prevRole = i > 0 ? (SECTION_ROLE[panelSections[i-1].id] ?? 'coaching') : null}
             {#if prevRole !== myRole}
               <div class="group-divider group-divider-{myRole}">
-                {myRole === 'interviewer' ? '👤 Reading the Room' : myRole === 'you' ? '✅ Your Performance' : '🎯 Coaching'}
+                {myRole === 'interviewer' ? '👤 Interviewer' : myRole === 'you' ? '✅ Your Performance' : '🎯 Coaching'}
               </div>
             {/if}
             <!-- svelte-ignore a11y_no_static_element_interactions -->

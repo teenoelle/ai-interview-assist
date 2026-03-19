@@ -17,10 +17,10 @@
     const dev = status === 'slow'
       ? Math.min(1, (GOOD_MIN - wpm) / 60)   // 0 at 90 wpm → 1 at 30 wpm
       : Math.min(1, (wpm - GOOD_MAX) / 80);   // 0 at 180 wpm → 1 at 260 wpm
-    // amber #f59e0b → red #ef4444
-    const r = Math.round(245 + (239 - 245) * dev);
-    const g = Math.round(158 + (68  - 158) * dev);
-    const b = Math.round(11  + (68  - 11)  * dev);
+    // amber #f59e0b → orange #f97316
+    const r = Math.round(245 + (249 - 245) * dev);
+    const g = Math.round(158 + (115 - 158) * dev);
+    const b = Math.round(11  + (22  - 11)  * dev);
     return `rgb(${r},${g},${b})`;
   }
 
@@ -76,12 +76,12 @@
     border-radius: var(--radius-pill, 9999px);
     /* gradient zones: red → amber → green (90/220=41%) → green (180/220=82%) → amber → red */
     background: linear-gradient(to right,
-      #ef4444 0%,
+      #f97316 0%,
       #f59e0b 28%,
       #22c55e 41%,
       #22c55e 82%,
       #f59e0b 91%,
-      #ef4444 100%
+      #f97316 100%
     );
   }
 

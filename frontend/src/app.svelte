@@ -460,7 +460,6 @@
   const DEFAULT_SECTION_LAYOUT: SectionSlot[] = [
     { panel: 'sentiment', id: 'screen-preview' },
     { panel: 'sentiment', id: 'sentiment-bar' },
-    { panel: 'sentiment', id: 'personality' },
     { panel: 'sentiment', id: 'body-language' },
     { panel: 'sentiment', id: 'stats' },
     { panel: 'sentiment', id: 'answer-score' },
@@ -1631,6 +1630,8 @@ Ask: team | How long have you been with the team?`;
                 </div>
                 {#if sid === 'screen-preview'}
                 {:else if sid === 'personality'}
+                  <!-- merged into sentiment-bar -->
+                {:else if sid === 'sentiment-bar'}
                   {#if personality}
                     <div class="personality-strip" style="border-color: {personality.color}">
                       <span class="personality-label" style="color: {personality.color}">{personality.label}</span>
@@ -1638,7 +1639,6 @@ Ask: team | How long have you been with the team?`;
                       <span class="personality-tip"><span class="tip-label">Tip</span> {personality.tip}</span>
                     </div>
                   {/if}
-                {:else if sid === 'sentiment-bar'}
                   {#if presenceIssues.length > 0}<BodyLanguagePanel {presenceIssues} />{/if}
                   {#if coachingLog.length > 0}
                     <div class="coaching-log coaching-log-sentiment">

@@ -10,21 +10,13 @@
   const GOOD_MAX = 180;
   const BAR_MAX  = 220;
 
-  // Continuous color: green in the good zone, sliding amber→red toward each extreme.
-  function paceColor(wpm: number, status: string): string {
+  function paceColor(status: string): string {
     if (status === 'idle') return '#334155';
     if (status === 'good') return '#22c55e';
-    const dev = status === 'slow'
-      ? Math.min(1, (GOOD_MIN - wpm) / 60)   // 0 at 90 wpm → 1 at 30 wpm
-      : Math.min(1, (wpm - GOOD_MAX) / 80);   // 0 at 180 wpm → 1 at 260 wpm
-    // amber #f59e0b → orange #f97316
-    const r = Math.round(245 + (249 - 245) * dev);
-    const g = Math.round(158 + (115 - 158) * dev);
-    const b = Math.round(11  + (22  - 11)  * dev);
-    return `rgb(${r},${g},${b})`;
+    return '#f59e0b';
   }
 
-  const color      = $derived(paceColor(wpm, status));
+  const color      = $derived(paceColor(status));
   const markerPct  = $derived(status !== 'idle' ? Math.min(100, (wpm / BAR_MAX) * 100) : null);
 </script>
 
@@ -76,12 +68,10 @@
     border-radius: var(--radius-pill, 9999px);
     /* gradient zones: red → amber → green (90/220=41%) → green (180/220=82%) → amber → red */
     background: linear-gradient(to right,
-      #f97316 0%,
-      #f59e0b 28%,
+      #f59e0b 0%,
       #22c55e 41%,
       #22c55e 82%,
-      #f59e0b 91%,
-      #f97316 100%
+      #f59e0b 100%
     );
   }
 

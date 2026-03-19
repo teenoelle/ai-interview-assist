@@ -63,7 +63,7 @@
   let emotionReason = $state('');
   let coaching = $state('');
   let coachingWhy = $state('');
-  let coachingLog = $state<{ text: string; why?: string; emotion: string; time: number }[]>([]);
+  let coachingLog = $state<{ text: string; why?: string; emotion: string; time: number; type?: 'posture-fixed' }[]>([]);
   let suggestions = $state<SuggestionEntry[]>([]);
   let statusMessages = $state<string[]>([]);
   let errorMessages = $state<string[]>([]);
@@ -596,6 +596,7 @@
   let answerNudgeTimer: ReturnType<typeof setTimeout> | null = null;
   let presenceIssues = $state<string[]>([]);
   let presencePositive = $state<string | null>(null);
+  let prevPresenceHadIssues = false;
 
   // Speaker mode for body-language hints
   const speakerMode = $derived<'listening' | 'answering' | 'idle'>(
@@ -621,8 +622,16 @@
       const resp = await fetch('/api/presence-check', { method: 'POST', body: fd });
       if (resp.ok) {
         const data = await resp.json();
-        presenceIssues = data.issues ?? [];
-        presencePositive = data.positive ?? null;
+        const newIssues: string[] = data.issues ?? [];
+        const positive: string | null = data.positive ?? null;
+        // Detect fix: previously had issues, now cleared
+        if (prevPresenceHadIssues && newIssues.length === 0) {
+          const fixText = positive || 'Body language improved';
+          coachingLog = [...coachingLog.slice(-4), { text: fixText, type: 'posture-fixed', emotion: '', time: Date.now() }];
+        }
+        prevPresenceHadIssues = newIssues.length > 0;
+        presenceIssues = newIssues;
+        presencePositive = positive;
       }
     } catch { /* silent — webcam analysis is best-effort */ }
   }
@@ -1631,14 +1640,25 @@ Ask: team | How long have you been with the team?`;
                       {#each coachingLog.slice().reverse() as entry, i}
                         <!-- svelte-ignore a11y_no_static_element_interactions -->
                         <div class="coaching-log-entry" class:coaching-log-latest={i === 0}
-                          class:coaching-log-latest-positive={i === 0 && POSITIVE_EMOTIONS.has(entry.emotion)}
+                          class:coaching-log-latest-positive={i === 0 && (POSITIVE_EMOTIONS.has(entry.emotion) || entry.type === 'posture-fixed')}
                           onclick={() => {
                             if (!entry.why) return;
                             const s = new Set(expandedCoachingEntries);
                             s.has(entry.time) ? s.delete(entry.time) : s.add(entry.time);
                             expandedCoachingEntries = s;
                           }}>
-                          {#if i === 0}
+                          {#if i === 0 && entry.type === 'posture-fixed'}
+                            <!-- Latest: posture fix from interviewee -->
+                            <div class="coaching-log-meta">
+                              <span class="coaching-log-emotion">
+                                <span class="coaching-log-who coaching-log-who-you">You</span>
+                                <span class="coaching-log-icon">✓</span>
+                              </span>
+                            </div>
+                            <span class="coaching-log-text coaching-log-text-latest coaching-log-positive">
+                              <span class="tip-label tip-label-positive">Fixed</span> {entry.text}
+                            </span>
+                          {:else if i === 0}
                             <!-- Latest: interviewer label + icon + emotion, no timestamp -->
                             <div class="coaching-log-meta">
                               <span class="coaching-log-emotion">
@@ -1654,6 +1674,13 @@ Ask: team | How long have you been with the team?`;
                                 {POSITIVE_EMOTIONS.has(entry.emotion) ? '✓' : 'Tip'}
                               </span> {entry.text}
                             </span>
+                          {:else if entry.type === 'posture-fixed'}
+                            <!-- History: posture fix -->
+                            <div class="coaching-log-meta">
+                              <span class="coaching-log-who-you coaching-log-emotion-hist">You</span>
+                              <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
+                            </div>
+                            <span class="coaching-log-text-hist coaching-log-posture-fixed-hist">{entry.text}</span>
                           {:else}
                             <!-- History: no icon, no Tip label, timestamp, dimmer -->
                             <div class="coaching-log-meta">
@@ -2685,6 +2712,8 @@ Ask: team | How long have you been with the team?`;
   }
   .coaching-log-icon { font-size: 0.85rem; margin-right: 0.2rem; }
   .coaching-log-who { color: #ef4444; font-weight: 800; margin-right: 0.35rem; }
+  .coaching-log-who-you { color: #4ade80; font-weight: 800; margin-right: 0.35rem; }
+  .coaching-log-posture-fixed-hist { font-size: var(--fs-sm); color: #4ade80; opacity: 0.6; line-height: 1.35; overflow-wrap: break-word; word-break: break-word; }
   .coaching-log-emotion {
     font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
     letter-spacing: 0.07em; display: flex; align-items: center;

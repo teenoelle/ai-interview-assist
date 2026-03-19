@@ -1468,21 +1468,15 @@ Ask: team | How long have you been with the team?`;
               style={collapsedCols.has('right') ? 'flex: 0 0 28px; min-width: 0; width: 28px;' : `flex-shrink: 0; width: ${rightW}px`}
               ondragover={onColDragOver} ondrop={(e) => onColDrop('right', e)}>
               <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div class="col-header col-drag-handle" draggable={true} ondragstart={(e) => onColDragStart('right', e)}>
-                <span class="col-label">{collapsedCols.has('right') ? '…' : 'Sentiment'}</span>
-                {#if !collapsedCols.has('right')}
-                  <div class="zoom-btns">
-                    <button class="zoom-btn" onclick={() => adjustZoom('rightTop', -10)} title="Decrease font size">A−</button>
-                    <button class="zoom-btn" onclick={() => adjustZoom('rightTop', +10)} title="Increase font size">A+</button>
-                    <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('right')} title="Collapse">▾</button>
-                  </div>
-                {:else}
+              <div class="col-header col-drag-handle" class:col-header-bare={!collapsedCols.has('right')} draggable={true} ondragstart={(e) => onColDragStart('right', e)}>
+                {#if collapsedCols.has('right')}
+                  <span class="col-label">…</span>
                   <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('right')} title="Expand">▸</button>
                 {/if}
               </div>
               {#if !collapsedCols.has('right')}
                 {#if webcamStream}
-                  <div class="selfview-strip">
+                  <div class="selfview-strip selfview-strip-controls">
                     <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_media_has_caption -->
                     <div class="selfview-zoom-shell"
                       class:selfview-zoomed={sVid.zoom > 1}
@@ -1506,6 +1500,17 @@ Ask: team | How long have you been with the team?`;
                       onpointerup={selfviewResizeUp}
                       onpointercancel={selfviewResizeUp}
                     ></div>
+                    <div class="sentiment-overlay-controls">
+                      <button class="zoom-btn" onclick={() => adjustZoom('rightTop', -10)} title="Decrease font size">A−</button>
+                      <button class="zoom-btn" onclick={() => adjustZoom('rightTop', +10)} title="Increase font size">A+</button>
+                      <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('right')} title="Collapse">▾</button>
+                    </div>
+                  </div>
+                {:else}
+                  <div class="sentiment-ctrl-strip">
+                    <button class="zoom-btn" onclick={() => adjustZoom('rightTop', -10)} title="Decrease font size">A−</button>
+                    <button class="zoom-btn" onclick={() => adjustZoom('rightTop', +10)} title="Increase font size">A+</button>
+                    <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('right')} title="Collapse">▾</button>
                   </div>
                 {/if}
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -2534,6 +2539,21 @@ Ask: team | How long have you been with the team?`;
     font-size: var(--fs-sm); cursor: pointer;
   }
   .crop-cancel-btn:hover { border-color: #64748b; color: #94a3b8; }
+
+  .col-header-bare { padding: 0; min-height: 0; border-bottom: none; }
+
+  .selfview-strip-controls { position: relative; }
+  .sentiment-overlay-controls {
+    position: absolute; top: 0.3rem; right: 0.3rem;
+    display: flex; gap: 0.2rem;
+    opacity: 0; transition: opacity 0.15s; z-index: 10;
+  }
+  .selfview-strip-controls:hover .sentiment-overlay-controls { opacity: 1; }
+
+  .sentiment-ctrl-strip {
+    display: flex; gap: 0.25rem; padding: 0.2rem 0.5rem;
+    justify-content: flex-end; border-bottom: 1px solid #1e293b; flex-shrink: 0;
+  }
 
   /* Webcam self-view */
   .selfview-strip {

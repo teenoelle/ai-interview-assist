@@ -454,7 +454,7 @@
   interface SectionSlot { panel: string; id: SectionId; }
   const DEFAULT_SECTION_LAYOUT: SectionSlot[] = [
     { panel: 'sentiment', id: 'screen-preview' },
-    { panel: 'sentiment', id: 'personality' },
+    { panel: 'coaching', id: 'personality' },
     { panel: 'sentiment', id: 'sentiment-bar' },
     { panel: 'sentiment', id: 'body-language' },
     { panel: 'sentiment', id: 'stats' },

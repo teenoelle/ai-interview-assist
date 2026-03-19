@@ -53,6 +53,8 @@ export class MediaCapture {
       video: { frameRate: 1, displaySurface: 'monitor' } as MediaTrackConstraints,
       audio: true,
     });
+    // Return focus to the interview app after the OS/browser switches to the captured window
+    window.focus();
 
     try {
       this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });

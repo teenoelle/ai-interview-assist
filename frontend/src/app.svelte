@@ -62,7 +62,7 @@
   let emotionReason = $state('');
   let coaching = $state('');
   let coachingWhy = $state('');
-  let coachingLog = $state<{ text: string; emotion: string; time: number }[]>([]);
+  let coachingLog = $state<{ text: string; why?: string; emotion: string; time: number }[]>([]);
   let suggestions = $state<SuggestionEntry[]>([]);
   let statusMessages = $state<string[]>([]);
   let errorMessages = $state<string[]>([]);
@@ -918,7 +918,7 @@ Ask: team | How long have you been with the team?`;
           // Add to log only if text differs from last entry
           const last = coachingLog[coachingLog.length - 1];
           if (!last || last.text !== event.coaching) {
-            coachingLog = [...coachingLog.slice(-4), { text: event.coaching, emotion: event.emotion, time: Date.now() }];
+            coachingLog = [...coachingLog.slice(-4), { text: event.coaching, why: event.coaching_why, emotion: event.emotion, time: Date.now() }];
           }
         }
         if (event.coaching_why) coachingWhy = event.coaching_why;
@@ -1518,14 +1518,6 @@ Ask: team | How long have you been with the team?`;
                       {/each}
                     </div>
                   {/if}
-                  {#if latestMissed}
-                    <div class="ascore-missed ascore-missed-coaching">
-                      <span class="ascore-missed-label">Not covered</span>
-                      {#each latestMissed.missedKeywords as kw}
-                        <span class="ascore-missed-kw">{kw}</span>
-                      {/each}
-                    </div>
-                  {/if}
                 </div>
               {/if}
             </div>
@@ -1613,7 +1605,7 @@ Ask: team | How long have you been with the team?`;
                     </div>
                   {/if}
                 {:else if sid === 'sentiment-bar'}
-                  <SentimentBar videoEmotion={emotion} {audioEmotion} {coachingWhy} />
+                  <SentimentBar videoEmotion={emotion} {audioEmotion} />
                   {#if coachingLog.length > 0}
                     <div class="coaching-log coaching-log-sentiment">
                       {#each coachingLog.slice().reverse() as entry, i}
@@ -1624,6 +1616,9 @@ Ask: team | How long have you been with the team?`;
                           </div>
                           <span class="coaching-log-for-you">For you:</span>
                           <span class="coaching-log-text">{entry.text}</span>
+                          {#if entry.why}
+                            <span class="coaching-log-why">{entry.why}</span>
+                          {/if}
                         </div>
                       {/each}
                     </div>
@@ -2602,6 +2597,7 @@ Ask: team | How long have you been with the team?`;
   .subject-label { color: #64748b; font-weight: 600; text-transform: uppercase; font-size: var(--fs-xs); letter-spacing: 0.06em; }
   .tip-for-you { color: #22c55e; font-weight: 700; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; }
   .coaching-log-for-you { font-size: var(--fs-xs); color: #4ade80; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-top: 0.1rem; }
+  .coaching-log-why { font-size: var(--fs-xs); color: #475569; font-style: italic; line-height: 1.35; display: block; margin-top: 0.1rem; }
 
   .rapport-coaching { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.35rem 0.5rem; background: #071a0f; border-left: 2px solid #14532d; border-radius: 0.25rem; margin-top: 0.35rem; }
   .rapport-coaching-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #4ade80; }

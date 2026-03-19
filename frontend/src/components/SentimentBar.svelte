@@ -2,11 +2,9 @@
   const {
     videoEmotion,
     audioEmotion,
-    coachingWhy,
   } = $props<{
     videoEmotion: string;
     audioEmotion?: string;
-    coachingWhy?: string;
   }>();
 
   const emotionConfig: Record<string, { color: string; icon: string; label: string }> = {
@@ -28,13 +26,11 @@
   const audioDiverges = $derived(
     audioEmotion && audioConfig && audioEmotion !== videoEmotion
   );
-
-  const tooltipText = $derived(coachingWhy ?? '');
 </script>
 
 <div class="sentiment-bar">
   {#if videoEmotion}
-    <div class="emotion" style="--color: {videoConfig.color}" title={tooltipText || undefined}>
+    <div class="emotion" style="--color: {videoConfig.color}">
       <span class="icon">{videoConfig.icon}</span>
       <div class="emotion-detail">
         <div class="label-row">
@@ -45,13 +41,7 @@
             </span>
           {/if}
         </div>
-        {#if coachingWhy}
-          <span class="why">{coachingWhy}</span>
-        {/if}
       </div>
-      {#if coachingWhy}
-        <span class="tooltip-hint" title={coachingWhy}>?</span>
-      {/if}
     </div>
   {:else}
     <p class="empty">Waiting for screen capture...</p>
@@ -70,7 +60,6 @@
     background: #1e293b;
     border-radius: 0.6rem;
     border-left: 3px solid var(--color);
-    cursor: default;
   }
   .icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 0.05rem; }
   .emotion-detail {
@@ -102,28 +91,6 @@
     padding: 0.05rem 0.3rem;
     cursor: help;
     opacity: 0.85;
-  }
-  .why {
-    font-size: var(--fs-sm);
-    color: #475569;
-    line-height: 1.3;
-    font-style: italic;
-  }
-  .tooltip-hint {
-    font-size: var(--fs-xs);
-    color: #334155;
-    background: #0d1a2b;
-    border: 1px solid #1e293b;
-    border-radius: 50%;
-    width: 1rem;
-    height: 1rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    cursor: help;
-    margin-top: 0.1rem;
-    font-weight: 700;
   }
   .empty {
     color: #334155;

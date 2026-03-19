@@ -1470,7 +1470,11 @@ Ask: team | How long have you been with the team?`;
               <div class="col-header col-drag-handle" draggable={true} ondragstart={(e) => onColDragStart('right', e)}>
                 <span class="col-label">{collapsedCols.has('right') ? '…' : 'Sentiment'}</span>
                 {#if !collapsedCols.has('right')}
-                  <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('right')} title="Collapse">▾</button>
+                  <div class="zoom-btns">
+                    <button class="zoom-btn" onclick={() => adjustZoom('rightTop', -10)} title="Decrease font size">A−</button>
+                    <button class="zoom-btn" onclick={() => adjustZoom('rightTop', +10)} title="Increase font size">A+</button>
+                    <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('right')} title="Collapse">▾</button>
+                  </div>
                 {:else}
                   <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('right')} title="Expand">▸</button>
                 {/if}
@@ -1503,10 +1507,6 @@ Ask: team | How long have you been with the team?`;
                     ></div>
                   </div>
                 {/if}
-                <div class="sentiment-zoom-row">
-                  <button class="zoom-btn" onclick={() => adjustZoom('rightTop', -10)} title="Decrease font size">A−</button>
-                  <button class="zoom-btn" onclick={() => adjustZoom('rightTop', +10)} title="Increase font size">A+</button>
-                </div>
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div class="right-panel-scroll" style="zoom: {rightTopZoom/100}" ondragover={(e) => { e.preventDefault(); }} ondrop={(e) => onPanelEmptyDrop('sentiment', e)}>
                   {#if answerNudgeVisible}
@@ -2339,12 +2339,6 @@ Ask: team | How long have you been with the team?`;
   }
   .col-header:hover .zoom-btns { opacity: 1; }
 
-  .sentiment-zoom-row {
-    display: flex;
-    gap: 0.25rem;
-    padding: 0.2rem 0.5rem;
-    border-bottom: 1px solid #1e293b;
-  }
   .zoom-btn {
     padding: 0.08rem 0.28rem;
     background: transparent;

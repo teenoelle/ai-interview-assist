@@ -225,7 +225,7 @@
   .kw-list { display: flex; flex-wrap: wrap; gap: 0.25rem 0.3rem; }
   .kw-chip {
     font-size: var(--fs-sm); padding: 0.1rem 0.45rem;
-    border-radius: 9999px; border: 1px solid;
+    border-radius: 0.3rem; border: 1px solid;
     white-space: nowrap; cursor: pointer;
     background: none; transition: opacity 0.15s;
   }

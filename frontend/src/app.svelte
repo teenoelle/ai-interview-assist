@@ -1579,7 +1579,7 @@ Ask: team | How long have you been with the team?`;
                           class:tone-positive={t === 'enthusiastic' || t === 'curious' || t === 'pleased'}
                           class:tone-negative={t === 'skeptical' || t === 'wrapping up'}
                           class:tone-latest={i === nonNeutralTones.length - 1}
-                          title={t}>{t.slice(0, 3)}</span>
+                          >{t.slice(0, 3)}</span>
                       {/each}
                     </div>
                   {/if}
@@ -1675,14 +1675,13 @@ Ask: team | How long have you been with the team?`;
                               <span class="coaching-log-emotion">
                                 <span class="coaching-log-who">Interviewer</span>
                                 <span class="coaching-log-icon">🧠</span>
-                                <span style="color: {entry.color ?? '#a78bfa'}" use:tooltip={"Personality type inferred from the pattern of interviewer emotions detected over time"}>{entry.emotion}</span>
+                                <span style="color: {entry.color ?? '#a78bfa'}">{entry.emotion}</span>
                               </span>
+                              {#if entry.why}<span class="coaching-log-expand-hint">{expandedCoachingEntries.has(entry.time) ? '▾' : '▸'} Profile</span>{/if}
                             </div>
                             <span class="coaching-log-text coaching-log-text-latest"
-                              style="color: {entry.color ?? '#a78bfa'}"
-                              class:coaching-log-clickable={!!(entry.why || entry.reason)}
-                              use:tooltip={entry.why || undefined}>
-                              <span class="tip-label" style="color: {entry.color ?? '#a78bfa'}; background: #1a0a2e">Profile</span> {entry.text}
+                              style="color: {entry.color ?? '#a78bfa'}">
+                              <span class="tip-label tip-label-personality" style="color: {entry.color ?? '#a78bfa'}; border-color: {entry.color ?? '#a78bfa'}">Tip</span> {entry.text}
                             </span>
                           {:else if i === 0}
                             <!-- Latest: interviewer label + icon + emotion, no timestamp -->
@@ -1690,13 +1689,12 @@ Ask: team | How long have you been with the team?`;
                               <span class="coaching-log-emotion">
                                 <span class="coaching-log-who">Interviewer</span>
                                 <span class="coaching-log-icon">{EMOTION_CONFIG[entry.emotion]?.icon ?? ''}</span>
-                                <span style="color: {emotionColor(entry.emotion)}" use:tooltip={"Facial emotion detected from interviewer video via Gemini Vision"}>{entry.emotion}</span>
+                                <span style="color: {emotionColor(entry.emotion)}">{entry.emotion}</span>
                               </span>
                             </div>
                             <span class="coaching-log-text coaching-log-text-latest"
                               class:coaching-log-positive={POSITIVE_EMOTIONS.has(entry.emotion)}
-                              class:coaching-log-clickable={!!(entry.why || entry.reason)}
-                              use:tooltip={[entry.reason, entry.why].filter(Boolean).join(' — ') || undefined}>
+                              class:coaching-log-clickable={!!(entry.why || entry.reason)}>
                               <span class="tip-label" class:tip-label-positive={POSITIVE_EMOTIONS.has(entry.emotion)}>
                                 {POSITIVE_EMOTIONS.has(entry.emotion) ? '✓' : 'Tip'}
                               </span> {entry.text}
@@ -1704,21 +1702,29 @@ Ask: team | How long have you been with the team?`;
                           {:else if entry.type === 'personality'}
                             <!-- History: personality read -->
                             <div class="coaching-log-meta">
-                              <span style="color: {entry.color ?? '#a78bfa'}" class="coaching-log-emotion-hist" use:tooltip={"Personality type inferred from interviewer emotion pattern"}>🧠 {entry.emotion}</span>
+                              <span style="color: {entry.color ?? '#a78bfa'}" class="coaching-log-emotion-hist">🧠 {entry.emotion}</span>
                               <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
                             </div>
-                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!(entry.why || entry.reason)} use:tooltip={entry.why || undefined}>{entry.text}</span>
+                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!(entry.why || entry.reason)}>{entry.text}</span>
                           {:else}
                             <!-- History: no icon, no Tip label, timestamp, dimmer -->
                             <div class="coaching-log-meta">
-                              <span style="color: {emotionColor(entry.emotion)}" class="coaching-log-emotion-hist" use:tooltip={"Facial emotion detected via Gemini Vision"}>{entry.emotion}</span>
+                              <span style="color: {emotionColor(entry.emotion)}" class="coaching-log-emotion-hist">{entry.emotion}</span>
                               <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
                             </div>
-                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!(entry.why || entry.reason)} use:tooltip={[entry.reason, entry.why].filter(Boolean).join(' — ') || undefined}>{entry.text}</span>
+                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!(entry.why || entry.reason)}>{entry.text}</span>
                           {/if}
                           {#if (entry.why || entry.reason) && expandedCoachingEntries.has(entry.time)}
-                            {#if entry.reason}<span class="coaching-log-reason">{entry.reason}</span>{/if}
-                            {#if entry.why}<span class="coaching-log-why">{entry.why}</span>{/if}
+                            {#if entry.type === 'personality'}
+                              <div class="coaching-log-profile-section">
+                                <span class="coaching-log-profile-label">Profile</span>
+                                {#if entry.reason}<span class="coaching-log-profile-text">{entry.reason}</span>{/if}
+                                {#if entry.why}<span class="coaching-log-profile-text">{entry.why}</span>{/if}
+                              </div>
+                            {:else}
+                              {#if entry.reason}<span class="coaching-log-reason">{entry.reason}</span>{/if}
+                              {#if entry.why}<span class="coaching-log-why">{entry.why}</span>{/if}
+                            {/if}
                           {/if}
                         </div>
                       {/each}
@@ -1801,29 +1807,33 @@ Ask: team | How long have you been with the team?`;
                           {#if latestFeedback.vocalFeedback}
                             {@const vf = latestFeedback.vocalFeedback}
                             {@const scoreColor = vf.confidence_score >= 70 ? '#4ade80' : vf.confidence_score >= 45 ? '#f59e0b' : '#f87171'}
-                            <button class="side-stat ascore-stat-btn" title="Click to expand coaching details" onclick={() => vocalWhyExpanded = !vocalWhyExpanded}>
-                              <span class="side-label">Voice Read</span>
-                              <span class="ascore-vocal-score" style="color: {scoreColor}">{vf.confidence_score}%</span>
-                              <span class="ascore-vocal-tone">{vf.tone}</span>
-                              {#if vf.fillers_noted}<span class="ascore-vocal-fillers">{vf.fillers_noted}</span>{/if}
-                              <span class="ascore-vocal-chevron">{vocalWhyExpanded ? '▾' : '▸'}</span>
-                            </button>
-                            {#if vocalWhyExpanded && vf.coaching}
-                              <p class="ascore-coaching you-log-coaching">{vf.coaching}</p>
-                            {/if}
+                            <div class="you-delivery-row">
+                              <button class="side-stat ascore-stat-btn" title="Click to expand coaching details" onclick={() => vocalWhyExpanded = !vocalWhyExpanded}>
+                                <span class="side-label">Voice Read</span>
+                                <span class="ascore-vocal-score" style="color: {scoreColor}">{vf.confidence_score}%</span>
+                                <span class="ascore-vocal-tone">{vf.tone}</span>
+                                {#if vf.fillers_noted}<span class="ascore-vocal-fillers">{vf.fillers_noted}</span>{/if}
+                                <span class="ascore-vocal-chevron">{vocalWhyExpanded ? '▾' : '▸'}</span>
+                              </button>
+                              {#if vocalWhyExpanded && vf.coaching}
+                                <p class="ascore-coaching you-log-coaching">{vf.coaching}</p>
+                              {/if}
+                            </div>
                           {/if}
                           {#if latestFeedback.answerFeedback}
                             {@const af = latestFeedback.answerFeedback}
-                            <button class="side-stat ascore-stat-btn" title="Click to expand answer coaching" onclick={() => answerWhyExpanded = !answerWhyExpanded}>
-                              <span class="side-label">Answer</span>
-                              {#if af.missed_followup}<span class="ascore-badge ascore-warn">No follow-up</span>{/if}
-                              {#if af.missed_metric}<span class="ascore-badge ascore-warn">Add metric</span>{/if}
-                              {#if !af.missed_followup && !af.missed_metric}<span class="side-value" style="color: #4ade80">✓</span>{/if}
-                              <span class="ascore-vocal-chevron">{answerWhyExpanded ? '▾' : '▸'}</span>
-                            </button>
-                            {#if answerWhyExpanded && af.coaching}
-                              <p class="ascore-coaching you-log-coaching">{af.coaching}</p>
-                            {/if}
+                            <div class="you-delivery-row">
+                              <button class="side-stat ascore-stat-btn" title="Click to expand answer coaching" onclick={() => answerWhyExpanded = !answerWhyExpanded}>
+                                <span class="side-label">Answer</span>
+                                {#if af.missed_followup}<span class="ascore-badge ascore-warn">No follow-up</span>{/if}
+                                {#if af.missed_metric}<span class="ascore-badge ascore-warn">Add metric</span>{/if}
+                                {#if !af.missed_followup && !af.missed_metric}<span class="side-value" style="color: #4ade80">✓</span>{/if}
+                                <span class="ascore-vocal-chevron">{answerWhyExpanded ? '▾' : '▸'}</span>
+                              </button>
+                              {#if answerWhyExpanded && af.coaching}
+                                <p class="ascore-coaching you-log-coaching">{af.coaching}</p>
+                              {/if}
+                            </div>
                           {/if}
                         {/if}
                         {#if energySignal}
@@ -2813,6 +2823,18 @@ Ask: team | How long have you been with the team?`;
   .coaching-log-reason { font-size: var(--fs-xs); color: #64748b; line-height: 1.35; display: block; margin-top: 0.1rem; }
   .coaching-log-why { font-size: var(--fs-xs); color: #475569; font-style: italic; line-height: 1.35; display: block; margin-top: 0.1rem; }
   .coaching-log-clickable { cursor: pointer; text-decoration-line: underline; text-decoration-style: dotted; text-decoration-color: #334155; }
+  .coaching-log-expand-hint { font-size: var(--fs-xs); color: #475569; margin-left: auto; cursor: pointer; letter-spacing: 0.04em; font-weight: 600; text-transform: uppercase; }
+  .tip-label-personality { background: none !important; border: 1px solid; border-radius: 0.2rem; padding: 0.05rem 0.3rem; }
+  .coaching-log-profile-section {
+    display: flex; flex-direction: column; gap: 0.2rem;
+    margin-top: 0.35rem; padding-top: 0.35rem;
+    border-top: 1px solid #1e293b;
+  }
+  .coaching-log-profile-label {
+    font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.07em; color: #475569;
+  }
+  .coaching-log-profile-text { font-size: var(--fs-xs); color: #64748b; font-style: italic; line-height: 1.4; }
   .coaching-log-latest-positive { border-left-color: #166534 !important; background: #060e0a !important; }
   .coaching-log-positive { color: #4ade80 !important; }
   .tip-label-positive { color: #22c55e !important; }
@@ -2985,6 +3007,7 @@ Ask: team | How long have you been with the team?`;
   }
   .ascore-warn { background: #431407; color: #fb923c; }
   .ascore-coaching { margin: 0; font-size: var(--fs-sm); color: #fb923c; line-height: 1.5; }
+  .you-delivery-row { display: flex; flex-direction: column; gap: 0; }
   .answer-nudge {
     display: flex; align-items: center; gap: 0.5rem;
     background: #0f1a2b; border: 1px solid #1e3a5f; border-left: 3px solid #3b82f6;

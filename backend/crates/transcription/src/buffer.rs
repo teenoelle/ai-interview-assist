@@ -65,6 +65,10 @@ impl RingBuffer {
         false
     }
 
+    pub fn has_speech(&self) -> bool {
+        self.has_speech
+    }
+
     pub fn drain_segment(&mut self) -> Vec<u8> {
         let data = std::mem::take(&mut self.data);
         self.silent_bytes = 0;

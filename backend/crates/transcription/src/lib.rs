@@ -306,6 +306,10 @@ pub async fn run_mic_agent(
             Some(chunk) => {
                 ring_buf.push(&chunk);
                 if ring_buf.should_flush() {
+                    if !ring_buf.has_speech() {
+                        ring_buf.drain_segment(); // discard silent window, avoid Whisper hallucination
+                        continue;
+                    }
                     let pcm = ring_buf.drain_segment();
                     if pcm.is_empty() { continue; }
 
@@ -387,6 +391,10 @@ pub async fn run_agent(
             Some(pcm_chunk) => {
                 ring_buf.push(&pcm_chunk);
                 if ring_buf.should_flush() {
+                    if !ring_buf.has_speech() {
+                        ring_buf.drain_segment(); // discard silent window, avoid Whisper hallucination
+                        continue;
+                    }
                     let segment_pcm = ring_buf.drain_segment();
                     if segment_pcm.is_empty() { continue; }
 

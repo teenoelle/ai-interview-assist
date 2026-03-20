@@ -24,6 +24,7 @@
   $effect(() => { localStorage.setItem('setup-interviewee-linkedin', intervieweeLinkedin); });
   $effect(() => { localStorage.setItem('setup-portfolio-urls', JSON.stringify(portfolioUrls)); });
   $effect(() => { localStorage.setItem('setup-extra-experience', extraExperience); });
+  let questionsExpanded = $state(true);
   let loading = $state(false);
   let loadingStep = $state('');
   let error = $state('');
@@ -173,15 +174,21 @@
         {#if predictedQuestions.length > 0}
           {@const firstIsQuestion = predictedQuestions[0]?.includes('?')}
           <div class="predicted">
-            <h3>Predicted Interview Questions</h3>
-            {#if !firstIsQuestion && predictedQuestions.length > 1}
-              <p class="predicted-context">{predictedQuestions[0]}</p>
+            <button class="predicted-toggle" onclick={() => questionsExpanded = !questionsExpanded}>
+              <span class="predicted-label">Predicted Interview Questions</span>
+              <span class="predicted-count">{predictedQuestions.length - (firstIsQuestion ? 0 : 1)}</span>
+              <span class="predicted-chevron">{questionsExpanded ? '▴' : '▾'}</span>
+            </button>
+            {#if questionsExpanded}
+              {#if !firstIsQuestion && predictedQuestions.length > 1}
+                <p class="predicted-context">{predictedQuestions[0]}</p>
+              {/if}
+              <ol class="questions-list">
+                {#each (firstIsQuestion ? predictedQuestions : predictedQuestions.slice(1)) as q}
+                  <li>{q}</li>
+                {/each}
+              </ol>
             {/if}
-            <ol class="questions-list">
-              {#each (firstIsQuestion ? predictedQuestions : predictedQuestions.slice(1)) as q}
-                <li>{q}</li>
-              {/each}
-            </ol>
           </div>
         {/if}
 
@@ -390,9 +397,17 @@
   .section-block { display: flex; flex-direction: column; gap: 0.4rem; }
   .section-block-label { font-size: var(--fs-sm); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #475569; }
   .predicted { background: #1e293b; border-radius: 0.5rem; padding: 1.25rem; }
-  .predicted h3 { font-size: var(--fs-base); color: #60a5fa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.5rem; }
-  .predicted-context { font-size: var(--fs-sm); color: #64748b; font-style: italic; margin: 0 0 0.75rem; }
-  .questions-list { margin: 0; padding-left: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
+  .predicted-toggle {
+    display: flex; align-items: center; gap: 0.5rem;
+    width: 100%; background: none; border: none; cursor: pointer;
+    padding: 0; margin-bottom: 0; text-align: left;
+  }
+  .predicted-toggle:hover .predicted-label { color: #93c5fd; }
+  .predicted-label { font-size: var(--fs-base); color: #60a5fa; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 700; flex: 1; }
+  .predicted-count { font-size: var(--fs-xs); color: #334155; background: #0f172a; border-radius: 9999px; padding: 0.05rem 0.45rem; }
+  .predicted-chevron { font-size: var(--fs-xs); color: #334155; }
+  .predicted-context { font-size: var(--fs-sm); color: #64748b; font-style: italic; margin: 0.75rem 0 0.75rem; }
+  .questions-list { margin: 0.75rem 0 0; padding-left: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
   .questions-list li { color: #cbd5e1; font-size: var(--fs-base); line-height: 1.5; }
   .action-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; border-top: 1px solid #1e293b; padding-top: 1.25rem; margin-top: 0.5rem; }
   .action-row-right { display: flex; align-items: center; gap: 0.75rem; margin-left: auto; }

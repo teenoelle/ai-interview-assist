@@ -16,6 +16,13 @@
   let loadingKw = $state<string | null>(null);
   let fetching = new Set<string>();
   let popupPos = $state<{ x: number; y: number } | null>(null);
+  let chipStyle = $state<'highlight' | 'invert'>(
+    (localStorage.getItem('kw-chip-style') as 'highlight' | 'invert') ?? 'highlight'
+  );
+  function toggleChipStyle() {
+    chipStyle = chipStyle === 'highlight' ? 'invert' : 'highlight';
+    localStorage.setItem('kw-chip-style', chipStyle);
+  }
 
   async function fetchDefinition(kw: string) {
     if (definitions[kw] || fetching.has(kw)) return;
@@ -63,19 +70,33 @@
     <div class="kw-hbar-row">
       <div class="kw-hbar-chips">
         {#each mentioned as kw}
-          <button class="kw-chip kw-done" onclick={(e) => showDefinition(kw, e)}
-            title={definitions[kw] ? `✓ ${definitions[kw].definition}` : 'You mentioned this — click for definition and tip'}>✓ {kw}</button>
+          <button class="kw-chip kw-done"
+            class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
+            class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
+            onclick={(e) => showDefinition(kw, e)}
+            title={definitions[kw] ? `✓ ${definitions[kw].definition}` : 'You mentioned this — click for definition and tip'}>✓ {kw}{#if selectedKw === kw} ▾{/if}</button>
         {/each}
         {#each notYet.filter(k => interviewerRaisedSet.has(k)) as kw}
-          <button class="kw-chip kw-raised" onclick={(e) => showDefinition(kw, e)}
-            title={keywordQuestionMap[kw] ? `Interviewer raised this in: "${keywordQuestionMap[kw]}" — click for definition and tip` : 'Interviewer raised this — click for definition and tip'}>↑ {kw}</button>
+          <button class="kw-chip kw-raised"
+            class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
+            class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
+            onclick={(e) => showDefinition(kw, e)}
+            title={keywordQuestionMap[kw] ? `Interviewer raised this in: "${keywordQuestionMap[kw]}" — click for definition and tip` : 'Interviewer raised this — click for definition and tip'}>↑ {kw}{#if selectedKw === kw} ▾{/if}</button>
         {/each}
         {#each notYet.filter(k => !interviewerRaisedSet.has(k)) as kw}
-          <button class="kw-chip kw-todo" onclick={(e) => showDefinition(kw, e)}
-            title={definitions[kw] ? definitions[kw].definition : 'Not yet mentioned — click for definition and interview tip'}>{kw}</button>
+          <button class="kw-chip kw-todo"
+            class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
+            class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
+            onclick={(e) => showDefinition(kw, e)}
+            title={definitions[kw] ? definitions[kw].definition : 'Not yet mentioned — click for definition and interview tip'}>{kw}{#if selectedKw === kw} ▾{/if}</button>
         {/each}
       </div>
-      <span class="kw-hbar-stats">{mentioned.length}/{keywords.length}</span>
+      <div class="kw-hbar-meta">
+        <span class="kw-hbar-stats">{mentioned.length}/{keywords.length}</span>
+        <button class="kw-style-toggle" onclick={toggleChipStyle} title="Toggle selected chip style">
+          {chipStyle === 'highlight' ? '1' : '3'}
+        </button>
+      </div>
     </div>
   </div>
   {#if selectedKw && popupPos}
@@ -103,19 +124,33 @@
       <div class="kw-progress">
         <div class="kw-bar" style="width: {pct}%"></div>
       </div>
-      <div class="kw-stats">{mentioned.length}/{keywords.length} keywords mentioned</div>
+      <div class="kw-stats-row">
+        <span class="kw-stats">{mentioned.length}/{keywords.length} keywords mentioned</span>
+        <button class="kw-style-toggle" onclick={toggleChipStyle} title="Toggle selected chip style — comparing style 1 (highlight) vs style 3 (invert)">
+          Style {chipStyle === 'highlight' ? '1' : '3'}
+        </button>
+      </div>
       <div class="kw-list">
         {#each mentioned as kw}
-          <button class="kw-chip kw-done" onclick={() => showDefinition(kw)}
-            title={definitions[kw] ? `✓ ${definitions[kw].definition}` : 'You mentioned this — click for definition and tip'}>✓ {kw}</button>
+          <button class="kw-chip kw-done"
+            class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
+            class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
+            onclick={() => showDefinition(kw)}
+            title={definitions[kw] ? `✓ ${definitions[kw].definition}` : 'You mentioned this — click for definition and tip'}>✓ {kw}{#if selectedKw === kw} ▾{/if}</button>
         {/each}
         {#each notYet.filter(k => interviewerRaisedSet.has(k)) as kw}
-          <button class="kw-chip kw-raised" onclick={() => showDefinition(kw)}
-            title={keywordQuestionMap[kw] ? `Interviewer raised this in: "${keywordQuestionMap[kw]}" — click for tip` : 'Interviewer raised this — click for definition and tip'}>↑ {kw}</button>
+          <button class="kw-chip kw-raised"
+            class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
+            class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
+            onclick={() => showDefinition(kw)}
+            title={keywordQuestionMap[kw] ? `Interviewer raised this in: "${keywordQuestionMap[kw]}" — click for tip` : 'Interviewer raised this — click for definition and tip'}>↑ {kw}{#if selectedKw === kw} ▾{/if}</button>
         {/each}
         {#each notYet.filter(k => !interviewerRaisedSet.has(k)) as kw}
-          <button class="kw-chip kw-todo" onclick={() => showDefinition(kw)}
-            title={definitions[kw] ? definitions[kw].definition : 'Not yet mentioned — click for definition and interview tip'}>{kw}</button>
+          <button class="kw-chip kw-todo"
+            class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
+            class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
+            onclick={() => showDefinition(kw)}
+            title={definitions[kw] ? definitions[kw].definition : 'Not yet mentioned — click for definition and interview tip'}>{kw}{#if selectedKw === kw} ▾{/if}</button>
         {/each}
       </div>
 
@@ -161,13 +196,26 @@
     flex: 1;
     min-width: 0;
   }
+  .kw-hbar-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.2rem;
+    flex-shrink: 0;
+  }
   .kw-hbar-stats {
     font-size: var(--fs-xs);
     color: #475569;
     white-space: nowrap;
-    flex-shrink: 0;
-    padding-top: 0.15rem;
   }
+  .kw-stats-row { display: flex; align-items: center; justify-content: space-between; }
+  .kw-style-toggle {
+    font-size: var(--fs-xs); color: #334155; background: none;
+    border: 1px solid #1e293b; border-radius: 0.2rem;
+    padding: 0.05rem 0.35rem; cursor: pointer; white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .kw-style-toggle:hover { border-color: #334155; color: #64748b; }
 
   .kw-panel { display: flex; flex-direction: column; gap: 0.4rem; }
   .kw-empty { font-size: var(--fs-sm); color: #334155; font-style: italic; margin: 0; }
@@ -189,6 +237,18 @@
     animation: kw-pulse 1.5s ease-in-out infinite;
   }
   @keyframes kw-pulse { 0%, 100% { border-color: #92400e; } 50% { border-color: #f59e0b; } }
+
+  /* Style 1: highlight — bright border + glow, chip keeps its color */
+  .kw-active-highlight {
+    border-width: 2px;
+    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.25);
+    filter: brightness(1.5);
+    animation: none;
+  }
+  /* Style 3: invert — fill with the chip's accent color, dark text */
+  .kw-done.kw-active-invert  { background: #22c55e; color: #031a07; border-color: #22c55e; animation: none; }
+  .kw-todo.kw-active-invert  { background: #475569; color: #f1f5f9; border-color: #475569; animation: none; }
+  .kw-raised.kw-active-invert { background: #fbbf24; color: #1a1000; border-color: #fbbf24; animation: none; }
   .kw-def {
     background: #0a1020; border: 1px solid #1e293b; border-left: 2px solid #3b82f6;
     border-radius: 0.4rem; padding: 0.6rem 0.75rem;

@@ -18,6 +18,8 @@
 
   const color      = $derived(paceColor(status));
   const markerPct  = $derived(status !== 'idle' ? Math.min(100, (wpm / BAR_MAX) * 100) : null);
+  const hasTip     = $derived(!!(tip && status !== 'good' && status !== 'idle'));
+  let tipExpanded  = $state(false);
 </script>
 
 <div class="energy-panel">
@@ -25,16 +27,13 @@
     <span class="pace-label">Pace</span>
     {#if status !== 'idle'}
       <span class="pace-wpm" style="color: {color}">{wpm} wpm</span>
-      {#if tip && status !== 'good'}
-        <span class="pace-tip" style="color: {color}">{tip}</span>
-      {/if}
     {:else}
       <span class="pace-idle">—</span>
     {/if}
   </div>
 
-  <!-- Pace bar: gradient track + moving marker -->
-  <div class="pace-bar-wrap">
+  <!-- Pace bar: gradient track + moving marker; click to reveal tip -->
+  <button class="pace-bar-wrap" class:pace-bar-clickable={hasTip} onclick={() => { if (hasTip) tipExpanded = !tipExpanded; }}>
     <div class="pace-track">
       {#if markerPct !== null}
         <div class="pace-marker" style="left: {markerPct}%; border-color: {color}"></div>
@@ -45,7 +44,10 @@
       <span>ideal</span>
       <span>fast</span>
     </div>
-  </div>
+  </button>
+  {#if tipExpanded && hasTip}
+    <div class="pace-tip-expanded" style="color: {color}">{tip}</div>
+  {/if}
 
   {#if energySignal}
     <div class="energy-signal">{energySignal}</div>
@@ -60,7 +62,9 @@
   .pace-tip { font-size: var(--fs-sm); font-style: italic; }
   .pace-idle { font-size: var(--fs-sm); color: #1e293b; }
 
-  .pace-bar-wrap { display: flex; flex-direction: column; gap: 0.15rem; }
+  .pace-bar-wrap { display: flex; flex-direction: column; gap: 0.15rem; background: none; border: none; padding: 0; width: 100%; text-align: left; }
+  .pace-bar-clickable { cursor: pointer; }
+  .pace-tip-expanded { font-size: var(--fs-sm); font-style: italic; padding: 0.2rem 0; line-height: 1.35; }
 
   .pace-track {
     position: relative;

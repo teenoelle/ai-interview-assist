@@ -63,7 +63,9 @@
   let emotionReason = $state('');
   let coaching = $state('');
   let coachingWhy = $state('');
-  let coachingLog = $state<{ text: string; why?: string; reason?: string; emotion: string; time: number; type?: 'posture-fixed' | 'personality'; color?: string }[]>([]);
+  let coachingLog = $state<{ text: string; why?: string; reason?: string; emotion: string; time: number; type?: 'personality'; color?: string }[]>([]);
+  let youLog = $state<{ text: string; time: number }[]>([]);
+  let expandedYouEntries = $state(new Set<number>());
   let suggestions = $state<SuggestionEntry[]>([]);
   let statusMessages = $state<string[]>([]);
   let errorMessages = $state<string[]>([]);
@@ -630,7 +632,7 @@
         const throttleOk = now - lastPosturePositiveTime > 5 * 60 * 1000;
         if (isPositiveCheck && (prevPresenceHadIssues || throttleOk)) {
           const fixText = positive || 'Body language looks good';
-          coachingLog = [...coachingLog.slice(-4), { text: fixText, type: 'posture-fixed', emotion: '', time: Date.now() }];
+          youLog = [...youLog.slice(-4), { text: fixText, time: Date.now() }];
           lastPosturePositiveTime = now;
         }
         prevPresenceHadIssues = newIssues.length > 0;
@@ -1610,7 +1612,7 @@ Ask: team | How long have you been with the team?`;
             {@const prevRole = i > 0 ? (SECTION_ROLE[panelSections[i-1].id] ?? 'coaching') : null}
             {#if prevRole !== myRole}
               <div class="group-divider group-divider-{myRole}">
-                {myRole === 'interviewer' ? '👤 Interviewer' : myRole === 'you' ? '✅ Your Performance' : '🎯 Coaching'}
+                {myRole === 'interviewer' ? '👤 Interviewer' : myRole === 'you' ? '✅ Your Performance' : '🎯 Resources'}
               </div>
             {/if}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -1647,7 +1649,7 @@ Ask: team | How long have you been with the team?`;
                       {#each coachingLog.slice().reverse() as entry, i}
                         <!-- svelte-ignore a11y_no_static_element_interactions -->
                         <div class="coaching-log-entry" class:coaching-log-latest={i === 0}
-                          class:coaching-log-latest-positive={i === 0 && (POSITIVE_EMOTIONS.has(entry.emotion) || entry.type === 'posture-fixed')}
+                          class:coaching-log-latest-positive={i === 0 && POSITIVE_EMOTIONS.has(entry.emotion)}
                           onclick={() => {
                             if (!entry.why && !entry.reason) return;
                             const s = new Set(expandedCoachingEntries);
@@ -1667,17 +1669,6 @@ Ask: team | How long have you been with the team?`;
                               style="color: {entry.color ?? '#a78bfa'}"
                               class:coaching-log-clickable={!!(entry.why || entry.reason)}>
                               <span class="tip-label" style="color: {entry.color ?? '#a78bfa'}; background: #1a0a2e">Profile</span> {entry.text}
-                            </span>
-                          {:else if i === 0 && entry.type === 'posture-fixed'}
-                            <!-- Latest: posture fix from interviewee -->
-                            <div class="coaching-log-meta">
-                              <span class="coaching-log-emotion">
-                                <span class="coaching-log-who coaching-log-who-you">You</span>
-                                <span class="coaching-log-icon">✓</span>
-                              </span>
-                            </div>
-                            <span class="coaching-log-text coaching-log-text-latest coaching-log-positive">
-                              <span class="tip-label tip-label-positive">Fixed</span> {entry.text}
                             </span>
                           {:else if i === 0}
                             <!-- Latest: interviewer label + icon + emotion, no timestamp -->
@@ -1702,13 +1693,6 @@ Ask: team | How long have you been with the team?`;
                               <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
                             </div>
                             <span class="coaching-log-text-hist" class:coaching-log-clickable={!!(entry.why || entry.reason)}>{entry.text}</span>
-                          {:else if entry.type === 'posture-fixed'}
-                            <!-- History: posture fix -->
-                            <div class="coaching-log-meta">
-                              <span class="coaching-log-who-you coaching-log-emotion-hist">You</span>
-                              <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
-                            </div>
-                            <span class="coaching-log-text-hist coaching-log-posture-fixed-hist">{entry.text}</span>
                           {:else}
                             <!-- History: no icon, no Tip label, timestamp, dimmer -->
                             <div class="coaching-log-meta">
@@ -1790,6 +1774,20 @@ Ask: team | How long have you been with the team?`;
                       </span>
                     </div>
                   </div>
+                  {#if youLog.length > 0}
+                    <div class="you-log">
+                      {#each youLog.slice().reverse() as entry, i}
+                        <div class="you-log-entry" class:you-log-latest={i === 0}>
+                          <div class="you-log-meta">
+                            <span class="you-log-who">You</span>
+                            <span class="you-log-icon">✓</span>
+                            {#if i > 0}<span class="you-log-ago">{fmtAgo(entry.time)}</span>{/if}
+                          </div>
+                          <span class="you-log-text">{entry.text}</span>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
                 {:else if sid === 'answer-score'}
                   {#if suggestions.some(s => s.answerFeedback || s.vocalFeedback)}
                     {@const latestWithFeedback = suggestions.slice().reverse().find(s => s.answerFeedback || s.vocalFeedback)}
@@ -2748,7 +2746,14 @@ Ask: team | How long have you been with the team?`;
   .coaching-log-icon { font-size: 0.85rem; margin-right: 0.2rem; }
   .coaching-log-who { color: #ef4444; font-weight: 800; margin-right: 0.35rem; }
   .coaching-log-who-you { color: #4ade80; font-weight: 800; margin-right: 0.35rem; }
-  .coaching-log-posture-fixed-hist { font-size: var(--fs-sm); color: #4ade80; opacity: 0.6; line-height: 1.35; overflow-wrap: break-word; word-break: break-word; }
+  .you-log { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.25rem 0; margin-top: 0.2rem; }
+  .you-log-entry { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.4rem 0.6rem; background: #060e0a; border: 1px solid #0f1e14; border-radius: 0.4rem; }
+  .you-log-entry.you-log-latest { background: #0a1f12; border-color: #166534; border-left: 4px solid #4ade80; }
+  .you-log-meta { display: flex; align-items: center; gap: 0.35rem; }
+  .you-log-who { font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: #4ade80; }
+  .you-log-icon { font-size: var(--fs-xs); color: #4ade80; }
+  .you-log-ago { font-size: var(--fs-xs); color: #334155; margin-left: auto; }
+  .you-log-text { font-size: var(--fs-sm); color: #86efac; line-height: 1.35; overflow-wrap: break-word; }
   .coaching-log-emotion {
     font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
     letter-spacing: 0.07em; display: flex; align-items: center;

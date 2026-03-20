@@ -1751,9 +1751,14 @@ Ask: team | How long have you been with the team?`;
                         wpm={paceReading.wordsPerMinute}
                         status={paceReading.status}
                         tip={paceReading.tip}
-                        {energySignal}
                       />
                     </div>
+                    {#if energySignal}
+                      <div class="side-subsection">
+                        <span class="side-subsection-label">Response Cues</span>
+                        <span class="side-subsection-text">{energySignal}</span>
+                      </div>
+                    {/if}
                     <div class="side-stat" title="Filler word count — words to avoid">
                       <span class="side-label">Fillers</span>
                       <span class="side-value" class:filler-active={fillerTotal > 0} style="color: {fillerTotal > 0 ? '#f59e0b' : '#475569'}">
@@ -2865,6 +2870,9 @@ Ask: team | How long have you been with the team?`;
     padding: 0.2rem 0.25rem; position: relative;
   }
   .side-label { font-size: var(--fs-xs); color: #475569; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .side-subsection { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.35rem 0.5rem; background: #1a0f00; border-left: 2px solid #92400e; border-radius: 0.2rem; margin: 0 0 0.1rem; }
+  .side-subsection-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #92400e; }
+  .side-subsection-text { font-size: var(--fs-sm); color: #f59e0b; font-style: italic; line-height: 1.35; }
   .side-value { font-size: var(--fs-sm); font-weight: 700; font-variant-numeric: tabular-nums; color: #475569; }
   .ws-dot { font-size: var(--fs-base); }
   .ws-dot.connected { color: #22c55e; }

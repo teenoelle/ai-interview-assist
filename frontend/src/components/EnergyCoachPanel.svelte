@@ -1,9 +1,8 @@
 <script lang="ts">
-  const { wpm, status, tip, energySignal } = $props<{
+  const { wpm, status, tip } = $props<{
     wpm: number;
     status: 'good' | 'fast' | 'slow' | 'idle';
     tip: string;
-    energySignal: string | null;
   }>();
 
   const GOOD_MIN = 90;
@@ -49,9 +48,6 @@
     <div class="pace-tip-expanded" style="color: {color}">{tip}</div>
   {/if}
 
-  {#if energySignal}
-    <div class="energy-signal">{energySignal}</div>
-  {/if}
 </div>
 
 <style>
@@ -100,9 +96,4 @@
     color: #334155;
   }
 
-  .energy-signal {
-    font-size: var(--fs-sm); color: #f59e0b; font-style: italic;
-    padding: 0.2rem 0.4rem; background: #1a0f00; border-left: 2px solid #92400e;
-    border-radius: 0.2rem;
-  }
 </style>

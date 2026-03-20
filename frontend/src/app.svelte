@@ -38,6 +38,7 @@
   import { fetchUsage } from './lib/api';
   import { parseSuggestion } from './lib/parseSuggestion';
   import { EMOTION_COLORS, EMOTION_CONFIG, emotionColor, POSITIVE_EMOTIONS, NEGATIVE_EMOTIONS } from './lib/emotions';
+  import { tooltip } from './lib/tooltip';
   import '@fontsource/inter/400.css';
   import '@fontsource/inter/600.css';
   import '@fontsource/inter/700.css';
@@ -64,6 +65,7 @@
   let coaching = $state('');
   let coachingWhy = $state('');
   let coachingLog = $state<{ text: string; why?: string; reason?: string; emotion: string; time: number; type?: 'personality'; color?: string }[]>([]);
+  let pendingCoachingEntry = $state<typeof coachingLog[0] | null>(null);
   let youLog = $state<{ text: string; time: number }[]>([]);
   let expandedYouEntries = $state(new Set<number>());
   let youDeliveryExpanded = $state(true);
@@ -79,6 +81,12 @@
   let vocalWhyExpanded = $state(false);
   let answerWhyExpanded = $state(false);
   let expandedCoachingEntries = $state(new Set<number>());
+  $effect(() => {
+    if (expandedCoachingEntries.size === 0 && pendingCoachingEntry) {
+      coachingLog = [...coachingLog.slice(-4), pendingCoachingEntry];
+      pendingCoachingEntry = null;
+    }
+  });
 
 
   // Setup-time data (persisted via localStorage so they survive back-navigation and practice→interview flow)
@@ -947,10 +955,14 @@ Ask: team | How long have you been with the team?`;
         if (event.reason) emotionReason = event.reason;
         if (event.coaching) {
           coaching = event.coaching;
-          // Add to log only if text differs from last entry
           const last = coachingLog[coachingLog.length - 1];
           if (!last || last.text !== event.coaching) {
-            coachingLog = [...coachingLog.slice(-4), { text: event.coaching, why: event.coaching_why, reason: event.reason, emotion: event.emotion, time: Date.now() }];
+            const entry = { text: event.coaching, why: event.coaching_why, reason: event.reason, emotion: event.emotion, time: Date.now() };
+            if (expandedCoachingEntries.size > 0) {
+              pendingCoachingEntry = entry; // hold until user closes the expanded entry
+            } else {
+              coachingLog = [...coachingLog.slice(-4), entry];
+            }
           }
         }
         if (event.coaching_why) coachingWhy = event.coaching_why;
@@ -1663,13 +1675,13 @@ Ask: team | How long have you been with the team?`;
                               <span class="coaching-log-emotion">
                                 <span class="coaching-log-who">Interviewer</span>
                                 <span class="coaching-log-icon">🧠</span>
-                                <span style="color: {entry.color ?? '#a78bfa'}" title="Personality type inferred from the pattern of interviewer emotions detected via Gemini Vision over time">{entry.emotion}</span>
+                                <span style="color: {entry.color ?? '#a78bfa'}" use:tooltip={"Personality type inferred from the pattern of interviewer emotions detected over time"}>{entry.emotion}</span>
                               </span>
                             </div>
                             <span class="coaching-log-text coaching-log-text-latest"
                               style="color: {entry.color ?? '#a78bfa'}"
                               class:coaching-log-clickable={!!(entry.why || entry.reason)}
-                              title={[entry.why].filter(Boolean).join(' — ')}>
+                              use:tooltip={entry.why || undefined}>
                               <span class="tip-label" style="color: {entry.color ?? '#a78bfa'}; background: #1a0a2e">Profile</span> {entry.text}
                             </span>
                           {:else if i === 0}
@@ -1678,13 +1690,13 @@ Ask: team | How long have you been with the team?`;
                               <span class="coaching-log-emotion">
                                 <span class="coaching-log-who">Interviewer</span>
                                 <span class="coaching-log-icon">{EMOTION_CONFIG[entry.emotion]?.icon ?? ''}</span>
-                                <span style="color: {emotionColor(entry.emotion)}" title="Facial emotion detected from interviewer video via Gemini Vision">{entry.emotion}</span>
+                                <span style="color: {emotionColor(entry.emotion)}" use:tooltip={"Facial emotion detected from interviewer video via Gemini Vision"}>{entry.emotion}</span>
                               </span>
                             </div>
                             <span class="coaching-log-text coaching-log-text-latest"
                               class:coaching-log-positive={POSITIVE_EMOTIONS.has(entry.emotion)}
                               class:coaching-log-clickable={!!(entry.why || entry.reason)}
-                              title={[entry.reason, entry.why].filter(Boolean).join(' — ')}>
+                              use:tooltip={[entry.reason, entry.why].filter(Boolean).join(' — ') || undefined}>
                               <span class="tip-label" class:tip-label-positive={POSITIVE_EMOTIONS.has(entry.emotion)}>
                                 {POSITIVE_EMOTIONS.has(entry.emotion) ? '✓' : 'Tip'}
                               </span> {entry.text}
@@ -1692,17 +1704,17 @@ Ask: team | How long have you been with the team?`;
                           {:else if entry.type === 'personality'}
                             <!-- History: personality read -->
                             <div class="coaching-log-meta">
-                              <span style="color: {entry.color ?? '#a78bfa'}" class="coaching-log-emotion-hist" title="Personality type inferred from interviewer emotion pattern">🧠 {entry.emotion}</span>
+                              <span style="color: {entry.color ?? '#a78bfa'}" class="coaching-log-emotion-hist" use:tooltip={"Personality type inferred from interviewer emotion pattern"}>🧠 {entry.emotion}</span>
                               <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
                             </div>
-                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!(entry.why || entry.reason)} title={[entry.why].filter(Boolean).join(' — ')}>{entry.text}</span>
+                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!(entry.why || entry.reason)} use:tooltip={entry.why || undefined}>{entry.text}</span>
                           {:else}
                             <!-- History: no icon, no Tip label, timestamp, dimmer -->
                             <div class="coaching-log-meta">
-                              <span style="color: {emotionColor(entry.emotion)}" class="coaching-log-emotion-hist" title="Facial emotion detected via Gemini Vision">{entry.emotion}</span>
+                              <span style="color: {emotionColor(entry.emotion)}" class="coaching-log-emotion-hist" use:tooltip={"Facial emotion detected via Gemini Vision"}>{entry.emotion}</span>
                               <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
                             </div>
-                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!(entry.why || entry.reason)} title={[entry.reason, entry.why].filter(Boolean).join(' — ')}>{entry.text}</span>
+                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!(entry.why || entry.reason)} use:tooltip={[entry.reason, entry.why].filter(Boolean).join(' — ') || undefined}>{entry.text}</span>
                           {/if}
                           {#if (entry.why || entry.reason) && expandedCoachingEntries.has(entry.time)}
                             {#if entry.reason}<span class="coaching-log-reason">{entry.reason}</span>{/if}
@@ -2999,4 +3011,24 @@ Ask: team | How long have you been with the team?`;
 
   /* Tone history at bottom of right panel */
   .tone-history-bottom { margin-top: 0.5rem; padding: 0.2rem 0.75rem; }
+
+  /* Custom tooltip — rendered fixed above element, never clipped by overflow containers */
+  :global(.app-tooltip) {
+    position: fixed;
+    z-index: 9999;
+    background: #1e293b;
+    color: #cbd5e1;
+    font-size: 0.67rem;
+    line-height: 1.45;
+    padding: 0.3rem 0.55rem;
+    border-radius: 0.3rem;
+    border: 1px solid #334155;
+    max-width: 220px;
+    white-space: normal;
+    word-break: break-word;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.1s;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.55);
+  }
 </style>

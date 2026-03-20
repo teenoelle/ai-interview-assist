@@ -384,7 +384,7 @@
   .preview pre {
     margin-top: 0.5rem; padding: 1rem; background: #1e293b;
     border-radius: 0.5rem; white-space: pre-wrap; font-size: var(--fs-sm);
-    color: #94a3b8; max-height: 200px; overflow: auto;
+    color: #94a3b8; max-height: 50vh; overflow: auto; resize: vertical;
   }
   .btn-primary {
     padding: 0.75rem 2rem; background: #3b82f6; color: white;

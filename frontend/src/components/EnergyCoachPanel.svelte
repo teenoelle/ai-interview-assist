@@ -51,7 +51,7 @@
 </div>
 
 <style>
-  .energy-panel { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.25rem 0; }
+  .energy-panel { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.25rem 0; width: 100%; }
   .pace-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .pace-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #475569; min-width: 2.5rem; }
   .pace-wpm { font-size: var(--fs-sm); font-weight: 700; font-variant-numeric: tabular-nums; margin-left: auto; }

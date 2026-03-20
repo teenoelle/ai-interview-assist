@@ -63,7 +63,7 @@
   let emotionReason = $state('');
   let coaching = $state('');
   let coachingWhy = $state('');
-  let coachingLog = $state<{ text: string; why?: string; emotion: string; time: number; type?: 'posture-fixed' | 'personality'; color?: string }[]>([]);
+  let coachingLog = $state<{ text: string; why?: string; reason?: string; emotion: string; time: number; type?: 'posture-fixed' | 'personality'; color?: string }[]>([]);
   let suggestions = $state<SuggestionEntry[]>([]);
   let statusMessages = $state<string[]>([]);
   let errorMessages = $state<string[]>([]);
@@ -947,7 +947,7 @@ Ask: team | How long have you been with the team?`;
           // Add to log only if text differs from last entry
           const last = coachingLog[coachingLog.length - 1];
           if (!last || last.text !== event.coaching) {
-            coachingLog = [...coachingLog.slice(-4), { text: event.coaching, why: event.coaching_why, emotion: event.emotion, time: Date.now() }];
+            coachingLog = [...coachingLog.slice(-4), { text: event.coaching, why: event.coaching_why, reason: event.reason, emotion: event.emotion, time: Date.now() }];
           }
         }
         if (event.coaching_why) coachingWhy = event.coaching_why;
@@ -1649,7 +1649,7 @@ Ask: team | How long have you been with the team?`;
                         <div class="coaching-log-entry" class:coaching-log-latest={i === 0}
                           class:coaching-log-latest-positive={i === 0 && (POSITIVE_EMOTIONS.has(entry.emotion) || entry.type === 'posture-fixed')}
                           onclick={() => {
-                            if (!entry.why) return;
+                            if (!entry.why && !entry.reason) return;
                             const s = new Set(expandedCoachingEntries);
                             s.has(entry.time) ? s.delete(entry.time) : s.add(entry.time);
                             expandedCoachingEntries = s;
@@ -1665,7 +1665,7 @@ Ask: team | How long have you been with the team?`;
                             </div>
                             <span class="coaching-log-text coaching-log-text-latest"
                               style="color: {entry.color ?? '#a78bfa'}"
-                              class:coaching-log-clickable={!!entry.why}>
+                              class:coaching-log-clickable={!!(entry.why || entry.reason)}>
                               <span class="tip-label" style="color: {entry.color ?? '#a78bfa'}; background: #1a0a2e">Profile</span> {entry.text}
                             </span>
                           {:else if i === 0 && entry.type === 'posture-fixed'}
@@ -1690,7 +1690,7 @@ Ask: team | How long have you been with the team?`;
                             </div>
                             <span class="coaching-log-text coaching-log-text-latest"
                               class:coaching-log-positive={POSITIVE_EMOTIONS.has(entry.emotion)}
-                              class:coaching-log-clickable={!!entry.why}>
+                              class:coaching-log-clickable={!!(entry.why || entry.reason)}>
                               <span class="tip-label" class:tip-label-positive={POSITIVE_EMOTIONS.has(entry.emotion)}>
                                 {POSITIVE_EMOTIONS.has(entry.emotion) ? '✓' : 'Tip'}
                               </span> {entry.text}
@@ -1701,7 +1701,7 @@ Ask: team | How long have you been with the team?`;
                               <span style="color: {entry.color ?? '#a78bfa'}" class="coaching-log-emotion-hist">🧠 {entry.emotion}</span>
                               <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
                             </div>
-                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!entry.why}>{entry.text}</span>
+                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!(entry.why || entry.reason)}>{entry.text}</span>
                           {:else if entry.type === 'posture-fixed'}
                             <!-- History: posture fix -->
                             <div class="coaching-log-meta">
@@ -1715,10 +1715,11 @@ Ask: team | How long have you been with the team?`;
                               <span style="color: {emotionColor(entry.emotion)}" class="coaching-log-emotion-hist">{entry.emotion}</span>
                               <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
                             </div>
-                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!entry.why}>{entry.text}</span>
+                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!(entry.why || entry.reason)}>{entry.text}</span>
                           {/if}
-                          {#if entry.why && expandedCoachingEntries.has(entry.time)}
-                            <span class="coaching-log-why">{entry.why}</span>
+                          {#if (entry.why || entry.reason) && expandedCoachingEntries.has(entry.time)}
+                            {#if entry.reason}<span class="coaching-log-reason">{entry.reason}</span>{/if}
+                            {#if entry.why}<span class="coaching-log-why">{entry.why}</span>{/if}
                           {/if}
                         </div>
                       {/each}
@@ -2774,6 +2775,7 @@ Ask: team | How long have you been with the team?`;
   }
   .subject-label { color: #64748b; font-weight: 600; text-transform: uppercase; font-size: var(--fs-xs); letter-spacing: 0.06em; }
   .tip-label { color: #4ade80; font-weight: 700; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; }
+  .coaching-log-reason { font-size: var(--fs-xs); color: #64748b; line-height: 1.35; display: block; margin-top: 0.1rem; }
   .coaching-log-why { font-size: var(--fs-xs); color: #475569; font-style: italic; line-height: 1.35; display: block; margin-top: 0.1rem; }
   .coaching-log-clickable { cursor: pointer; text-decoration-line: underline; text-decoration-style: dotted; text-decoration-color: #334155; }
   .coaching-log-latest-positive { border-left-color: #166534 !important; background: #060e0a !important; }

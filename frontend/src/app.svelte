@@ -1773,36 +1773,16 @@ Ask: team | How long have you been with the team?`;
                       </span>
                     </div>
                   </div>
-                  {#if energySignal || youLog.length > 0}
+                  {#if energySignal || youLog.length > 0 || suggestions.some(s => s.answerFeedback || s.vocalFeedback)}
+                    {@const latestFeedback = suggestions.slice().reverse().find(s => s.answerFeedback || s.vocalFeedback)}
                     <div class="you-log">
                       <span class="you-log-header">Your Delivery</span>
-                      {#if energySignal}
-                        <div class="you-log-entry you-log-cue">
-                          <span class="you-log-cue-text">{energySignal}</span>
-                        </div>
-                      {/if}
-                      {#each youLog.slice().reverse() as entry, i}
-                        <div class="you-log-entry" class:you-log-latest={i === 0 && !energySignal}>
-                          <div class="you-log-meta">
-                            <span class="you-log-who">You</span>
-                            <span class="you-log-icon">✓</span>
-                            {#if i > 0}<span class="you-log-ago">{fmtAgo(entry.time)}</span>{/if}
-                          </div>
-                          <span class="you-log-text">{entry.text}</span>
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
-                {:else if sid === 'answer-score'}
-                  {#if suggestions.some(s => s.answerFeedback || s.vocalFeedback)}
-                    {@const latestWithFeedback = suggestions.slice().reverse().find(s => s.answerFeedback || s.vocalFeedback)}
-                    {#if latestWithFeedback}
-                      <div class="side-stats">
-                        {#if latestWithFeedback.vocalFeedback}
-                          {@const vf = latestWithFeedback.vocalFeedback}
+                      {#if latestFeedback}
+                        {#if latestFeedback.vocalFeedback}
+                          {@const vf = latestFeedback.vocalFeedback}
                           {@const scoreColor = vf.confidence_score >= 70 ? '#4ade80' : vf.confidence_score >= 45 ? '#f59e0b' : '#f87171'}
                           <button class="side-stat ascore-stat-btn" onclick={() => vocalWhyExpanded = !vocalWhyExpanded}>
-                            <span class="side-label">Confidence</span>
+                            <span class="side-label">Voice Read</span>
                             <span class="ascore-vocal-score" style="color: {scoreColor}">{vf.confidence_score}%</span>
                             <span class="ascore-vocal-tone">{vf.tone}</span>
                             {#if vf.fillers_noted}<span class="ascore-vocal-fillers">{vf.fillers_noted}</span>{/if}
@@ -1812,8 +1792,8 @@ Ask: team | How long have you been with the team?`;
                             <p class="ascore-coaching">{vf.coaching}</p>
                           {/if}
                         {/if}
-                        {#if latestWithFeedback.answerFeedback}
-                          {@const af = latestWithFeedback.answerFeedback}
+                        {#if latestFeedback.answerFeedback}
+                          {@const af = latestFeedback.answerFeedback}
                           <button class="side-stat ascore-stat-btn" onclick={() => answerWhyExpanded = !answerWhyExpanded}>
                             <span class="side-label">Answer</span>
                             {#if af.missed_followup}<span class="ascore-badge ascore-warn">No follow-up</span>{/if}
@@ -1825,9 +1805,26 @@ Ask: team | How long have you been with the team?`;
                             <p class="ascore-coaching">{af.coaching}</p>
                           {/if}
                         {/if}
-                      </div>
-                    {/if}
+                      {/if}
+                      {#if energySignal}
+                        <div class="you-log-entry you-log-cue">
+                          <span class="you-log-cue-text">{energySignal}</span>
+                        </div>
+                      {/if}
+                      {#each youLog.slice().reverse() as entry, i}
+                        <div class="you-log-entry" class:you-log-latest={i === 0 && !energySignal && !latestFeedback}>
+                          <div class="you-log-meta">
+                            <span class="you-log-who">You</span>
+                            <span class="you-log-icon">✓</span>
+                            {#if i > 0}<span class="you-log-ago">{fmtAgo(entry.time)}</span>{/if}
+                          </div>
+                          <span class="you-log-text">{entry.text}</span>
+                        </div>
+                      {/each}
+                    </div>
                   {/if}
+                {:else if sid === 'answer-score'}
+                  <!-- merged into Your Delivery (stats section) -->
                 {:else if sid === 'rate-limits'}
                   <div class="side-section">
                     <button class="side-section-toggle" onclick={() => { modelUsageExpanded = !modelUsageExpanded; localStorage.setItem('model-usage-expanded', String(modelUsageExpanded)); }}>

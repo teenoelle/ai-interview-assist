@@ -39,7 +39,7 @@
   import type { MediaCapture } from './lib/capture';
   import type { CompanyBrief, InterviewerSummary } from './lib/api';
   import { fetchUsage } from './lib/api';
-  import { parseSuggestion } from './lib/parseSuggestion';
+  import { parseSuggestion, parseCues } from './lib/parseSuggestion';
   import { EMOTION_COLORS, EMOTION_CONFIG, emotionColor, POSITIVE_EMOTIONS, NEGATIVE_EMOTIONS } from './lib/emotions';
   import { tooltip } from './lib/tooltip';
   import '@fontsource/inter/400.css';
@@ -415,7 +415,19 @@
     const startX = e.clientX;
     const startW = col === 'left' ? leftW : col === 'hist' ? histW : col === 'center' ? centerW : rightW;
     const vw = window.innerWidth;
-    const [min, max] = col === 'left' ? [130, Math.floor(vw * 0.4)] : col === 'hist' ? [120, Math.floor(vw * 0.35)] : col === 'center' ? [180, Math.floor(vw * 0.6)] : [120, Math.floor(vw * 0.5)];
+    // Reserve space for right panels so they never get clipped
+    const rightReserved = (collapsedCols.has('right') ? 28 : rightW)
+                        + (collapsedCols.has('right2') ? 28 : 120)
+                        + 25; // handle widths
+    const colW = (c: string) => collapsedCols.has(c) ? 28 : (c === 'left' ? leftW : c === 'hist' ? histW : centerW);
+    const otherLeftCols: Record<string, number> = {
+      left: colW('hist') + colW('center'),
+      hist: colW('left') + colW('center'),
+      center: colW('left') + colW('hist'),
+      right: colW('left') + colW('hist') + colW('center'),
+    };
+    const dynamicMax = Math.max(120, vw - rightReserved - otherLeftCols[col] - 10);
+    const [min, max] = col === 'left' ? [130, Math.min(Math.floor(vw * 0.4), dynamicMax)] : col === 'hist' ? [120, Math.min(Math.floor(vw * 0.35), dynamicMax)] : col === 'center' ? [180, Math.min(Math.floor(vw * 0.6), dynamicMax)] : [120, Math.min(Math.floor(vw * 0.5), dynamicMax)];
     function onMove(ev: MouseEvent) {
       const w = Math.max(min, Math.min(max, startW + ev.clientX - startX));
       if (col === 'left') leftW = w;
@@ -1967,15 +1979,47 @@ Ask: team | How long have you been with the team?`;
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
         <div class="focus-card" onclick={(e) => e.stopPropagation()}>
           {#if latestSuggestion}
+            {@const fp = parseSuggestion(latestSuggestion.suggestion ?? '')}
+            {@const fcues = parseCues(fp.body)}
             <div class="focus-question">"{latestSuggestion.question}"</div>
-            <div class="focus-suggestion">
-              {#if latestSuggestion.suggestion}
-                {@html renderBold(latestSuggestion.suggestion)}
-                {#if latestSuggestion.streaming}<span class="focus-cursor">|</span>{/if}
-              {:else if latestSuggestion.streaming}
-                <span class="focus-loading">Generating...</span>
+            {#if latestSuggestion.suggestion}
+              {#if fp.acknowledge}
+                <div class="focus-section">
+                  <span class="focus-badge focus-badge-ack">Acknowledge</span>
+                  <span class="focus-ack">{fp.acknowledge}</span>
+                </div>
               {/if}
-            </div>
+              {#if fp.tell}
+                <div class="focus-section">
+                  <span class="focus-badge">Answer</span>
+                  <span class="focus-tell">{@html renderBold(fp.tell)}</span>
+                  {#if latestSuggestion.streaming && !fp.body}<span class="focus-cursor">|</span>{/if}
+                </div>
+              {/if}
+              {#if fcues.length > 0}
+                <div class="focus-cues">
+                  {#each fcues as cue}
+                    <div class="focus-cue">
+                      <span class="focus-cue-label">{cue.typeTag || (cue.label === 'General' ? 'Point' : cue.label)}</span>
+                      <span class="focus-cue-text">{@html renderBold(cue.text)}</span>
+                    </div>
+                  {/each}
+                  {#if latestSuggestion.streaming}<span class="focus-cursor">|</span>{/if}
+                </div>
+              {/if}
+              {#if fp.asks.length > 0}
+                <div class="focus-section">
+                  <span class="focus-badge focus-badge-ask">Ask</span>
+                  <div class="focus-asks">
+                    {#each fp.asks as ask}
+                      <span class="focus-ask-item">{ask.question}</span>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+            {:else if latestSuggestion.streaming}
+              <span class="focus-loading">Generating...</span>
+            {/if}
           {:else}
             <div class="focus-empty">Waiting for a question...</div>
           {/if}
@@ -3020,13 +3064,33 @@ Ask: team | How long have you been with the team?`;
     width: 100%; max-width: 680px; background: #07101e;
     border: 1px solid #1e3a5f; border-radius: 1rem; padding: 1.75rem 2rem;
     cursor: default; box-shadow: 0 0 60px rgba(59,130,246,0.08);
+    display: flex; flex-direction: column; gap: 1rem;
   }
   .focus-question {
     color: #60a5fa; font-style: italic; font-size: 0.95rem; line-height: 1.5;
-    margin-bottom: 1.25rem; padding-bottom: 1rem; border-bottom: 1px solid #1e293b;
+    padding-bottom: 1rem; border-bottom: 1px solid #1e293b;
   }
-  .focus-suggestion { color: #cbd5e1; line-height: 2.4; white-space: pre-wrap; font-size: var(--fs-lg); }
-  :global(.focus-suggestion strong) { color: #fff; font-size: 1.45rem; font-weight: 800; }
+  .focus-section { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
+  .focus-badge {
+    font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+    padding: 0.15rem 0.5rem; border-radius: 0.25rem; flex-shrink: 0;
+    background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid #1e293b;
+  }
+  .focus-badge-ack { background: rgba(59,130,246,0.12); color: #60a5fa; border-color: rgba(59,130,246,0.25); }
+  .focus-badge-ask { background: rgba(167,139,250,0.12); color: #a78bfa; border-color: rgba(167,139,250,0.25); }
+  .focus-ack { color: #93c5fd; font-size: var(--fs-lg); line-height: 1.7; }
+  .focus-tell { color: #e2e8f0; font-size: var(--fs-lg); line-height: 1.7; }
+  :global(.focus-tell strong) { color: #fff; font-size: 1.2rem; font-weight: 800; }
+  .focus-cues { display: flex; flex-direction: column; gap: 0.55rem; margin-top: 0.2rem; }
+  .focus-cue { display: flex; align-items: baseline; gap: 0.55rem; }
+  .focus-cue-label {
+    font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #475569; flex-shrink: 0; padding-top: 0.15rem;
+  }
+  .focus-cue-text { color: #cbd5e1; font-size: 1rem; line-height: 1.6; }
+  :global(.focus-cue-text strong) { color: #fff; font-size: 1.15rem; font-weight: 800; }
+  .focus-asks { display: flex; flex-direction: column; gap: 0.3rem; }
+  .focus-ask-item { color: #c4b5fd; font-size: 0.95rem; line-height: 1.5; }
   .focus-cursor { animation: blink 1s step-end infinite; color: #60a5fa; }
   @keyframes blink { 50% { opacity: 0; } }
   .focus-loading { color: #60a5fa; font-style: italic; }

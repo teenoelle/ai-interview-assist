@@ -63,7 +63,7 @@
   let emotionReason = $state('');
   let coaching = $state('');
   let coachingWhy = $state('');
-  let coachingLog = $state<{ text: string; why?: string; emotion: string; time: number; type?: 'posture-fixed' }[]>([]);
+  let coachingLog = $state<{ text: string; why?: string; emotion: string; time: number; type?: 'posture-fixed' | 'personality'; color?: string }[]>([]);
   let suggestions = $state<SuggestionEntry[]>([]);
   let statusMessages = $state<string[]>([]);
   let errorMessages = $state<string[]>([]);
@@ -713,6 +713,14 @@
     latestSuggestion?.suggestion ? extractTell(latestSuggestion.suggestion) : ''
   );
   const personality = $derived(derivePersonality(emotionHistory));
+  let lastPersonalityLabel = '';
+  $effect(() => {
+    const p = personality;
+    if (p && p.label !== lastPersonalityLabel) {
+      lastPersonalityLabel = p.label;
+      coachingLog = [...coachingLog.slice(-4), { text: p.tip, why: p.description, emotion: p.label, time: Date.now(), type: 'personality', color: p.color }];
+    }
+  });
   const nonNeutralTones = $derived(audioEmotionHistory.filter(t => t !== 'neutral'));
 
   // Rate limits
@@ -1633,13 +1641,6 @@ Ask: team | How long have you been with the team?`;
                 {:else if sid === 'personality'}
                   <!-- merged into sentiment-bar -->
                 {:else if sid === 'sentiment-bar'}
-                  {#if personality}
-                    <div class="personality-strip" style="border-color: {personality.color}">
-                      <span class="personality-label" style="color: {personality.color}">{personality.label}</span>
-                      <span class="personality-desc">{personality.description}</span>
-                      <span class="personality-tip"><span class="tip-label">Tip</span> {personality.tip}</span>
-                    </div>
-                  {/if}
                   {#if presenceIssues.length > 0}<BodyLanguagePanel {presenceIssues} />{/if}
                   {#if coachingLog.length > 0}
                     <div class="coaching-log coaching-log-sentiment">
@@ -1653,7 +1654,21 @@ Ask: team | How long have you been with the team?`;
                             s.has(entry.time) ? s.delete(entry.time) : s.add(entry.time);
                             expandedCoachingEntries = s;
                           }}>
-                          {#if i === 0 && entry.type === 'posture-fixed'}
+                          {#if i === 0 && entry.type === 'personality'}
+                            <!-- Latest: personality read -->
+                            <div class="coaching-log-meta">
+                              <span class="coaching-log-emotion">
+                                <span class="coaching-log-who">Interviewer</span>
+                                <span class="coaching-log-icon">🧠</span>
+                                <span style="color: {entry.color ?? '#a78bfa'}">{entry.emotion}</span>
+                              </span>
+                            </div>
+                            <span class="coaching-log-text coaching-log-text-latest"
+                              style="color: {entry.color ?? '#a78bfa'}"
+                              class:coaching-log-clickable={!!entry.why}>
+                              <span class="tip-label" style="color: {entry.color ?? '#a78bfa'}; background: #1a0a2e">Profile</span> {entry.text}
+                            </span>
+                          {:else if i === 0 && entry.type === 'posture-fixed'}
                             <!-- Latest: posture fix from interviewee -->
                             <div class="coaching-log-meta">
                               <span class="coaching-log-emotion">
@@ -1680,6 +1695,13 @@ Ask: team | How long have you been with the team?`;
                                 {POSITIVE_EMOTIONS.has(entry.emotion) ? '✓' : 'Tip'}
                               </span> {entry.text}
                             </span>
+                          {:else if entry.type === 'personality'}
+                            <!-- History: personality read -->
+                            <div class="coaching-log-meta">
+                              <span style="color: {entry.color ?? '#a78bfa'}" class="coaching-log-emotion-hist">🧠 {entry.emotion}</span>
+                              <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
+                            </div>
+                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!entry.why}>{entry.text}</span>
                           {:else if entry.type === 'posture-fixed'}
                             <!-- History: posture fix -->
                             <div class="coaching-log-meta">

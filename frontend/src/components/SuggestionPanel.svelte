@@ -447,15 +447,8 @@
     flex-shrink: 0;
   }
   .tp-sec-ack    { background: var(--bg-ack);    border-left-color: var(--border-ack); }
-  .tp-sec-affirm { background: #071520;          border-left-color: #0e7490; }
   .tp-sec-say    { background: var(--bg-say);    border-left-color: var(--border-say); }
   .tp-sec-ask    { background: var(--bg-ask);    border-left-color: var(--border-ask); }
-
-  .tp-sec-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.5rem;
-  }
 
   /* CUE badges */
   .cue-badge {
@@ -474,7 +467,6 @@
     margin-top: 0.1rem;
   }
   .cue-badge.cue-ask { background: #422006; color: #fbbf24; }
-  .cue-badge.cue-affirm { background: #164e63; color: #67e8f9; }
   .cue-badge.cue-ack { background: #2e1065; color: #c084fc; }
 
   /* Acknowledge text (purple section) */
@@ -486,14 +478,6 @@
     flex: 1;
   }
 
-  /* Affirm text (cyan section) */
-  .tp-affirm-text {
-    color: #e0f7fa;
-    font-size: var(--fs-lg);
-    line-height: 1.4;
-    overflow-wrap: break-word;
-    flex: 1;
-  }
 
   /* Say text */
   .tp-tell {
@@ -562,11 +546,6 @@
     display: flex; flex-direction: column; gap: 0.1rem;
     padding: 0.1rem 0.5rem 0.35rem;
     border-top: 1px solid #0d2010;
-  }
-  .tp-cue-line {
-    /* text is lighter green than the label */
-    color: #86efac; font-size: var(--fs-lg); line-height: 1.45;
-    padding-left: 0.15rem; overflow-wrap: break-word;
   }
   .cue-sentence {
     padding: 0.3rem 0.4rem;
@@ -682,7 +661,6 @@
     border-left: 2px solid transparent;
   }
   .e-sec-ack    { background: var(--bg-ack);    border-left-color: var(--border-ack); }
-  .e-sec-affirm { background: #071520;          border-left-color: #0e7490; }
   .e-sec-say    { background: var(--bg-say);    border-left-color: var(--border-say); }
   .e-sec-ask    { background: var(--bg-ask);    border-left-color: var(--border-ask); }
   .affirm-text, .tell-text {
@@ -710,9 +688,6 @@
     overflow-wrap: break-word; word-break: break-word;
   }
   :global(.body-text strong) { color: #b8cce4; font-weight: 700; }
-
-  .e-ask-header { display: flex; align-items: center; }
-  .e-ask-header { display: flex; align-items: center; }
 
   .loading { color: #60a5fa; font-style: italic; font-size: var(--fs-base); }
   .empty {

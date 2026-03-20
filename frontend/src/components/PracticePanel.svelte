@@ -585,13 +585,10 @@
   .practice-header {
     display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
   }
-  .back-btn { background: none; border: 1px solid #1e293b; color: #60a5fa; font-size: var(--fs-sm); font-weight: 600; cursor: pointer; padding: 0.5rem 1rem; border-radius: 0.5rem; white-space: nowrap; }
-  .back-btn:hover { border-color: #60a5fa; }
   .practice-action-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.5rem 0 0.5rem; border-top: 1px solid #1e293b; margin-top: 1rem; }
   .practice-action-right { display: flex; align-items: center; gap: 0.75rem; margin-left: auto; }
   h2 { font-size: 1.5rem; font-weight: 800; color: #f1f5f9; margin: 0 0 0.25rem; }
   .subtitle { color: #64748b; font-size: 0.875rem; margin: 0; }
-  .header-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .start-btn {
     padding: 0.6rem 1.5rem; background: #3b82f6; color: white;
     border: none; border-radius: 0.5rem; font-size: var(--fs-base); font-weight: 600;
@@ -611,7 +608,6 @@
     border-radius: 0.75rem; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;
   }
   .question-text { font-size: 0.9rem; font-weight: 500; color: #f87171; line-height: 1.5; margin: 0; font-style: normal; }
-  .hint-loaded-badge { align-self: flex-start; font-size: var(--fs-sm); color: #22c55e; font-weight: 600; }
   .hint-loading-inline { color: #475569; font-size: var(--fs-sm); font-style: italic; }
   .hints-card {
     background: #07101e; border: 1px solid #1a2d4a; border-radius: 0.6rem;
@@ -624,7 +620,6 @@
     border-left: 3px solid transparent;
   }
   .h-sec-ack    { background: #110823; border-left-color: #6d28d9; }
-  .h-sec-affirm { background: #071520; border-left-color: #0e7490; }
   .h-sec-say    { background: #060e0a; border-left-color: #166534; }
   .h-sec-ask    { background: #0e0700; border-left-color: #92400e; }
   .font-select {
@@ -642,7 +637,6 @@
     letter-spacing: 0.06em; flex-shrink: 0; margin-top: 0.1rem;
   }
   .h-cue-badge.h-cue-ask    { background: #422006; color: #fbbf24; }
-  .h-cue-badge.h-cue-affirm { background: #164e63; color: #67e8f9; }
   .h-cue-badge.h-cue-ack    { background: #2e1065; color: #c084fc; }
 
   /* Spoken text */

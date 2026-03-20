@@ -47,8 +47,8 @@
     ext => report.source_filename.toLowerCase().endsWith(`.${ext}`)
   ));
 
-  const sourceUrl = `/api/review/${report.id}/source`;
-  const downloadUrl = `/api/review/${report.id}/download`;
+  const sourceUrl = $derived(`/api/review/${report.id}/source`);
+  const downloadUrl = $derived(`/api/review/${report.id}/download`);
 
   function fmtDuration(secs: number): string {
     const m = Math.floor(secs / 60);

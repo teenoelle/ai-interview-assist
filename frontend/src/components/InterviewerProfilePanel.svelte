@@ -87,7 +87,6 @@
   .profiles-toggle:hover { background: #0a1525; }
   .profiles-toggle-inner { display: flex; flex-direction: column; gap: 0.1rem; text-align: left; }
   .profiles-label-header { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #334155; }
-  .profiles-names { font-size: var(--fs-base); font-weight: 700; color: #60a5fa; }
   .profiles-names-preview { font-size: var(--fs-sm); color: #60a5fa; font-weight: 600; }
   .profiles-chevron { font-size: var(--fs-xs); color: #334155; }
   .profiles { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.5rem 0.75rem 0.75rem; border-top: 1px solid #0f1e33; }

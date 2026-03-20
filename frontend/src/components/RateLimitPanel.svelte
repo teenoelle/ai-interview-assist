@@ -117,9 +117,9 @@
     align-items: baseline;
   }
   .provider-name {
-    font-weight: 700;
-    font-size: var(--fs-base);
-    color: #e2e8f0;
+    font-weight: 500;
+    font-size: var(--fs-sm);
+    color: #94a3b8;
   }
   .counts {
     font-size: var(--fs-base);

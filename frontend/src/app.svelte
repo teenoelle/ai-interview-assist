@@ -1741,11 +1741,11 @@ Ask: team | How long have you been with the team?`;
                   {/if}
                 {:else if sid === 'stats'}
                   <div class="side-stats">
-                    <div class="side-stat" title="Time since you started answering">
+                    <div class="side-stat" title="Time since you started answering. Green = under 30s (concise), amber = 30–60s (detailed), red = over 60s (wrap up). Aim for 30–90 seconds per answer.">
                       <span class="side-label">Answer</span>
                       <span class="side-value" style="color: {timerColor}">{answerMs > 0 ? fmtTime(answerMs) : '—'}</span>
                     </div>
-                    <div class="side-stat" title="Your share of speaking time vs interviewer">
+                    <div class="side-stat" title="Your share of speaking time vs the interviewer. Aim for 40–60% — enough to show depth, while leaving room for the interviewer to lead.">
                       <span class="side-label">You / Them</span>
                       <span class="side-value" style="color: {ratioColor}">{youPct > 0 ? `${youPct}% / ${interviewerPct}%` : '—'}</span>
                     </div>

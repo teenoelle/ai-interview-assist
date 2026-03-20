@@ -12,19 +12,14 @@
   const pct = $derived(keywords.length > 0 ? Math.round((mentioned.length / keywords.length) * 100) : 0);
 
   let selectedKw = $state<string | null>(null);
-  let definitions = $state<Record<string, string>>({});
+  let definitions = $state<Record<string, { definition: string; tip: string }>>({});
   let loadingKw = $state<string | null>(null);
+  let fetching = new Set<string>();
   let popupPos = $state<{ x: number; y: number } | null>(null);
 
-  async function showDefinition(kw: string, e?: MouseEvent) {
-    if (selectedKw === kw) { selectedKw = null; popupPos = null; return; }
-    selectedKw = kw;
-    if (horizontal && e) {
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      popupPos = { x: rect.left, y: window.innerHeight - rect.top + 6 };
-    }
-    if (definitions[kw]) return;
-    loadingKw = kw;
+  async function fetchDefinition(kw: string) {
+    if (definitions[kw] || fetching.has(kw)) return;
+    fetching.add(kw);
     try {
       const resp = await fetch('/api/keyword-definition', {
         method: 'POST',
@@ -33,10 +28,32 @@
       });
       if (resp.ok) {
         const data = await resp.json();
-        definitions = { ...definitions, [kw]: data.definition };
+        definitions = { ...definitions, [kw]: { definition: data.definition ?? '', tip: data.tip ?? '' } };
       }
     } catch { /* ignore */ }
-    loadingKw = null;
+    fetching.delete(kw);
+  }
+
+  // Preload all keyword definitions with stagger to avoid hammering the API
+  $effect(() => {
+    const kws = keywords.slice();
+    kws.forEach((kw, i) => {
+      if (!definitions[kw]) setTimeout(() => fetchDefinition(kw), i * 350);
+    });
+  });
+
+  async function showDefinition(kw: string, e?: MouseEvent) {
+    if (selectedKw === kw) { selectedKw = null; popupPos = null; return; }
+    selectedKw = kw;
+    if (horizontal && e) {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      popupPos = { x: rect.left, y: window.innerHeight - rect.top + 6 };
+    }
+    if (!definitions[kw]) {
+      loadingKw = kw;
+      await fetchDefinition(kw);
+      loadingKw = null;
+    }
   }
 </script>
 
@@ -46,14 +63,16 @@
     <div class="kw-hbar-row">
       <div class="kw-hbar-chips">
         {#each mentioned as kw}
-          <button class="kw-chip kw-done" onclick={(e) => showDefinition(kw, e)} title="Click for definition">✓ {kw}</button>
+          <button class="kw-chip kw-done" onclick={(e) => showDefinition(kw, e)}
+            title={definitions[kw] ? `✓ ${definitions[kw].definition}` : 'You mentioned this — click for definition and tip'}>✓ {kw}</button>
         {/each}
         {#each notYet.filter(k => interviewerRaisedSet.has(k)) as kw}
           <button class="kw-chip kw-raised" onclick={(e) => showDefinition(kw, e)}
-            title={keywordQuestionMap[kw] ? `Asked in: "${keywordQuestionMap[kw]}"` : 'Interviewer raised this — click for info'}>↑ {kw}</button>
+            title={keywordQuestionMap[kw] ? `Interviewer raised this in: "${keywordQuestionMap[kw]}" — click for definition and tip` : 'Interviewer raised this — click for definition and tip'}>↑ {kw}</button>
         {/each}
         {#each notYet.filter(k => !interviewerRaisedSet.has(k)) as kw}
-          <button class="kw-chip kw-todo" onclick={(e) => showDefinition(kw, e)} title="Click for definition">{kw}</button>
+          <button class="kw-chip kw-todo" onclick={(e) => showDefinition(kw, e)}
+            title={definitions[kw] ? definitions[kw].definition : 'Not yet mentioned — click for definition and interview tip'}>{kw}</button>
         {/each}
       </div>
       <span class="kw-hbar-stats">{mentioned.length}/{keywords.length}</span>
@@ -69,7 +88,10 @@
       {#if loadingKw === selectedKw}
         <p class="kw-def-text kw-def-loading">Loading…</p>
       {:else if definitions[selectedKw]}
-        <p class="kw-def-text">{definitions[selectedKw]}</p>
+        <p class="kw-def-text">{definitions[selectedKw].definition}</p>
+        {#if definitions[selectedKw].tip}
+          <p class="kw-def-tip">{definitions[selectedKw].tip}</p>
+        {/if}
       {/if}
     </div>
   {/if}
@@ -84,14 +106,16 @@
       <div class="kw-stats">{mentioned.length}/{keywords.length} keywords mentioned</div>
       <div class="kw-list">
         {#each mentioned as kw}
-          <button class="kw-chip kw-done" onclick={() => showDefinition(kw)} title="Click for definition">✓ {kw}</button>
+          <button class="kw-chip kw-done" onclick={() => showDefinition(kw)}
+            title={definitions[kw] ? `✓ ${definitions[kw].definition}` : 'You mentioned this — click for definition and tip'}>✓ {kw}</button>
         {/each}
         {#each notYet.filter(k => interviewerRaisedSet.has(k)) as kw}
           <button class="kw-chip kw-raised" onclick={() => showDefinition(kw)}
-            title={keywordQuestionMap[kw] ? `Asked in: "${keywordQuestionMap[kw]}"` : 'Interviewer raised this — click for info'}>↑ {kw}</button>
+            title={keywordQuestionMap[kw] ? `Interviewer raised this in: "${keywordQuestionMap[kw]}" — click for tip` : 'Interviewer raised this — click for definition and tip'}>↑ {kw}</button>
         {/each}
         {#each notYet.filter(k => !interviewerRaisedSet.has(k)) as kw}
-          <button class="kw-chip kw-todo" onclick={() => showDefinition(kw)} title="Click for definition">{kw}</button>
+          <button class="kw-chip kw-todo" onclick={() => showDefinition(kw)}
+            title={definitions[kw] ? definitions[kw].definition : 'Not yet mentioned — click for definition and interview tip'}>{kw}</button>
         {/each}
       </div>
 
@@ -104,7 +128,10 @@
           {#if loadingKw === selectedKw}
             <p class="kw-def-text kw-def-loading">Loading…</p>
           {:else if definitions[selectedKw]}
-            <p class="kw-def-text">{definitions[selectedKw]}</p>
+            <p class="kw-def-text">{definitions[selectedKw].definition}</p>
+            {#if definitions[selectedKw].tip}
+              <p class="kw-def-tip">{definitions[selectedKw].tip}</p>
+            {/if}
           {/if}
         </div>
       {/if}
@@ -177,6 +204,7 @@
   }
   .kw-def-close:hover { color: #64748b; }
   .kw-def-text { margin: 0; font-size: var(--fs-sm); color: #94a3b8; line-height: 1.5; }
+  .kw-def-tip { margin: 0; font-size: var(--fs-sm); color: #60a5fa; line-height: 1.5; border-top: 1px solid #1e293b; padding-top: 0.3rem; }
   .kw-def-loading { color: #334155; font-style: italic; }
   .kw-popup-fixed {
     position: fixed;

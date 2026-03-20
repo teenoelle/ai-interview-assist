@@ -479,6 +479,7 @@ pub struct KeywordDefinitionRequest {
 #[derive(serde::Serialize)]
 pub struct KeywordDefinitionResponse {
     pub definition: String,
+    pub tip: String,
 }
 
 pub async fn handle_keyword_definition(
@@ -487,7 +488,7 @@ pub async fn handle_keyword_definition(
 ) -> Result<Json<KeywordDefinitionResponse>, (StatusCode, String)> {
     let sp = state.system_prompt.read().await.clone();
     let user_prompt = format!(
-        "The candidate needs to understand the keyword: \"{}\"\n\nWrite exactly 1 sentence (max 20 words) explaining what this means for this specific role. No hashtags. No markdown. No bullet points. Plain sentence only.",
+        "The candidate is interviewing for a role where \"{}\" is a key requirement.\n\nRespond with EXACTLY two plain-text sentences on two separate lines:\n1. What this term means for this specific role (max 18 words, no jargon)\n2. One concrete tip for naturally weaving it into an interview answer (max 20 words, start with an action verb)\n\nNo numbers, no labels, no markdown, no blank lines between them.",
         req.keyword
     );
     let cfg = AiConfig {
@@ -499,10 +500,13 @@ pub async fn handle_keyword_definition(
         ollama_model: &state.ollama_model,
         usage: Some(state.call_counts.clone()),
     };
-    let definition = call_ai_simple(&cfg, &sp, &user_prompt)
+    let raw = call_ai_simple(&cfg, &sp, &user_prompt)
         .await
-        .unwrap_or_else(|_| format!("A key skill or concept relevant to this role: {}.", req.keyword));
-    Ok(Json(KeywordDefinitionResponse { definition }))
+        .unwrap_or_else(|_| format!("A key skill or concept relevant to this role.\nMention a specific example where you applied {} in a past project.", req.keyword));
+    let lines: Vec<&str> = raw.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+    let definition = lines.first().map(|s| s.to_string()).unwrap_or_else(|| format!("Key skill for this role: {}.", req.keyword));
+    let tip = lines.get(1).map(|s| s.to_string()).unwrap_or_default();
+    Ok(Json(KeywordDefinitionResponse { definition, tip }))
 }
 
 #[derive(serde::Deserialize)]

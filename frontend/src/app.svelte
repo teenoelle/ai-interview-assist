@@ -1623,7 +1623,7 @@ Ask: team | How long have you been with the team?`;
             {@const sid = slot.id}
             {@const myRole = SECTION_ROLE[sid] ?? 'coaching'}
             {@const prevRole = i > 0 ? (SECTION_ROLE[panelSections[i-1].id] ?? 'coaching') : null}
-            {#if prevRole !== myRole}
+            {#if prevRole !== myRole && !(prevRole === null && myRole === 'coaching')}
               <div class="group-divider group-divider-{myRole}">
                 {myRole === 'interviewer' ? '👤 Interviewer' : myRole === 'you' ? '✅ Your Performance' : 'Resources'}
               </div>

@@ -94,7 +94,7 @@ pub type SharedTracker = Arc<Mutex<SpeakerTracker>>;
 
 // ── WAV encoding (for sending PCM to sidecar) ─────────────────────────────────
 
-pub(crate) fn pcm_to_wav(pcm: &[u8]) -> Result<Vec<u8>> {
+pub fn pcm_to_wav(pcm: &[u8]) -> Result<Vec<u8>> {
     let spec = WavSpec {
         channels: 1,
         sample_rate: 16000,

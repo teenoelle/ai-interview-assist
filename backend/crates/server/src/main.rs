@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use axum::{
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use tower_http::{cors::CorsLayer, services::ServeDir};
@@ -16,6 +16,8 @@ mod state;
 mod ws_handler;
 mod http_handler;
 mod tts_handler;
+mod review;
+mod review_handler;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -68,9 +70,17 @@ async fn main() -> anyhow::Result<()> {
         config.diarize_url.as_deref().unwrap_or("disabled (set HF_TOKEN to enable)")
     );
 
+    let reviews_dir = std::env::current_dir()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("reviews");
+    tokio::fs::create_dir_all(&reviews_dir).await?;
+
     let state = AppState {
         system_prompt: Arc::new(RwLock::new(String::new())),
         transcript: Arc::new(RwLock::new(Vec::new())),
+        jd_keywords: Arc::new(RwLock::new(Vec::new())),
         audio_tx,
         mic_audio_tx,
         video_tx,
@@ -87,10 +97,15 @@ async fn main() -> anyhow::Result<()> {
         ollama_url: config.ollama_url.clone(),
         ollama_model: config.ollama_model.clone(),
         ollama_models: config.ollama_models.clone(),
+        whisper_url: config.whisper_url.clone(),
+        whisper_model: config.whisper_model.clone(),
+        diarize_url: config.diarize_url.clone(),
         rate_limiter: rate_limiter.clone(),
         call_counts: call_counts.clone(),
         piper_binary: config.piper_binary.clone(),
         piper_models_dir: config.piper_models_dir.clone(),
+        reviews_dir,
+        review_sessions: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
     };
 
     // Mic agent: microphone audio → always "You", never triggers suggestions
@@ -179,9 +194,19 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/usage", get(http_handler::handle_usage))
         .route("/api/tts/voices", get(tts_handler::handle_tts_voices))
         .route("/api/tts/speak", post(tts_handler::handle_speak))
+        // Review pipeline
+        .route("/api/review/upload", post(review_handler::handle_upload))
+        .route("/api/review/from-live", post(review_handler::handle_from_live))
+        .route("/api/reviews", get(review_handler::handle_list_reports))
+        .route("/api/reviews", delete(review_handler::handle_delete_all))
+        .route("/api/review/:id", get(review_handler::handle_get_report))
+        .route("/api/review/:id", delete(review_handler::handle_delete_report))
+        .route("/api/review/:id/events", get(review_handler::handle_events))
+        .route("/api/review/:id/source", get(review_handler::handle_get_source))
+        .route("/api/review/:id/download", get(review_handler::handle_download))
         .fallback_service(ServeDir::new(&frontend_path))
         .layer(CorsLayer::permissive())
-        .layer(DefaultBodyLimit::max(50 * 1024 * 1024)) // 50 MB — handles large CV uploads
+        .layer(DefaultBodyLimit::max(500 * 1024 * 1024)) // 500 MB — review video uploads
         .with_state(state);
 
     let addr = format!("0.0.0.0:{}", config.port);

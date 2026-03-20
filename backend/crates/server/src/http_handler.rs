@@ -174,6 +174,12 @@ pub async fn handle_setup_finalize(
         extract_jd_keywords(&payload.job_description, &cfg),
     );
 
+    // Store keywords so the review pipeline can use them
+    {
+        let mut kw = state.jd_keywords.write().await;
+        *kw = jd_keywords.clone();
+    }
+
     let company_brief_opt = if company_brief.name.is_empty() { None } else { Some(company_brief) };
 
     Ok(Json(SetupResponse {

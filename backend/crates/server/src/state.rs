@@ -1,13 +1,16 @@
 use std::sync::Arc;
-use tokio::sync::{broadcast, mpsc, RwLock};
+use std::path::PathBuf;
+use tokio::sync::{broadcast, mpsc, RwLock, watch};
 use common::messages::{TranscriptSegment, WsEvent};
 use common::rate_limiter::RateLimiter;
+use crate::review::ReviewProgress;
 
 #[derive(Clone)]
 #[allow(dead_code)]
 pub struct AppState {
     pub system_prompt: Arc<RwLock<String>>,
     pub transcript: Arc<RwLock<Vec<TranscriptSegment>>>,
+    pub jd_keywords: Arc<RwLock<Vec<String>>>,
     pub audio_tx: mpsc::Sender<Vec<u8>>,
     pub mic_audio_tx: mpsc::Sender<Vec<u8>>,
     pub video_tx: mpsc::Sender<Vec<u8>>,
@@ -24,8 +27,13 @@ pub struct AppState {
     pub ollama_url: String,
     pub ollama_model: String,
     pub ollama_models: Vec<String>,
+    pub whisper_url: Option<String>,
+    pub whisper_model: String,
+    pub diarize_url: Option<String>,
     pub rate_limiter: RateLimiter,
     pub call_counts: Arc<std::sync::Mutex<std::collections::HashMap<String, u64>>>,
     pub piper_binary: Option<String>,
     pub piper_models_dir: Option<String>,
+    pub reviews_dir: PathBuf,
+    pub review_sessions: Arc<std::sync::Mutex<std::collections::HashMap<String, watch::Receiver<ReviewProgress>>>>,
 }

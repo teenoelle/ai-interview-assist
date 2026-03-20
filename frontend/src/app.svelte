@@ -7,6 +7,9 @@
   import SuggestionPanel from './components/SuggestionPanel.svelte';
   import RateLimitPanel from './components/RateLimitPanel.svelte';
   import DebriefModal from './components/DebriefModal.svelte';
+  import ReviewUpload from './components/ReviewUpload.svelte';
+  import ReviewPanel from './components/ReviewPanel.svelte';
+  import type { ReviewReport } from './components/ReviewPanel.svelte';
   import PracticePanel from './components/PracticePanel.svelte';
   import InterviewHistoryPanel from './components/InterviewHistoryPanel.svelte';
   import WhisperOverlay from './components/WhisperOverlay.svelte';
@@ -76,6 +79,10 @@
   let showDebrief = $state(false);
   let focusMode = $state(false);
   let showHistory = $state(false);
+  let showReviewUpload = $state(false);
+  let showReviewPanel = $state(false);
+  let reviewReport = $state<ReviewReport | null>(null);
+  let savingLiveReport = $state(false);
   let showWhisper = $state(false);
   let emotionHistory = $state<string[]>([]);
   let vocalWhyExpanded = $state(false);
@@ -1221,6 +1228,16 @@ Ask: team | How long have you been with the team?`;
         </div>
       </header>
       <SetupForm onSetupComplete={handleSetupComplete} onPractice={handlePractice} />
+      <div class="setup-review-row">
+        <button class="setup-review-btn" onclick={() => showReviewUpload = true}>
+          ⬆ Review a Recording
+        </button>
+        {#if reviewReport}
+          <button class="setup-review-view-btn" onclick={() => { showReviewPanel = true; }}>
+            View last report: {reviewReport.source_filename}
+          </button>
+        {/if}
+      </div>
       {#if Object.keys(callCounts).length > 0 || Object.keys(rateLimits).length > 0}
         <div class="setup-usage">
           <RateLimitPanel {rateLimits} {callCounts} />
@@ -1340,6 +1357,20 @@ Ask: team | How long have you been with the team?`;
               </div>
             {/if}
           </div>
+          <button class="debrief-btn save-report-btn"
+            class:saving={savingLiveReport}
+            disabled={savingLiveReport}
+            onclick={async () => {
+              savingLiveReport = true;
+              try {
+                const resp = await fetch('/api/review/from-live', { method: 'POST' });
+                if (resp.ok) {
+                  reviewReport = await resp.json();
+                  showReviewPanel = true;
+                }
+              } finally { savingLiveReport = false; }
+            }}
+          >{savingLiveReport ? 'Saving…' : 'Save Report'}</button>
           <button class="debrief-btn" onclick={() => showDebrief = true}>End Interview</button>
           <CaptureButton
             onCapture={(v) => { capturing = v; if (v) ttsEnabled = true; if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); } }}
@@ -2011,6 +2042,19 @@ Ask: team | How long have you been with the team?`;
     onRehearsal={(questions) => { predictedQuestions = questions; phase = 'practice'; connectWs(); showHistory = false; }}
   />
 {/if}
+{#if showReviewUpload}
+  <ReviewUpload
+    onReport={(r) => { reviewReport = r; showReviewUpload = false; showReviewPanel = true; }}
+    onCancel={() => showReviewUpload = false}
+  />
+{/if}
+{#if showReviewPanel && reviewReport}
+  <ReviewPanel
+    report={reviewReport}
+    onClose={() => showReviewPanel = false}
+    onDelete={(id) => { if (reviewReport?.id === id) reviewReport = null; showReviewPanel = false; }}
+  />
+{/if}
 </main>
 
 <style>
@@ -2095,6 +2139,24 @@ Ask: team | How long have you been with the team?`;
 
   .setup-container { max-width: 800px; margin: 0 auto; }
   .setup-usage { max-width: 800px; margin: 0 auto 2rem; padding: 0 2rem; }
+  .setup-review-row { max-width: 800px; margin: 0.75rem auto 0; padding: 0 2rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+  .setup-review-btn {
+    padding: 0.4rem 1rem; background: transparent;
+    border: 1px solid #334155; border-radius: 0.4rem;
+    color: #64748b; font-size: 0.82rem; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .setup-review-btn:hover { border-color: #60a5fa; color: #60a5fa; }
+  .setup-review-view-btn {
+    padding: 0.4rem 1rem; background: rgba(59,130,246,0.1);
+    border: 1px solid rgba(59,130,246,0.3); border-radius: 0.4rem;
+    color: #93c5fd; font-size: 0.82rem; cursor: pointer;
+    transition: all 0.15s; max-width: 320px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .setup-review-view-btn:hover { border-color: #60a5fa; }
+  .save-report-btn { opacity: 0.85; }
+  .save-report-btn.saving { opacity: 0.5; cursor: default; }
   .setup-header { text-align: center; padding: 3rem 2rem 1rem; }
   .setup-font-row { display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-top: 1rem; }
   .setup-font-label { font-size: var(--fs-sm); color: #64748b; }

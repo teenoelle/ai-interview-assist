@@ -488,8 +488,8 @@ pub async fn handle_keyword_definition(
 ) -> Result<Json<KeywordDefinitionResponse>, (StatusCode, String)> {
     let sp = state.system_prompt.read().await.clone();
     let user_prompt = format!(
-        "The candidate is interviewing for a role where \"{}\" is a key requirement.\n\nRespond with EXACTLY two plain-text sentences on two separate lines:\n1. What this term means for this specific role (max 18 words, no jargon)\n2. One concrete tip for naturally weaving it into an interview answer (max 20 words, start with an action verb)\n\nNo numbers, no labels, no markdown, no blank lines between them.",
-        req.keyword
+        "The candidate is interviewing for a role where \"{}\" is a key requirement.\n\nRespond with EXACTLY two plain-text sentences on two separate lines:\n1. Begin with \"{} refers to\" then explain what it means for this specific role (max 20 words total, no jargon, grammatically correct)\n2. One concrete tip for naturally weaving it into an interview answer (max 20 words, start with an action verb)\n\nNo numbers, no labels, no markdown, no blank lines between them.",
+        req.keyword, req.keyword
     );
     let cfg = AiConfig {
         gemini_key: &state.gemini_key,

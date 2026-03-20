@@ -2797,6 +2797,7 @@ Ask: team | How long have you been with the team?`;
   .coaching-log-emotion {
     font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
     letter-spacing: 0.07em; display: flex; align-items: center;
+    white-space: nowrap; overflow: hidden; min-width: 0;
   }
   .coaching-log-emotion-hist {
     font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
@@ -2823,7 +2824,7 @@ Ask: team | How long have you been with the team?`;
   .coaching-log-reason { font-size: var(--fs-xs); color: #64748b; line-height: 1.35; display: block; margin-top: 0.1rem; }
   .coaching-log-why { font-size: var(--fs-xs); color: #475569; font-style: italic; line-height: 1.35; display: block; margin-top: 0.1rem; }
   .coaching-log-clickable { cursor: pointer; text-decoration-line: underline; text-decoration-style: dotted; text-decoration-color: #334155; }
-  .coaching-log-expand-hint { font-size: var(--fs-xs); color: #475569; margin-left: auto; cursor: pointer; letter-spacing: 0.04em; font-weight: 600; text-transform: uppercase; }
+  .coaching-log-expand-hint { font-size: var(--fs-xs); color: #475569; margin-left: 0.5rem; flex-shrink: 0; cursor: pointer; letter-spacing: 0.04em; font-weight: 600; text-transform: uppercase; white-space: nowrap; }
   .tip-label-personality { background: none !important; border: 1px solid; border-radius: 0.2rem; padding: 0.05rem 0.3rem; }
   .coaching-log-profile-section {
     display: flex; flex-direction: column; gap: 0.2rem;

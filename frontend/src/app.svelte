@@ -66,6 +66,7 @@
   let coachingLog = $state<{ text: string; why?: string; reason?: string; emotion: string; time: number; type?: 'personality'; color?: string }[]>([]);
   let youLog = $state<{ text: string; time: number }[]>([]);
   let expandedYouEntries = $state(new Set<number>());
+  let youDeliveryExpanded = $state(true);
   let suggestions = $state<SuggestionEntry[]>([]);
   let statusMessages = $state<string[]>([]);
   let errorMessages = $state<string[]>([]);
@@ -1662,12 +1663,13 @@ Ask: team | How long have you been with the team?`;
                               <span class="coaching-log-emotion">
                                 <span class="coaching-log-who">Interviewer</span>
                                 <span class="coaching-log-icon">🧠</span>
-                                <span style="color: {entry.color ?? '#a78bfa'}">{entry.emotion}</span>
+                                <span style="color: {entry.color ?? '#a78bfa'}" title="Personality type inferred from the pattern of interviewer emotions detected via Gemini Vision over time">{entry.emotion}</span>
                               </span>
                             </div>
                             <span class="coaching-log-text coaching-log-text-latest"
                               style="color: {entry.color ?? '#a78bfa'}"
-                              class:coaching-log-clickable={!!(entry.why || entry.reason)}>
+                              class:coaching-log-clickable={!!(entry.why || entry.reason)}
+                              title={[entry.why].filter(Boolean).join(' — ')}>
                               <span class="tip-label" style="color: {entry.color ?? '#a78bfa'}; background: #1a0a2e">Profile</span> {entry.text}
                             </span>
                           {:else if i === 0}
@@ -1676,12 +1678,13 @@ Ask: team | How long have you been with the team?`;
                               <span class="coaching-log-emotion">
                                 <span class="coaching-log-who">Interviewer</span>
                                 <span class="coaching-log-icon">{EMOTION_CONFIG[entry.emotion]?.icon ?? ''}</span>
-                                <span style="color: {emotionColor(entry.emotion)}">{entry.emotion}</span>
+                                <span style="color: {emotionColor(entry.emotion)}" title="Facial emotion detected from interviewer video via Gemini Vision">{entry.emotion}</span>
                               </span>
                             </div>
                             <span class="coaching-log-text coaching-log-text-latest"
                               class:coaching-log-positive={POSITIVE_EMOTIONS.has(entry.emotion)}
-                              class:coaching-log-clickable={!!(entry.why || entry.reason)}>
+                              class:coaching-log-clickable={!!(entry.why || entry.reason)}
+                              title={[entry.reason, entry.why].filter(Boolean).join(' — ')}>
                               <span class="tip-label" class:tip-label-positive={POSITIVE_EMOTIONS.has(entry.emotion)}>
                                 {POSITIVE_EMOTIONS.has(entry.emotion) ? '✓' : 'Tip'}
                               </span> {entry.text}
@@ -1689,17 +1692,17 @@ Ask: team | How long have you been with the team?`;
                           {:else if entry.type === 'personality'}
                             <!-- History: personality read -->
                             <div class="coaching-log-meta">
-                              <span style="color: {entry.color ?? '#a78bfa'}" class="coaching-log-emotion-hist">🧠 {entry.emotion}</span>
+                              <span style="color: {entry.color ?? '#a78bfa'}" class="coaching-log-emotion-hist" title="Personality type inferred from interviewer emotion pattern">🧠 {entry.emotion}</span>
                               <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
                             </div>
-                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!(entry.why || entry.reason)}>{entry.text}</span>
+                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!(entry.why || entry.reason)} title={[entry.why].filter(Boolean).join(' — ')}>{entry.text}</span>
                           {:else}
                             <!-- History: no icon, no Tip label, timestamp, dimmer -->
                             <div class="coaching-log-meta">
-                              <span style="color: {emotionColor(entry.emotion)}" class="coaching-log-emotion-hist">{entry.emotion}</span>
+                              <span style="color: {emotionColor(entry.emotion)}" class="coaching-log-emotion-hist" title="Facial emotion detected via Gemini Vision">{entry.emotion}</span>
                               <span class="coaching-log-ago">{fmtAgo(entry.time)}</span>
                             </div>
-                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!(entry.why || entry.reason)}>{entry.text}</span>
+                            <span class="coaching-log-text-hist" class:coaching-log-clickable={!!(entry.why || entry.reason)} title={[entry.reason, entry.why].filter(Boolean).join(' — ')}>{entry.text}</span>
                           {/if}
                           {#if (entry.why || entry.reason) && expandedCoachingEntries.has(entry.time)}
                             {#if entry.reason}<span class="coaching-log-reason">{entry.reason}</span>{/if}
@@ -1776,51 +1779,57 @@ Ask: team | How long have you been with the team?`;
                   {#if energySignal || youLog.length > 0 || suggestions.some(s => s.answerFeedback || s.vocalFeedback)}
                     {@const latestFeedback = suggestions.slice().reverse().find(s => s.answerFeedback || s.vocalFeedback)}
                     <div class="you-log">
-                      <span class="you-log-header">Your Delivery</span>
-                      {#if latestFeedback}
-                        {#if latestFeedback.vocalFeedback}
-                          {@const vf = latestFeedback.vocalFeedback}
-                          {@const scoreColor = vf.confidence_score >= 70 ? '#4ade80' : vf.confidence_score >= 45 ? '#f59e0b' : '#f87171'}
-                          <button class="side-stat ascore-stat-btn" onclick={() => vocalWhyExpanded = !vocalWhyExpanded}>
-                            <span class="side-label">Voice Read</span>
-                            <span class="ascore-vocal-score" style="color: {scoreColor}">{vf.confidence_score}%</span>
-                            <span class="ascore-vocal-tone">{vf.tone}</span>
-                            {#if vf.fillers_noted}<span class="ascore-vocal-fillers">{vf.fillers_noted}</span>{/if}
-                            <span class="ascore-vocal-chevron">{vocalWhyExpanded ? '▾' : '▸'}</span>
-                          </button>
-                          {#if vocalWhyExpanded}
-                            <p class="ascore-coaching">{vf.coaching}</p>
+                      <button class="you-log-header-btn" onclick={() => youDeliveryExpanded = !youDeliveryExpanded} title="Click to show/hide Your Delivery tips">
+                        <span class="you-log-header">Your Delivery</span>
+                        <span class="you-log-header-tip">tip</span>
+                        <span class="you-log-header-chevron">{youDeliveryExpanded ? '▾' : '▸'}</span>
+                      </button>
+                      {#if youDeliveryExpanded}
+                        {#if latestFeedback}
+                          {#if latestFeedback.vocalFeedback}
+                            {@const vf = latestFeedback.vocalFeedback}
+                            {@const scoreColor = vf.confidence_score >= 70 ? '#4ade80' : vf.confidence_score >= 45 ? '#f59e0b' : '#f87171'}
+                            <button class="side-stat ascore-stat-btn" title="Click to expand coaching details" onclick={() => vocalWhyExpanded = !vocalWhyExpanded}>
+                              <span class="side-label">Voice Read</span>
+                              <span class="ascore-vocal-score" style="color: {scoreColor}">{vf.confidence_score}%</span>
+                              <span class="ascore-vocal-tone">{vf.tone}</span>
+                              {#if vf.fillers_noted}<span class="ascore-vocal-fillers">{vf.fillers_noted}</span>{/if}
+                              <span class="ascore-vocal-chevron">{vocalWhyExpanded ? '▾' : '▸'}</span>
+                            </button>
+                            {#if vocalWhyExpanded && vf.coaching}
+                              <p class="ascore-coaching you-log-coaching">{vf.coaching}</p>
+                            {/if}
+                          {/if}
+                          {#if latestFeedback.answerFeedback}
+                            {@const af = latestFeedback.answerFeedback}
+                            <button class="side-stat ascore-stat-btn" title="Click to expand answer coaching" onclick={() => answerWhyExpanded = !answerWhyExpanded}>
+                              <span class="side-label">Answer</span>
+                              {#if af.missed_followup}<span class="ascore-badge ascore-warn">No follow-up</span>{/if}
+                              {#if af.missed_metric}<span class="ascore-badge ascore-warn">Add metric</span>{/if}
+                              {#if !af.missed_followup && !af.missed_metric}<span class="side-value" style="color: #4ade80">✓</span>{/if}
+                              <span class="ascore-vocal-chevron">{answerWhyExpanded ? '▾' : '▸'}</span>
+                            </button>
+                            {#if answerWhyExpanded && af.coaching}
+                              <p class="ascore-coaching you-log-coaching">{af.coaching}</p>
+                            {/if}
                           {/if}
                         {/if}
-                        {#if latestFeedback.answerFeedback}
-                          {@const af = latestFeedback.answerFeedback}
-                          <button class="side-stat ascore-stat-btn" onclick={() => answerWhyExpanded = !answerWhyExpanded}>
-                            <span class="side-label">Answer</span>
-                            {#if af.missed_followup}<span class="ascore-badge ascore-warn">No follow-up</span>{/if}
-                            {#if af.missed_metric}<span class="ascore-badge ascore-warn">Add metric</span>{/if}
-                            {#if !af.missed_followup && !af.missed_metric}<span class="side-value" style="color: #4ade80">✓</span>{/if}
-                            <span class="ascore-vocal-chevron">{answerWhyExpanded ? '▾' : '▸'}</span>
-                          </button>
-                          {#if answerWhyExpanded}
-                            <p class="ascore-coaching">{af.coaching}</p>
-                          {/if}
-                        {/if}
-                      {/if}
-                      {#if energySignal}
-                        <div class="you-log-entry you-log-cue">
-                          <span class="you-log-cue-text">{energySignal}</span>
-                        </div>
-                      {/if}
-                      {#each youLog.slice().reverse() as entry, i}
-                        <div class="you-log-entry" class:you-log-latest={i === 0 && !energySignal && !latestFeedback}>
-                          <div class="you-log-meta">
-                            <span class="you-log-who">You</span>
-                            <span class="you-log-icon">✓</span>
-                            {#if i > 0}<span class="you-log-ago">{fmtAgo(entry.time)}</span>{/if}
+                        {#if energySignal}
+                          <div class="you-log-entry you-log-cue" title="Detected from your recent transcript">
+                            <span class="you-log-cue-text">{energySignal}</span>
                           </div>
-                          <span class="you-log-text">{entry.text}</span>
-                        </div>
-                      {/each}
+                        {/if}
+                        {#each youLog.slice().reverse() as entry, i}
+                          <div class="you-log-entry" class:you-log-latest={i === 0 && !energySignal && !latestFeedback}>
+                            <div class="you-log-meta">
+                              <span class="you-log-who">You</span>
+                              <span class="you-log-icon">✓</span>
+                              {#if i > 0}<span class="you-log-ago">{fmtAgo(entry.time)}</span>{/if}
+                            </div>
+                            <span class="you-log-text">{entry.text}</span>
+                          </div>
+                        {/each}
+                      {/if}
                     </div>
                   {/if}
                 {:else if sid === 'answer-score'}
@@ -2749,7 +2758,11 @@ Ask: team | How long have you been with the team?`;
   .coaching-log-who { color: #ef4444; font-weight: 800; margin-right: 0.35rem; }
   .coaching-log-who-you { color: #4ade80; font-weight: 800; margin-right: 0.35rem; }
   .you-log { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.25rem 0; margin-top: 0.2rem; }
-  .you-log-header { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #334155; padding: 0 0.1rem 0.1rem; }
+  .you-log-header { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #334155; }
+  .you-log-header-btn { display: flex; align-items: center; gap: 0.3rem; background: none; border: none; padding: 0 0.1rem 0.1rem; cursor: pointer; width: 100%; text-align: left; }
+  .you-log-header-btn:hover .you-log-header { color: #475569; }
+  .you-log-header-tip { font-size: var(--fs-xs); color: #1e3a5f; background: #0a1525; border-radius: 0.2rem; padding: 0.05rem 0.3rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .you-log-header-chevron { font-size: var(--fs-xs); color: #334155; margin-left: auto; }
   .you-log-cue { background: #1a0f00 !important; border-color: #92400e !important; border-left-color: #f59e0b !important; }
   .you-log-cue-text { font-size: var(--fs-sm); color: #f59e0b; font-style: italic; line-height: 1.35; }
   .you-log-entry { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.4rem 0.6rem; background: #060e0a; border: 1px solid #0f1e14; border-radius: 0.4rem; }

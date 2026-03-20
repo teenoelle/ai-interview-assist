@@ -54,9 +54,9 @@
   .energy-panel { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.25rem 0; }
   .pace-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .pace-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #475569; min-width: 2.5rem; }
-  .pace-wpm { font-size: var(--fs-sm); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .pace-wpm { font-size: var(--fs-sm); font-weight: 700; font-variant-numeric: tabular-nums; margin-left: auto; }
   .pace-tip { font-size: var(--fs-sm); font-style: italic; }
-  .pace-idle { font-size: var(--fs-sm); color: #1e293b; }
+  .pace-idle { font-size: var(--fs-sm); color: #1e293b; margin-left: auto; }
 
   .pace-bar-wrap { display: flex; flex-direction: column; gap: 0.15rem; background: none; border: none; padding: 0; width: 100%; text-align: left; }
   .pace-bar-clickable { cursor: pointer; }

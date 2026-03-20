@@ -54,7 +54,9 @@
     selectedKw = kw;
     if (horizontal && e) {
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      popupPos = { x: rect.left, y: window.innerHeight - rect.top + 6 };
+      const POPUP_MAX_W = 320;
+      const x = Math.max(8, Math.min(rect.left, window.innerWidth - POPUP_MAX_W - 8));
+      popupPos = { x, y: window.innerHeight - rect.top + 6 };
     }
     if (!definitions[kw]) {
       loadingKw = kw;
@@ -73,22 +75,19 @@
           <button class="kw-chip kw-done"
             class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
             class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
-            onclick={(e) => showDefinition(kw, e)}
-            title={definitions[kw] ? `✓ ${definitions[kw].definition}` : 'You mentioned this — click for definition and tip'}>✓ {kw}{#if selectedKw === kw} ▾{/if}</button>
+            onclick={(e) => showDefinition(kw, e)}>✓ {kw}{#if selectedKw === kw} ▾{/if}</button>
         {/each}
         {#each notYet.filter(k => interviewerRaisedSet.has(k)) as kw}
           <button class="kw-chip kw-raised"
             class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
             class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
-            onclick={(e) => showDefinition(kw, e)}
-            title={keywordQuestionMap[kw] ? `Interviewer raised this in: "${keywordQuestionMap[kw]}" — click for definition and tip` : 'Interviewer raised this — click for definition and tip'}>↑ {kw}{#if selectedKw === kw} ▾{/if}</button>
+            onclick={(e) => showDefinition(kw, e)}>↑ {kw}{#if selectedKw === kw} ▾{/if}</button>
         {/each}
         {#each notYet.filter(k => !interviewerRaisedSet.has(k)) as kw}
           <button class="kw-chip kw-todo"
             class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
             class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
-            onclick={(e) => showDefinition(kw, e)}
-            title={definitions[kw] ? definitions[kw].definition : 'Not yet mentioned — click for definition and interview tip'}>{kw}{#if selectedKw === kw} ▾{/if}</button>
+            onclick={(e) => showDefinition(kw, e)}>{kw}{#if selectedKw === kw} ▾{/if}</button>
         {/each}
       </div>
       <div class="kw-hbar-meta">
@@ -135,22 +134,19 @@
           <button class="kw-chip kw-done"
             class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
             class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
-            onclick={() => showDefinition(kw)}
-            title={definitions[kw] ? `✓ ${definitions[kw].definition}` : 'You mentioned this — click for definition and tip'}>✓ {kw}{#if selectedKw === kw} ▾{/if}</button>
+            onclick={() => showDefinition(kw)}>✓ {kw}{#if selectedKw === kw} ▾{/if}</button>
         {/each}
         {#each notYet.filter(k => interviewerRaisedSet.has(k)) as kw}
           <button class="kw-chip kw-raised"
             class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
             class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
-            onclick={() => showDefinition(kw)}
-            title={keywordQuestionMap[kw] ? `Interviewer raised this in: "${keywordQuestionMap[kw]}" — click for tip` : 'Interviewer raised this — click for definition and tip'}>↑ {kw}{#if selectedKw === kw} ▾{/if}</button>
+            onclick={() => showDefinition(kw)}>↑ {kw}{#if selectedKw === kw} ▾{/if}</button>
         {/each}
         {#each notYet.filter(k => !interviewerRaisedSet.has(k)) as kw}
           <button class="kw-chip kw-todo"
             class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
             class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
-            onclick={() => showDefinition(kw)}
-            title={definitions[kw] ? definitions[kw].definition : 'Not yet mentioned — click for definition and interview tip'}>{kw}{#if selectedKw === kw} ▾{/if}</button>
+            onclick={() => showDefinition(kw)}>{kw}{#if selectedKw === kw} ▾{/if}</button>
         {/each}
       </div>
 

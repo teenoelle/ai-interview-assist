@@ -1593,7 +1593,7 @@ Ask: team | How long have you been with the team?`;
               ondragover={onColDragOver} ondrop={(e) => onColDrop('right2', e)}>
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div class="col-header col-drag-handle" draggable={true} ondragstart={(e) => onColDragStart('right2', e)}>
-                <span class="col-label">{collapsedCols.has('right2') ? '…' : 'Coaching'}</span>
+                <span class="col-label">{collapsedCols.has('right2') ? '…' : 'Resources'}</span>
                 {#if !collapsedCols.has('right2')}
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('rightBottom', -10)} title="Decrease font size">A−</button>
@@ -1625,7 +1625,7 @@ Ask: team | How long have you been with the team?`;
             {@const prevRole = i > 0 ? (SECTION_ROLE[panelSections[i-1].id] ?? 'coaching') : null}
             {#if prevRole !== myRole}
               <div class="group-divider group-divider-{myRole}">
-                {myRole === 'interviewer' ? '👤 Interviewer' : myRole === 'you' ? '✅ Your Performance' : '🎯 Resources'}
+                {myRole === 'interviewer' ? '👤 Interviewer' : myRole === 'you' ? '✅ Your Performance' : 'Resources'}
               </div>
             {/if}
             <!-- svelte-ignore a11y_no_static_element_interactions -->

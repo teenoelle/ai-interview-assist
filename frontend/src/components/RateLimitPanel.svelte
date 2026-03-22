@@ -39,6 +39,19 @@
   }
 
   const entries = $derived(Object.entries(rateLimits));
+
+  function minsLeft(remaining: number, rate: number | null): number {
+    if (!rate || rate <= 0) return Infinity;
+    return remaining / rate;
+  }
+
+  function isNearLimit(entry: RateLimitEntry): boolean {
+    const p = pct(entry);
+    if (p < 20) return true;
+    const rate = computeRate(entry.history);
+    const mins = minsLeft(entry.remaining, rate);
+    return mins < 5;
+  }
 </script>
 
 <div class="rate-panel">
@@ -49,7 +62,8 @@
       {#each entries as [provider, entry]}
         {@const p = pct(entry)}
         {@const rate = computeRate(entry.history)}
-        <div class="provider-row">
+        {@const warn = isNearLimit(entry)}
+        <div class="provider-row" class:provider-warn={warn}>
           <div class="provider-header">
             <span class="provider-name">{provider}</span>
             <span class="counts">{entry.remaining.toLocaleString()} / {entry.limit.toLocaleString()}</span>
@@ -71,6 +85,9 @@
           </div>
           {#if callCounts[provider] != null}
             <div class="call-count">{callCounts[provider]} call{callCounts[provider] !== 1 ? 's' : ''} this session</div>
+          {/if}
+          {#if warn}
+            <div class="warn-badge">⚠ Rate limit low — responses may slow down</div>
           {/if}
         </div>
       {/each}
@@ -155,4 +172,6 @@
   }
   .call-count { font-size: var(--fs-xs); color: #475569; }
   .provider-row-counts-only { border-color: #1e293b; opacity: 0.7; }
+  .provider-warn { border-color: #92400e; }
+  .warn-badge { font-size: var(--fs-xs); color: #f59e0b; font-weight: 600; letter-spacing: 0.02em; }
 </style>

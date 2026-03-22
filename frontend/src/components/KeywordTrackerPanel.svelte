@@ -1,7 +1,8 @@
 <script lang="ts">
-  const { keywords, mentionedSet, interviewerRaisedSet = new Set(), keywordQuestionMap = {}, horizontal = false } = $props<{
+  const { keywords, mentionedSet, flashSet = new Set(), interviewerRaisedSet = new Set(), keywordQuestionMap = {}, horizontal = false } = $props<{
     keywords: string[];
     mentionedSet: Set<string>;
+    flashSet?: Set<string>;
     interviewerRaisedSet?: Set<string>;
     keywordQuestionMap?: Record<string, string>;
     horizontal?: boolean;
@@ -73,6 +74,7 @@
       <div class="kw-hbar-chips">
         {#each mentioned as kw}
           <button class="kw-chip kw-done"
+            class:kw-flash={flashSet.has(kw)}
             class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
             class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
             onclick={(e) => showDefinition(kw, e)}>✓ {kw}{#if selectedKw === kw} ▾{/if}</button>
@@ -132,6 +134,7 @@
       <div class="kw-list">
         {#each mentioned as kw}
           <button class="kw-chip kw-done"
+            class:kw-flash={flashSet.has(kw)}
             class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
             class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
             onclick={() => showDefinition(kw)}>✓ {kw}{#if selectedKw === kw} ▾{/if}</button>
@@ -227,6 +230,8 @@
   }
   .kw-chip:hover { opacity: 0.75; }
   .kw-done { color: #22c55e; background: #071a0f; border-color: #14532d; }
+  .kw-flash { animation: kw-flash 0.6s ease-out 3; }
+  @keyframes kw-flash { 0% { background: #22c55e; color: #031a07; border-color: #22c55e; } 100% { background: #071a0f; color: #22c55e; border-color: #14532d; } }
   .kw-todo { color: #334155; background: #080d18; border-color: #1e293b; }
   .kw-raised {
     color: #fbbf24; background: #1a1000; border-color: #92400e;

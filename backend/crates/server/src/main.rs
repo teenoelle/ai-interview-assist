@@ -1,6 +1,10 @@
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use axum::{
+    extract::{Request, State},
+    http::StatusCode,
+    middleware::{self, Next},
+    response::IntoResponse,
     routing::{delete, get, post},
     Router,
 };
@@ -18,6 +22,34 @@ mod http_handler;
 mod tts_handler;
 mod review;
 mod review_handler;
+
+
+async fn auth_middleware(
+    State(state): State<AppState>,
+    req: Request,
+    next: Next,
+) -> impl IntoResponse {
+    if let Some(expected) = &state.app_token {
+        // Check Authorization: Bearer <token> header
+        let bearer = req.headers()
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.strip_prefix("Bearer "))
+            .map(|s| s.to_string());
+        // Check ?token=<token> query param
+        let query_token = req.uri().query().and_then(|q| {
+            q.split('&').find_map(|pair| {
+                let (k, v) = pair.split_once('=')?;
+                if k == "token" { Some(v.to_string()) } else { None }
+            })
+        });
+        let provided = bearer.or(query_token);
+        if provided.as_deref() != Some(expected.as_str()) {
+            return (StatusCode::UNAUTHORIZED, "Invalid or missing token").into_response();
+        }
+    }
+    next.run(req).await.into_response()
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -104,6 +136,7 @@ async fn main() -> anyhow::Result<()> {
         call_counts: call_counts.clone(),
         piper_binary: config.piper_binary.clone(),
         piper_models_dir: config.piper_models_dir.clone(),
+        app_token: config.app_token.clone(),
         reviews_dir,
         review_sessions: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
     };
@@ -174,11 +207,7 @@ async fn main() -> anyhow::Result<()> {
         .join("frontend")
         .join("dist");
 
-    let app = Router::new()
-        .route("/ws/audio", get(ws_handler::ws_audio))
-        .route("/ws/audio/mic", get(ws_handler::ws_audio_mic))
-        .route("/ws/video", get(ws_handler::ws_video))
-        .route("/ws/events", get(ws_handler::ws_events))
+    let api_routes = Router::new()
         .route("/api/setup/finalize", post(http_handler::handle_setup_finalize))
         .route("/api/debrief", post(http_handler::handle_debrief))
         .route("/api/practice-question", post(http_handler::handle_practice_question))
@@ -194,7 +223,6 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/usage", get(http_handler::handle_usage))
         .route("/api/tts/voices", get(tts_handler::handle_tts_voices))
         .route("/api/tts/speak", post(tts_handler::handle_speak))
-        // Review pipeline
         .route("/api/review/upload", post(review_handler::handle_upload))
         .route("/api/review/from-live", post(review_handler::handle_from_live))
         .route("/api/reviews", get(review_handler::handle_list_reports))
@@ -204,6 +232,14 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/review/:id/events", get(review_handler::handle_events))
         .route("/api/review/:id/source", get(review_handler::handle_get_source))
         .route("/api/review/:id/download", get(review_handler::handle_download))
+        .layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
+
+    let app = Router::new()
+        .route("/ws/audio", get(ws_handler::ws_audio))
+        .route("/ws/audio/mic", get(ws_handler::ws_audio_mic))
+        .route("/ws/video", get(ws_handler::ws_video))
+        .route("/ws/events", get(ws_handler::ws_events))
+        .merge(api_routes)
         .fallback_service(ServeDir::new(&frontend_path))
         .layer(CorsLayer::permissive())
         .layer(DefaultBodyLimit::max(500 * 1024 * 1024)) // 500 MB — review video uploads

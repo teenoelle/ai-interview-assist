@@ -2,7 +2,7 @@
   import type { TranscriptEntry } from '../lib/types';
   import PanelHeader from './PanelHeader.svelte';
 
-  const { entries } = $props<{ entries: TranscriptEntry[] }>();
+  const { entries, onFlipSpeaker } = $props<{ entries: TranscriptEntry[]; onFlipSpeaker?: (idx: number) => void }>();
 
   let container: HTMLElement;
 
@@ -37,11 +37,14 @@
     {#if entries.length === 0}
       <p class="empty">Transcript will appear here when audio is captured...</p>
     {:else}
-      {#each entries as entry (entry.timestamp_ms)}
+      {#each entries as entry, i (entry.timestamp_ms)}
         <div class="entry" class:interviewer={entry.speaker === 'Interviewer'} class:you={entry.speaker === 'You'}>
           <div class="meta">
             <span class="speaker" class:interviewer={entry.speaker === 'Interviewer'}>{entry.speaker}</span>
             <span class="time">{formatTime(entry.timestamp_ms)}</span>
+            {#if onFlipSpeaker}
+              <button class="flip-btn" title="Flip speaker" onclick={() => onFlipSpeaker(i)}>⇄</button>
+            {/if}
           </div>
           <span class="text">{entry.text}</span>
         </div>
@@ -68,6 +71,13 @@
   }
   .speaker.interviewer { color: var(--clr-speaker-them, #f87171); }
   .time { color: var(--clr-text-muted, #475569); font-size: var(--fs-sm); font-family: var(--ff-mono); }
+  .flip-btn {
+    background: none; border: none; color: #334155; font-size: var(--fs-sm);
+    cursor: pointer; padding: 0 0.2rem; line-height: 1; opacity: 0;
+    transition: opacity 0.15s, color 0.15s; margin-left: auto;
+  }
+  .entry:hover .flip-btn { opacity: 1; }
+  .flip-btn:hover { color: #60a5fa; }
   .text { color: #cbd5e1; font-size: var(--fs-base); line-height: 1.5; }
   .empty { color: var(--clr-text-muted, #475569); font-style: italic; text-align: center; padding: 2rem; }
 </style>

@@ -128,11 +128,17 @@ pub async fn list_reports(reviews_dir: &Path) -> Vec<ReviewReport> {
     let mut reports = Vec::new();
     let Ok(mut rd) = tokio::fs::read_dir(reviews_dir).await else { return reports; };
     while let Ok(Some(entry)) = rd.next_entry().await {
-        let path = entry.path().join("report.json");
-        if let Ok(json) = tokio::fs::read_to_string(&path).await {
+        let dir = entry.path();
+        let report_path = dir.join("report.json");
+        let processing_path = dir.join("processing.json");
+        if let Ok(json) = tokio::fs::read_to_string(&report_path).await {
             if let Ok(r) = serde_json::from_str::<ReviewReport>(&json) {
                 reports.push(r);
             }
+        } else if tokio::fs::metadata(&processing_path).await.is_ok() {
+            // processing.json exists but no report.json = crashed/interrupted; clean up
+            tracing::warn!("Removing interrupted review at {:?}", dir);
+            let _ = tokio::fs::remove_dir_all(&dir).await;
         }
     }
     reports.sort_by(|a, b| b.created_at.cmp(&a.created_at));
@@ -486,6 +492,12 @@ pub async fn process_review(
     let work_dir = cfg.reviews_dir.join(&id);
     tokio::fs::create_dir_all(&work_dir).await?;
 
+    // Mark as in-progress so we can detect crashes on restart
+    let _ = tokio::fs::write(
+        work_dir.join("processing.json"),
+        serde_json::json!({ "id": id, "source_filename": source_filename, "started_at": now_ms() }).to_string(),
+    ).await;
+
     // 1. Probe duration + channel layout
     send_progress(&progress_tx, 5, "Detecting audio layout…");
     let layout = detect_channels(&source_path).await;
@@ -582,6 +594,8 @@ pub async fn process_review(
     };
 
     save_report(&cfg.reviews_dir, &report).await?;
+    // Remove processing marker now that report is saved
+    let _ = tokio::fs::remove_file(work_dir.join("processing.json")).await;
     let _ = progress_tx.send(ReviewProgress { pct: 100, step: "Done".to_string(), done: true, error: None });
     Ok(report)
 }

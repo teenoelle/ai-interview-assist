@@ -70,7 +70,7 @@
       <button onclick={togglePause} class="pause-btn" class:paused title="Pause/resume audio (P)">
         {paused ? '▶' : '⏸'}
       </button>
-      <AudioMeter {micLevel} {systemLevel} {paused} />
+      <AudioMeter {micLevel} {systemLevel} {paused} capturing={active} />
     {/if}
   </div>
 </div>

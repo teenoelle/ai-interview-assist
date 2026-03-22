@@ -1,26 +1,52 @@
 use axum::{
     extract::{
         ws::{Message, WebSocket},
-        State, WebSocketUpgrade,
+        Query, State, WebSocketUpgrade,
     },
-    response::Response,
+    http::StatusCode,
+    response::{IntoResponse, Response},
 };
 use futures::StreamExt;
+use serde::Deserialize;
 use crate::state::AppState;
 
-pub async fn ws_audio(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
+#[derive(Deserialize, Default)]
+pub struct TokenQuery {
+    token: Option<String>,
+}
+
+fn check_token(state: &AppState, query_token: Option<&str>) -> bool {
+    match &state.app_token {
+        None => true, // no auth configured
+        Some(expected) => query_token.map(|t| t == expected).unwrap_or(false),
+    }
+}
+
+pub async fn ws_audio(ws: WebSocketUpgrade, Query(q): Query<TokenQuery>, State(state): State<AppState>) -> Response {
+    if !check_token(&state, q.token.as_deref()) {
+        return (StatusCode::UNAUTHORIZED, "Invalid or missing token").into_response();
+    }
     ws.on_upgrade(move |socket| handle_audio(socket, state.audio_tx))
 }
 
-pub async fn ws_audio_mic(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
+pub async fn ws_audio_mic(ws: WebSocketUpgrade, Query(q): Query<TokenQuery>, State(state): State<AppState>) -> Response {
+    if !check_token(&state, q.token.as_deref()) {
+        return (StatusCode::UNAUTHORIZED, "Invalid or missing token").into_response();
+    }
     ws.on_upgrade(move |socket| handle_audio(socket, state.mic_audio_tx))
 }
 
-pub async fn ws_video(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
+pub async fn ws_video(ws: WebSocketUpgrade, Query(q): Query<TokenQuery>, State(state): State<AppState>) -> Response {
+    if !check_token(&state, q.token.as_deref()) {
+        return (StatusCode::UNAUTHORIZED, "Invalid or missing token").into_response();
+    }
     ws.on_upgrade(move |socket| handle_video(socket, state.video_tx))
 }
 
-pub async fn ws_events(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
+pub async fn ws_events(ws: WebSocketUpgrade, Query(q): Query<TokenQuery>, State(state): State<AppState>) -> Response {
+    if !check_token(&state, q.token.as_deref()) {
+        return (StatusCode::UNAUTHORIZED, "Invalid or missing token").into_response();
+    }
     ws.on_upgrade(move |socket| handle_events(socket, state.event_tx))
 }
 

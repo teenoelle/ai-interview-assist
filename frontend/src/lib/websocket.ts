@@ -1,5 +1,15 @@
 import type { WsEvent } from './types';
 
+/** Read optional APP_TOKEN from localStorage — set by the user if the server has auth enabled. */
+export function getAppToken(): string | null {
+  try { return localStorage.getItem('app-token'); } catch { return null; }
+}
+
+function withToken(path: string): string {
+  const token = getAppToken();
+  return token ? `${path}?token=${encodeURIComponent(token)}` : path;
+}
+
 type EventHandler = (event: WsEvent) => void;
 type StatusHandler = (status: 'connected' | 'disconnected' | 'reconnecting', attempt: number) => void;
 
@@ -18,7 +28,7 @@ export class EventWebSocket {
 
   private _connect() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const url = `${protocol}//${location.host}/ws/events`;
+    const url = `${protocol}//${location.host}${withToken('/ws/events')}`;
     this.ws = new WebSocket(url);
 
     this.ws.onopen = () => {
@@ -67,7 +77,7 @@ export class AudioWebSocket {
 
   connect() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    this.ws = new WebSocket(`${protocol}//${location.host}${this.path}`);
+    this.ws = new WebSocket(`${protocol}//${location.host}${withToken(this.path)}`);
   }
 
   send(data: ArrayBuffer) {
@@ -82,7 +92,7 @@ export class VideoWebSocket {
 
   connect() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    this.ws = new WebSocket(`${protocol}//${location.host}/ws/video`);
+    this.ws = new WebSocket(`${protocol}//${location.host}${withToken('/ws/video')}`);
   }
 
   send(data: ArrayBuffer) {

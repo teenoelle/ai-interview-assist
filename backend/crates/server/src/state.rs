@@ -34,6 +34,7 @@ pub struct AppState {
     pub call_counts: Arc<std::sync::Mutex<std::collections::HashMap<String, u64>>>,
     pub piper_binary: Option<String>,
     pub piper_models_dir: Option<String>,
+    pub app_token: Option<String>,
     pub reviews_dir: PathBuf,
     pub review_sessions: Arc<std::sync::Mutex<std::collections::HashMap<String, watch::Receiver<ReviewProgress>>>>,
 }

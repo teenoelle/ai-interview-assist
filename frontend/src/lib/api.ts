@@ -1,3 +1,15 @@
+function authHeaders(): Record<string, string> {
+  try {
+    const token = localStorage.getItem('app-token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  } catch { return {}; }
+}
+
+export function authFetch(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  const headers = { ...authHeaders(), ...(init?.headers as Record<string, string> ?? {}) };
+  return fetch(input, { ...init, headers });
+}
+
 export interface CompanyBrief {
   name: string;
   what_they_do: string;
@@ -26,7 +38,7 @@ export interface SetupResponse {
 }
 
 export async function submitSetup(formData: FormData): Promise<SetupResponse> {
-  const resp = await fetch('/api/setup/finalize', {
+  const resp = await authFetch('/api/setup/finalize', {
     method: 'POST',
     body: formData,
   });
@@ -39,7 +51,7 @@ export async function submitSetup(formData: FormData): Promise<SetupResponse> {
 
 export async function fetchUsage(): Promise<Record<string, number>> {
   try {
-    const resp = await fetch('/api/usage');
+    const resp = await authFetch('/api/usage');
     if (resp.ok) return resp.json();
   } catch {}
   return {};

@@ -38,7 +38,7 @@
   import type { FillerCount } from './lib/filler';
   import type { MediaCapture } from './lib/capture';
   import type { CompanyBrief, InterviewerSummary } from './lib/api';
-  import { fetchUsage } from './lib/api';
+  import { fetchUsage, authFetch } from './lib/api';
   import { parseSuggestion, parseCues } from './lib/parseSuggestion';
   import { EMOTION_COLORS, EMOTION_CONFIG, emotionColor, POSITIVE_EMOTIONS, NEGATIVE_EMOTIONS } from './lib/emotions';
   import { tooltip } from './lib/tooltip';
@@ -83,6 +83,31 @@
   let showReviewPanel = $state(false);
   let reviewReport = $state<ReviewReport | null>(null);
   let savingLiveReport = $state(false);
+  let reviewList = $state<ReviewReport[]>([]);
+  let reviewSearch = $state('');
+  let showReviewList = $state(false);
+
+  async function loadReviewList() {
+    try {
+      const resp = await authFetch('/api/reviews');
+      if (resp.ok) reviewList = await resp.json();
+    } catch { /* ignore */ }
+  }
+
+  async function deleteReview(id: string) {
+    try {
+      await authFetch(`/api/review/${id}`, { method: 'DELETE' });
+      reviewList = reviewList.filter(r => r.id !== id);
+    } catch { /* ignore */ }
+  }
+
+  const filteredReviews = $derived(
+    reviewSearch.trim()
+      ? reviewList.filter(r =>
+          (r.source_filename ?? '').toLowerCase().includes(reviewSearch.toLowerCase())
+        )
+      : reviewList
+  );
   let showWhisper = $state(false);
   let emotionHistory = $state<string[]>([]);
   let vocalWhyExpanded = $state(false);
@@ -107,6 +132,8 @@
   let jdKeywords = $state<string[]>(loadKeywords());
   let mentionedKeywords = $state<Set<string>>(new Set());
   let interviewerRaisedKeywords = $state<Set<string>>(new Set());
+  let flashingKeywords = $state<Set<string>>(new Set());
+  let flashTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Salary coach
   let salaryTactics = $state<{ deflect: string; anchor: string; counter_range: string; never_say: string } | null>(null);
@@ -649,7 +676,7 @@
     const fd = new FormData();
     fd.append('image', blob, 'webcam.jpg');
     try {
-      const resp = await fetch('/api/presence-check', { method: 'POST', body: fd });
+      const resp = await authFetch('/api/presence-check', { method: 'POST', body: fd });
       if (resp.ok) {
         const data = await resp.json();
         const newIssues: string[] = data.issues ?? [];
@@ -753,6 +780,10 @@
   });
   const nonNeutralTones = $derived(audioEmotionHistory.filter(t => t !== 'neutral'));
 
+  function flipSpeaker(idx: number) {
+    transcript = transcript.map((e, i) => i === idx ? { ...e, speaker: e.speaker === 'You' ? 'Interviewer' : 'You' } : e);
+  }
+
   // Rate limits
   interface RateLimitEntry { remaining: number; limit: number; history: Array<{ r: number; t: number }>; }
   let rateLimits = $state<Record<string, RateLimitEntry>>({});
@@ -792,7 +823,7 @@
     loadingSalary = true;
     try {
       const sp = companyBrief ? `${companyBrief.name}: ${companyBrief.what_they_do}` : 'unknown role';
-      const resp = await fetch('/api/salary-coach', {
+      const resp = await authFetch('/api/salary-coach', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role_context: sp }),
       });
@@ -805,7 +836,7 @@
     if (loadingNextQ) return;
     loadingNextQ = true;
     try {
-      const resp = await fetch('/api/next-question', {
+      const resp = await authFetch('/api/next-question', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript: transcript.map(e => ({ speaker: e.speaker, text: e.text })) }),
       });
@@ -824,7 +855,7 @@
     if (loadingNextSteps || nextSteps.length > 0) return;
     loadingNextSteps = true;
     try {
-      const resp = await fetch('/api/next-steps', {
+      const resp = await authFetch('/api/next-steps', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript: transcript.map(e => ({ speaker: e.speaker, text: e.text })) }),
       });
@@ -855,7 +886,7 @@ Ask: team | How long have you been with the team?`;
     suggestions = [{ question: '🤝 Opening', suggestion: OPENING_SUGGESTION_STATIC, streaming: false }];
 
     try {
-      const resp = await fetch('/api/practice-question', {
+      const resp = await authFetch('/api/practice-question', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question }),
       });
@@ -902,6 +933,10 @@ Ask: team | How long have you been with the team?`;
             const updated = new Set(mentionedKeywords);
             newlyMentioned.forEach(k => updated.add(k));
             mentionedKeywords = updated;
+            // Flash newly-detected keywords for 2 seconds
+            flashingKeywords = new Set(newlyMentioned);
+            if (flashTimer) clearTimeout(flashTimer);
+            flashTimer = setTimeout(() => { flashingKeywords = new Set(); }, 2000);
           }
           const newCounts = countFillers(event.text);
           const merged: Record<string, number> = {};
@@ -925,7 +960,7 @@ Ask: team | How long have you been with the team?`;
               const conf = computeConfidence(capturedAnswer, capturedSuggestion);
               suggestions = suggestions.map((s, i) => i === capturedQIdx ? { ...s, confidenceScore: conf.score, matchedKeywords: conf.matched, missedKeywords: conf.missed } : s);
             }
-            fetch('/api/vocal-sentiment', {
+            authFetch('/api/vocal-sentiment', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1035,7 +1070,7 @@ Ask: team | How long have you been with the team?`;
             if (prevSuggestion && prevSuggestion.suggestion) {
               const prevIdx = currentQuestionIdx;
               const answerText = youSegmentsSinceQuestion.join(' ');
-              fetch('/api/answer-feedback', {
+              authFetch('/api/answer-feedback', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1244,12 +1279,39 @@ Ask: team | How long have you been with the team?`;
         <button class="setup-review-btn" onclick={() => showReviewUpload = true}>
           ⬆ Review a Recording
         </button>
+        <button class="setup-review-btn" onclick={() => { showReviewList = !showReviewList; if (!showReviewList) return; loadReviewList(); }}>
+          {showReviewList ? '▴' : '▾'} Past Reports
+        </button>
         {#if reviewReport}
           <button class="setup-review-view-btn" onclick={() => { showReviewPanel = true; }}>
             View last report: {reviewReport.source_filename}
           </button>
         {/if}
       </div>
+      {#if showReviewList}
+        <div class="review-list-panel">
+          <input class="review-search" type="text" placeholder="Search reports…" bind:value={reviewSearch} />
+          {#if filteredReviews.length === 0}
+            <p class="review-list-empty">{reviewSearch ? 'No matching reports.' : 'No reports yet. Upload a recording to get started.'}</p>
+          {:else}
+            <div class="review-list">
+              {#each filteredReviews as r}
+                <div class="review-list-item">
+                  <div class="review-list-meta">
+                    <span class="review-list-name">{r.source_filename ?? 'Untitled'}</span>
+                    <span class="review-list-date">{r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}</span>
+                  </div>
+                  <p class="review-list-summary">{r.qa_pairs.length} Q&A · {r.vocal_summary.avg_wpm} wpm · {Math.round(r.speaker_summary.you_pct)}% you</p>
+                  <div class="review-list-actions">
+                    <button class="review-list-open" onclick={() => { reviewReport = r; showReviewPanel = true; }}>Open</button>
+                    <button class="review-list-delete" onclick={() => deleteReview(r.id)}>Delete</button>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
       {#if Object.keys(callCounts).length > 0 || Object.keys(rateLimits).length > 0}
         <div class="setup-usage">
           <RateLimitPanel {rateLimits} {callCounts} />
@@ -1375,7 +1437,7 @@ Ask: team | How long have you been with the team?`;
             onclick={async () => {
               savingLiveReport = true;
               try {
-                const resp = await fetch('/api/review/from-live', { method: 'POST' });
+                const resp = await authFetch('/api/review/from-live', { method: 'POST' });
                 if (resp.ok) {
                   reviewReport = await resp.json();
                   showReviewPanel = true;
@@ -1438,7 +1500,7 @@ Ask: team | How long have you been with the team?`;
               {#if !collapsedCols.has('left')}
                 <div class="col-body">
                   <div class="col-body-scroll" style="zoom: {leftZoom/100}">
-                    <TranscriptPanel entries={transcript} />
+                    <TranscriptPanel entries={transcript} onFlipSpeaker={flipSpeaker} />
                   </div>
                 </div>
               {/if}
@@ -1700,6 +1762,13 @@ Ask: team | How long have you been with the team?`;
                   <!-- merged into sentiment-bar -->
                 {:else if sid === 'sentiment-bar'}
                   {#if presenceIssues.length > 0}<BodyLanguagePanel {presenceIssues} />{/if}
+                  {#if emotionHistory.length > 1}
+                    <div class="emotion-sparkline">
+                      {#each emotionHistory.slice(-15) as emo}
+                        <span class="emotion-dot" style="background: {emotionColor(emo)}" title={emo}></span>
+                      {/each}
+                    </div>
+                  {/if}
                   {#if coachingLog.length > 0}
                     <div class="coaching-log coaching-log-sentiment">
                       {#each coachingLog.slice().reverse() as entry, i}
@@ -1789,7 +1858,7 @@ Ask: team | How long have you been with the team?`;
                   {#if jdKeywords.length > 0}
                     <div class="side-section">
                       <div class="side-section-label">Keywords</div>
-                      <KeywordTrackerPanel keywords={jdKeywords} mentionedSet={mentionedKeywords} interviewerRaisedSet={interviewerRaisedKeywords} />
+                      <KeywordTrackerPanel keywords={jdKeywords} mentionedSet={mentionedKeywords} flashSet={flashingKeywords} interviewerRaisedSet={interviewerRaisedKeywords} />
                     </div>
                   {/if}
                 {:else if sid === 'company-brief'}
@@ -1952,7 +2021,7 @@ Ask: team | How long have you been with the team?`;
             </div>
           </div>
           <div class="keywords-bar-content" style="zoom: {kwZoom/100}">
-            <KeywordTrackerPanel keywords={jdKeywords} mentionedSet={mentionedKeywords} interviewerRaisedSet={interviewerRaisedKeywords} {keywordQuestionMap} horizontal={true} />
+            <KeywordTrackerPanel keywords={jdKeywords} mentionedSet={mentionedKeywords} flashSet={flashingKeywords} interviewerRaisedSet={interviewerRaisedKeywords} {keywordQuestionMap} horizontal={true} />
           </div>
         </div>
       {/if}
@@ -2191,6 +2260,42 @@ Ask: team | How long have you been with the team?`;
     transition: all 0.15s;
   }
   .setup-review-btn:hover { border-color: #60a5fa; color: #60a5fa; }
+  /* Review list panel */
+  .review-list-panel {
+    max-width: 800px; margin: 0.5rem auto 0; padding: 0 2rem;
+    display: flex; flex-direction: column; gap: 0.5rem;
+  }
+  .review-search {
+    width: 100%; padding: 0.4rem 0.75rem; background: #0a1525;
+    border: 1px solid #1e3a5f; border-radius: 0.4rem;
+    color: #cbd5e1; font-size: var(--fs-sm); outline: none;
+  }
+  .review-search:focus { border-color: #3b82f6; }
+  .review-list-empty { color: #475569; font-size: var(--fs-sm); font-style: italic; margin: 0; text-align: center; padding: 0.75rem 0; }
+  .review-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: 300px; overflow-y: auto; }
+  .review-list-item {
+    display: flex; flex-direction: column; gap: 0.25rem;
+    padding: 0.5rem 0.75rem; background: #060e1a;
+    border: 1px solid #1a2d4a; border-radius: 0.4rem;
+  }
+  .review-list-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+  .review-list-name { font-size: var(--fs-sm); font-weight: 600; color: #94a3b8; }
+  .review-list-date { font-size: var(--fs-xs); color: #334155; flex-shrink: 0; }
+  .review-list-summary { font-size: var(--fs-xs); color: #475569; margin: 0; line-height: 1.4; }
+  .review-list-actions { display: flex; gap: 0.5rem; }
+  .review-list-open {
+    padding: 0.2rem 0.6rem; background: rgba(59,130,246,0.1);
+    border: 1px solid rgba(59,130,246,0.3); border-radius: 0.3rem;
+    color: #60a5fa; font-size: var(--fs-xs); cursor: pointer; transition: all 0.15s;
+  }
+  .review-list-open:hover { background: rgba(59,130,246,0.2); }
+  .review-list-delete {
+    padding: 0.2rem 0.6rem; background: none;
+    border: 1px solid #1e293b; border-radius: 0.3rem;
+    color: #475569; font-size: var(--fs-xs); cursor: pointer; transition: all 0.15s;
+  }
+  .review-list-delete:hover { border-color: #ef4444; color: #ef4444; }
+
   .setup-review-view-btn {
     padding: 0.4rem 1rem; background: rgba(59,130,246,0.1);
     border: 1px solid rgba(59,130,246,0.3); border-radius: 0.4rem;
@@ -2857,6 +2962,11 @@ Ask: team | How long have you been with the team?`;
     padding: 0.2rem 0.5rem;
     text-align: center;
   }
+  /* Emotion sparkline */
+  .emotion-sparkline { display: flex; flex-wrap: wrap; gap: 3px; padding: 0.2rem 0 0.1rem; }
+  .emotion-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; opacity: 0.85; transition: opacity 0.2s; }
+  .emotion-dot:last-child { opacity: 1; box-shadow: 0 0 0 2px rgba(255,255,255,0.15); }
+
   /* Coaching log feed */
   .coaching-log {
     display: flex; flex-direction: column; gap: 0.3rem;

@@ -227,11 +227,11 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/review/from-live", post(review_handler::handle_from_live))
         .route("/api/reviews", get(review_handler::handle_list_reports))
         .route("/api/reviews", delete(review_handler::handle_delete_all))
-        .route("/api/review/:id", get(review_handler::handle_get_report))
-        .route("/api/review/:id", delete(review_handler::handle_delete_report))
-        .route("/api/review/:id/events", get(review_handler::handle_events))
-        .route("/api/review/:id/source", get(review_handler::handle_get_source))
-        .route("/api/review/:id/download", get(review_handler::handle_download))
+        .route("/api/review/{id}", get(review_handler::handle_get_report))
+        .route("/api/review/{id}", delete(review_handler::handle_delete_report))
+        .route("/api/review/{id}/events", get(review_handler::handle_events))
+        .route("/api/review/{id}/source", get(review_handler::handle_get_source))
+        .route("/api/review/{id}/download", get(review_handler::handle_download))
         .layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
 
     let app = Router::new()

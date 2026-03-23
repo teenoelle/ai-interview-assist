@@ -43,8 +43,8 @@ Answer: <The spoken answer on this same line. Short sentences starting with 'I'.
 ---\n\
 General: [General Answer] <keyword phrase: 2-3 word approach. Max 6 words total. No metrics. e.g. 'keyword research: intent-first'>\n\
 Example: [Example] <keyword phrase: outcome. Include a metric ONLY if it appears explicitly in the candidate background — never invent one. Max 6 words total. e.g. 'difficult client: retained account'>\n\
-Ask: <keyword phrase — no question words> | <A genuine question the candidate asks the interviewer — phrased naturally, as if said at the end of an answer. Must be specific to this role and company. 1-2 sentences, max 10 words each, ends with '?'. e.g. 'How does the team currently measure this?' or 'What tools does the team use for this today?'>\n\
-Ask: <different keyword phrase — no question words> | <A different genuine question the candidate asks the interviewer. 1-2 sentences, max 10 words each, ends with '?'.>\n\n\
+Ask: <keyword phrase — no question words> | <A genuine question the candidate asks the interviewer — phrased naturally, as if said at the end of an answer. Must name the specific metric, tool, process, or concept being asked about — never use 'this', 'it', 'here', or vague pronouns. 1-2 sentences, max 10 words each, ends with '?'. e.g. 'How does the team currently measure customer acquisition cost?' or 'What attribution model does the team use for paid social?'>\n\
+Ask: <different keyword phrase — no question words> | <A different genuine question the candidate asks the interviewer. Names the specific topic — no vague pronouns. 1-2 sentences, max 10 words each, ends with '?'.>\n\n\
 Rules:\n\
 - Output ONLY these lines. No extra text.\n\
 - Acknowledge: one complete sentence the candidate reads aloud. Empathetic and conversational — names the business priority without restating the question. Never starts with 'I'.\n\
@@ -56,7 +56,7 @@ Rules:\n\
 - Only add a second General or Example if it addresses a genuinely DIFFERENT part of the question or a different story. No repeating the same point in different words.\n\
 - Keywords are multi-word phrases from the question (e.g. 'difficult conversation', 'conflicting priorities', 'client relationships').\n\
 - Ask topic: keyword phrase — NO question words (no 'how', 'what', 'when', 'why').\n\
-- Ask question: natural, specific, grammatical question the candidate asks the interviewer. Ends with '?'. No adjectives or adverbs.\n\
+- Ask question: natural, specific, grammatical question the candidate asks the interviewer. Ends with '?'. No adjectives or adverbs. Never use 'this', 'it', 'that', or vague pronouns — always name the specific metric, tool, process, or concept explicitly.\n\
 - Ask lines come AFTER the --- separator only.\n\
 - NEVER name specific clients, employers, or companies. Refer to them by industry only (e.g. 'retail brand', 'tech startup', 'financial services firm').\n\
 - Read the system prompt carefully to understand the employer's business model. If the employer is an agency, consultancy, or services firm that works with multiple clients, frame all answers in terms of client work across accounts — NEVER describe it as owning one company's strategy long-term.\n\
@@ -73,8 +73,8 @@ Answer: <The spoken answer on this same line. Short sentences starting with 'I'.
 General: [General Answer] <keyword phrase: 2-3 word approach. Max 6 words total. No metrics. e.g. 'keyword research: intent-first'>\n\
 General: [General Answer] <different keyword phrase: 2-3 word approach. Max 6 words total. No metrics.>\n\
 Example: [Example] <keyword phrase: outcome. Include a metric ONLY if it appears explicitly in the candidate background — never invent one. Max 6 words total. e.g. 'ad copywriting: lower CPA'>\n\
-Ask: <keyword phrase — no question words> | <A genuine question the candidate asks the interviewer — phrased naturally, as if said at the end of an answer. Must be specific to this role and company. 1-2 sentences, max 10 words each, ends with '?'. e.g. 'How does the team currently measure this?' or 'What tools does the team use for this today?'>\n\
-Ask: <different keyword phrase — no question words> | <A different genuine question the candidate asks the interviewer. 1-2 sentences, max 10 words each, ends with '?'.>\n\n\
+Ask: <keyword phrase — no question words> | <A genuine question the candidate asks the interviewer — phrased naturally, as if said at the end of an answer. Must name the specific metric, tool, process, or concept being asked about — never use 'this', 'it', 'here', or vague pronouns. 1-2 sentences, max 10 words each, ends with '?'. e.g. 'How does the team currently measure customer acquisition cost?' or 'What attribution model does the team use for paid social?'>\n\
+Ask: <different keyword phrase — no question words> | <A different genuine question the candidate asks the interviewer. Names the specific topic — no vague pronouns. 1-2 sentences, max 10 words each, ends with '?'.>\n\n\
 Rules:\n\
 - Output ONLY these lines. No extra text.\n\
 - Acknowledge: one complete sentence the candidate reads aloud. Empathetic and conversational — names the business priority without restating the question. Never starts with 'I'.\n\
@@ -86,7 +86,7 @@ Rules:\n\
 - Only add a second General or Example if it addresses a genuinely DIFFERENT part of the question or a different story. No repeating the same point in different words.\n\
 - Keywords are multi-word phrases from the question (e.g. 'keyword research', 'client relationships', 'ad copywriting').\n\
 - Ask topic: keyword phrase — NO question words (no 'how', 'what', 'when', 'why').\n\
-- Ask question: natural, specific, grammatical question the candidate asks the interviewer. Ends with '?'. No adjectives or adverbs.\n\
+- Ask question: natural, specific, grammatical question the candidate asks the interviewer. Ends with '?'. No adjectives or adverbs. Never use 'this', 'it', 'that', or vague pronouns — always name the specific metric, tool, process, or concept explicitly.\n\
 - Ask lines come AFTER the --- separator only.\n\
 - NEVER name specific clients, employers, or companies. Refer to them by industry only (e.g. 'retail brand', 'tech startup', 'financial services firm').\n\
 - Use only background provided. No invented details.",

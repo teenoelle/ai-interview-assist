@@ -411,7 +411,7 @@ pub async fn predict_questions(system_prompt: &str, cfg: &AiConfig<'_>) -> Vec<S
                     .trim_start_matches(|c: char| c.is_ascii_digit())
                     .trim_start_matches(['.', ')', ' '].as_ref())
                     .trim();
-                if stripped.len() > 10 { Some(stripped.to_string()) } else { None }
+                if stripped.len() > 10 && stripped.contains('?') { Some(stripped.to_string()) } else { None }
             })
             .take(8)
             .collect(),

@@ -40,6 +40,27 @@
 
   const entries = $derived(Object.entries(rateLimits));
 
+  const PURPOSE: Record<string, string> = {
+    'Whisper (local)':    'transcription · local',
+    'Groq Whisper':       'transcription',
+    'Groq Whisper #2':    'transcription',
+    'Gemini Transcription': 'transcription',
+    'Claude':             'suggestions · sentiment',
+    'Groq':               'suggestions · setup',
+    'Groq #2':            'suggestions · setup',
+    'Gemini':             'suggestions · setup',
+    'Ollama':             'suggestions · local',
+    'Gemini Vision':      'sentiment',
+    'Anthropic':          'suggestions · sentiment',
+  };
+
+  function purpose(name: string): string {
+    if (PURPOSE[name]) return PURPOSE[name];
+    if (name.startsWith('Ollama')) return 'suggestions · local';
+    if (name.includes('Whisper')) return 'transcription';
+    return '';
+  }
+
   function minsLeft(remaining: number, rate: number | null): number {
     if (!rate || rate <= 0) return Infinity;
     return remaining / rate;
@@ -65,7 +86,10 @@
         {@const warn = isNearLimit(entry)}
         <div class="provider-row" class:provider-warn={warn}>
           <div class="provider-header">
-            <span class="provider-name">{provider}</span>
+            <div class="provider-name-block">
+              <span class="provider-name">{provider}</span>
+              {#if purpose(provider)}<span class="provider-purpose">{purpose(provider)}</span>{/if}
+            </div>
             <span class="counts">{entry.remaining.toLocaleString()} / {entry.limit.toLocaleString()}</span>
           </div>
 
@@ -94,7 +118,10 @@
       {#each Object.entries(callCounts).filter(([p]) => !rateLimits[p]) as [provider, count]}
         <div class="provider-row provider-row-counts-only">
           <div class="provider-header">
-            <span class="provider-name">{provider}</span>
+            <div class="provider-name-block">
+              <span class="provider-name">{provider}</span>
+              {#if purpose(provider)}<span class="provider-purpose">{purpose(provider)}</span>{/if}
+            </div>
             <span class="counts">{count} call{count !== 1 ? 's' : ''}</span>
           </div>
         </div>
@@ -133,11 +160,13 @@
     justify-content: space-between;
     align-items: baseline;
   }
+  .provider-name-block { display: flex; flex-direction: column; gap: 0.05rem; }
   .provider-name {
     font-weight: 500;
     font-size: var(--fs-sm);
     color: #94a3b8;
   }
+  .provider-purpose { font-size: var(--fs-xs); color: #475569; }
   .counts {
     font-size: var(--fs-base);
     color: #94a3b8;

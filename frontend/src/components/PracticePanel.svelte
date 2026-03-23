@@ -69,7 +69,7 @@
     readOn = true;
     const parsed = parseSuggestion(text);
     if (!parsed.acknowledge) { readOn = false; return; }
-    const toSpeak = [parsed.acknowledge, parsed.solve, parsed.tell].filter(Boolean).join(' ');
+    const toSpeak = [parsed.acknowledge, parsed.solve, parsed.bridge, parsed.tell, parsed.close].filter(Boolean).join(' ');
     ttsClient.speak(toSpeak, voiceId, voiceRate, voiceVolume);
   }
 
@@ -373,8 +373,22 @@
             </div>
           {/if}
 
+          {#if parsed.bridge}
+            <div class="h-sec h-sec-bridge">
+              <span class="h-cue-badge h-cue-bridge">Bridge</span>
+              <span class="h-speak-text h-bridge-text">{parsed.bridge}</span>
+            </div>
+          {/if}
+
           <div class="h-sec h-sec-say">
-            <span class="h-cue-badge">{parsed.cue}</span>
+            <div class="h-sec-header">
+              <span class="h-cue-badge">{parsed.cue}</span>
+              {#if parsed.tell}
+                {@const words = parsed.tell.trim().split(/\s+/).filter(Boolean).length}
+                {@const secs = Math.round((words / 130) * 60)}
+                <span class="h-time-est">~{secs < 60 ? secs + 's' : Math.floor(secs/60) + 'm ' + (secs%60) + 's'}</span>
+              {/if}
+            </div>
             <span class="h-speak-text h-speak-main">{parsed.tell}</span>
             {#if parsed.body}
               {@const cues = parseCues(parsed.body)}
@@ -406,35 +420,58 @@
             {/if}
           </div>
 
+          {#if parsed.close}
+            <div class="h-sec h-sec-close">
+              <span class="h-cue-badge h-cue-close">Close</span>
+              <span class="h-speak-text">{parsed.close}</span>
+            </div>
+          {/if}
+
           {#if parsed.asks.length > 0}
             <div class="h-sec h-sec-ask">
               <span class="h-cue-badge h-cue-ask">Ask</span>
-              <div class="h-cues-section">
+              <div class="h-ask-list">
                 {#each parsed.asks as ask, ai}
                   {@const askKey = '[Ask] ' + ask.topic}
-                  {@const askOpen = !!openCues[askKey]}
-                  <div class="h-cue-block h-cue-block-ask" class:h-cue-open={askOpen}>
-                    <button class="h-cue-toggle" onclick={() => { const opening = !askOpen; toggleCueOpen(askKey); if (opening) toggleCue(currentIdx, askKey, askKey); }}>
-                      <span class="h-cue-label h-cue-label-ask">Q{ai + 1}</span>
-                      <span class="h-cue-preview h-ask-preview">{ask.topic}</span>
-                      <span class="h-cue-chevron">{askOpen ? '▾' : '▸'}</span>
-                    </button>
-                    {#if askOpen}
-                      <div class="h-cue-body">
-                        {#if loadingCue === askKey}
-                          <div class="h-cue-sentence h-cue-loading">…</div>
-                        {:else if expandedCues[askKey]}
-                          <div class="h-ask-sentence">{expandedCues[askKey]}</div>
-                        {:else}
-                          <div class="h-cue-sentence h-cue-loading">Loading…</div>
-                        {/if}
-                      </div>
-                    {/if}
+                  <div class="h-ask-item">
+                    <span class="h-cue-label h-cue-label-ask">Q{ai + 1}</span>
+                    <div class="h-ask-content">
+                      <span class="h-ask-topic">{ask.topic}</span>
+                      {#if loadingCue === askKey}
+                        <span class="h-ask-question h-cue-loading">…</span>
+                      {:else if expandedCues[askKey]}
+                        <span class="h-ask-question">{expandedCues[askKey]}</span>
+                      {:else}
+                        <button class="h-ask-load-btn" onclick={() => toggleCue(currentIdx, askKey, askKey)}>Load question</button>
+                      {/if}
+                    </div>
                   </div>
                 {/each}
               </div>
             </div>
           {/if}
+
+          <!-- PIVOT -->
+          <div class="h-pivot-row">
+            <div class="h-cue-block h-cue-block-pivot" class:h-cue-open={!!openCues['[Pivot]_' + currentIdx]}>
+              <button class="h-cue-toggle" onclick={() => { const pk = '[Pivot]_' + currentIdx; const opening = !openCues[pk]; toggleCueOpen(pk); if (opening) toggleCue(currentIdx, pk, '[Pivot]'); }}>
+                <span class="h-cue-label h-cue-label-pivot">Pivot</span>
+                <span class="h-cue-preview" style="color: #6b7280">Recovery phrase if interrupted</span>
+                <span class="h-cue-chevron">{!!openCues['[Pivot]_' + currentIdx] ? '▾' : '▸'}</span>
+              </button>
+              {#if openCues['[Pivot]_' + currentIdx]}
+                <div class="h-cue-body">
+                  {#if loadingCue === '[Pivot]_' + currentIdx}
+                    <div class="h-cue-sentence h-cue-loading">…</div>
+                  {:else if expandedCues['[Pivot]_' + currentIdx]}
+                    <div class="h-cue-sentence">{expandedCues['[Pivot]_' + currentIdx]}</div>
+                  {:else}
+                    <div class="h-cue-sentence h-cue-loading">Loading…</div>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          </div>
         </div>
       {/if}
 
@@ -635,7 +672,9 @@
   }
   .h-sec-ack    { background: #110823; border-left-color: #6d28d9; }
   .h-sec-solve  { background: #071a1a; border-left-color: #0e7490; }
+  .h-sec-bridge { background: #0d0d07; border-left-color: #78716c; }
   .h-sec-say    { background: #060e0a; border-left-color: #166534; }
+  .h-sec-close  { background: #080d1a; border-left-color: #3b82f6; }
   .h-sec-ask    { background: #0e0700; border-left-color: #92400e; }
   .font-select {
     padding: 0.2rem 0.4rem; background: #0a0f1a; border: 1px solid #1e293b;
@@ -654,10 +693,29 @@
   .h-cue-badge.h-cue-ask    { background: #422006; color: #fbbf24; }
   .h-cue-badge.h-cue-ack    { background: #2e1065; color: #c084fc; }
   .h-cue-badge.h-cue-solve  { background: #164e63; color: #67e8f9; }
+  .h-cue-badge.h-cue-bridge { background: #292524; color: #a8a29e; }
+  .h-cue-badge.h-cue-close  { background: #1e3a5f; color: #93c5fd; }
 
   /* Spoken text */
   .h-speak-text { color: #e2e8f0; font-size: var(--fs-lg); line-height: 1.5; flex: 1; }
   .h-speak-main { font-weight: 600; color: #f1f5f9; }
+  .h-bridge-text { color: #d6d3d1; font-style: italic; }
+  .h-sec-header { display: flex; align-items: center; gap: 0.5rem; }
+  .h-time-est { font-size: var(--fs-xs); color: #334155; font-style: italic; font-variant-numeric: tabular-nums; }
+
+  /* Ask inline */
+  .h-ask-list { display: flex; flex-direction: column; gap: 0.35rem; }
+  .h-ask-item { display: flex; align-items: flex-start; gap: 0.4rem; }
+  .h-ask-content { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; }
+  .h-ask-topic { font-size: var(--fs-xs); color: #7c4a1a; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+  .h-ask-question { font-size: var(--fs-lg); color: #fde68a; line-height: 1.4; overflow-wrap: break-word; }
+  .h-ask-load-btn { background: none; border: none; color: #374151; font-size: var(--fs-xs); cursor: pointer; padding: 0; text-decoration: underline; }
+
+  /* Pivot */
+  .h-pivot-row { margin-top: 0.1rem; }
+  .h-cue-block-pivot { border-color: #1f2937 !important; background: #05070a !important; }
+  .h-cue-block-pivot.h-cue-open { border-color: #374151 !important; }
+  .h-cue-label-pivot { color: #6b7280 !important; }
 
 
   /* Cue blocks — matching interview teleprompter */

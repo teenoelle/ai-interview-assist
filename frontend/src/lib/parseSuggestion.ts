@@ -1,6 +1,8 @@
 export interface ParsedSuggestion {
   acknowledge: string;
   solve: string;
+  bridge: string;
+  close: string;
   affirm: string;
   cue: string;     // 'Answer'
   tell: string;    // main spoken line
@@ -11,7 +13,7 @@ export interface ParsedSuggestion {
 
 export function parseSuggestion(text: string): ParsedSuggestion {
   const lines = text.split('\n');
-  let acknowledge = '', solve = '', affirm = '', tell = '', cue = 'Answer';
+  let acknowledge = '', solve = '', bridge = '', close = '', affirm = '', tell = '', cue = 'Answer';
   const asks: { topic: string; question: string }[] = [];
   const bodyLines: string[] = [];
   let pendingAskTopic = '';
@@ -19,7 +21,7 @@ export function parseSuggestion(text: string): ParsedSuggestion {
   // Strip markdown bold markers e.g. **Affirm:** → Affirm:
   const clean = (s: string) => s.replace(/^\*+([^*]+)\*+\s*/, '$1 ').trim();
   const isCueLabel = (s: string) =>
-    /^(Principle|Context|Action|Result|Point|Metric|General|Example|Story|Acknowledge|Affirm|Answer|Say|Tell|Ask):/i.test(s);
+    /^(Principle|Context|Action|Result|Point|Metric|General|Example|Story|Acknowledge|Affirm|Solve|Bridge|Close|Answer|Say|Tell|Ask):/i.test(s);
 
   for (const line of lines) {
     const t = line.trim();
@@ -33,6 +35,14 @@ export function parseSuggestion(text: string): ParsedSuggestion {
     } else if (c.match(/^Solve:/i)) {
       pendingTell = false;
       solve = c.replace(/^Solve:\s*/i, '').trim();
+      pendingAskTopic = '';
+    } else if (c.match(/^Bridge:/i)) {
+      pendingTell = false;
+      bridge = c.replace(/^Bridge:\s*/i, '').trim();
+      pendingAskTopic = '';
+    } else if (c.match(/^Close:/i)) {
+      pendingTell = false;
+      close = c.replace(/^Close:\s*/i, '').trim();
       pendingAskTopic = '';
     } else if (c.match(/^Affirm:/i)) {
       pendingTell = false;
@@ -112,7 +122,7 @@ export function parseSuggestion(text: string): ParsedSuggestion {
     tell = first.length > 80 ? first.slice(0, 80) + '…' : first;
   }
 
-  return { acknowledge, solve, affirm, cue, tell, body, cues: [], asks };
+  return { acknowledge, solve, bridge, close, affirm, cue, tell, body, cues: [], asks };
 }
 
 // Strip [General] / [Example] prefix from display text

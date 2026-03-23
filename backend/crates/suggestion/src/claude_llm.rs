@@ -12,7 +12,7 @@ pub async fn stream_suggestions(
 ) -> Result<()> {
     let body = json!({
         "model": "claude-haiku-4-5-20251001",
-        "max_tokens": 400,
+        "max_tokens": 800,
         "stream": true,
         "system": system_prompt,
         "messages": [{ "role": "user", "content": user_prompt }]

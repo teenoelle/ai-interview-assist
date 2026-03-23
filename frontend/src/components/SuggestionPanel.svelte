@@ -83,7 +83,17 @@
     for (const ask of parsed.asks) {
       expandCue(current.question, '[Ask] ' + ask.topic);
     }
+    expandCue(current.question, '[Pivot]');
   });
+
+  function wordCount(text: string): number {
+    return text.trim().split(/\s+/).filter(Boolean).length;
+  }
+
+  function estimateSecs(parsed: ReturnType<typeof parseSuggestion>): number {
+    const words = wordCount([parsed.acknowledge, parsed.bridge, parsed.solve, parsed.tell, parsed.close].filter(Boolean).join(' '));
+    return Math.round((words / 130) * 60);
+  }
 
   // Collapsed state per question entry (collapsed = body hidden)
   let collapsed = $state<boolean[]>([]);
@@ -230,9 +240,23 @@
             </div>
           {/if}
 
+          <!-- BRIDGE section -->
+          {#if parsed.bridge}
+            <div class="tp-sec tp-sec-bridge">
+              <span class="cue-badge cue-bridge">Bridge</span>
+              <span class="tp-bridge-text">{parsed.bridge}</span>
+            </div>
+          {/if}
+
           <!-- ANSWER section (includes cue points) -->
           <div class="tp-sec tp-sec-say">
-            <span class="cue-badge">{parsed.cue}</span>
+            <div class="tp-sec-header">
+              <span class="cue-badge">{parsed.cue}</span>
+              {#if parsed.tell && !current.streaming}
+                {@const secs = estimateSecs(parsed)}
+                <span class="tp-time-est">~{secs < 60 ? secs + 's' : Math.floor(secs/60) + 'm ' + (secs%60) + 's'}</span>
+              {/if}
+            </div>
             <span class="tp-tell">{parsed.tell}{#if current.streaming && !parsed.body}<span class="cursor">|</span>{/if}</span>
             {#if parsed.body}
               {@const cues = parseCues(parsed.body)}
@@ -277,33 +301,58 @@
             {/if}
           </div>
 
-          <!-- ASK section -->
+          <!-- CLOSE section -->
+          {#if parsed.close}
+            <div class="tp-sec tp-sec-close">
+              <span class="cue-badge cue-close">Close</span>
+              <span class="tp-close-text">{parsed.close}</span>
+            </div>
+          {/if}
+
+          <!-- ASK section — always show expanded question text -->
           {#if parsed.asks.length > 0}
             <div class="tp-sec tp-sec-ask">
               <span class="cue-badge cue-ask">Ask</span>
-              <div class="tp-cues">
+              <div class="tp-ask-list">
                 {#each parsed.asks as ask, i}
                   {@const askKey = '[Ask] ' + ask.topic}
-                  {@const askOpen = !!openCues[askKey]}
-                  <div class="tp-cue-block tp-cue-block-ask" class:tp-cue-open={askOpen}>
-                    <button class="tp-cue-toggle" onclick={() => { const opening = !askOpen; toggleCueOpen(askKey); if (opening) expandCue(current.question, askKey); }}>
-                      <span class="cue-label-sm cue-label-ask">Q{i + 1}</span>
-                      <span class="tp-cue-preview tp-ask-preview">{ask.topic}</span>
-                      <span class="tp-cue-chevron">{askOpen ? '▾' : '▸'}</span>
-                    </button>
-                    {#if askOpen}
-                      <div class="tp-cue-body">
-                        {#if expandedCues[askKey]?.loading}
-                          <div class="ask-sentence cue-loading">…</div>
-                        {:else if expandedCues[askKey]?.sentence}
-                          <div class="ask-sentence">{expandedCues[askKey].sentence}</div>
-                        {:else}
-                          <div class="ask-sentence cue-loading">Loading…</div>
-                        {/if}
-                      </div>
-                    {/if}
+                  <div class="tp-ask-item">
+                    <span class="cue-label-sm cue-label-ask">Q{i + 1}</span>
+                    <div class="tp-ask-content">
+                      <span class="tp-ask-topic">{ask.topic}</span>
+                      {#if expandedCues[askKey]?.sentence}
+                        <span class="tp-ask-question">{expandedCues[askKey].sentence}</span>
+                      {:else if expandedCues[askKey]?.loading}
+                        <span class="tp-ask-question cue-loading">…</span>
+                      {/if}
+                    </div>
                   </div>
                 {/each}
+              </div>
+            </div>
+          {/if}
+
+          <!-- PIVOT chip -->
+          {#if !current.streaming}
+            {@const pivotOpen = !!openCues['[Pivot]']}
+            <div class="tp-pivot-row">
+              <div class="tp-cue-block tp-cue-block-pivot" class:tp-cue-open={pivotOpen}>
+                <button class="tp-cue-toggle" onclick={() => { const opening = !pivotOpen; toggleCueOpen('[Pivot]'); if (opening) expandCue(current.question, '[Pivot]'); }}>
+                  <span class="cue-label-sm cue-label-pivot">Pivot</span>
+                  <span class="tp-cue-preview" style="color: #6b7280">Recovery phrase if interrupted</span>
+                  <span class="tp-cue-chevron">{pivotOpen ? '▾' : '▸'}</span>
+                </button>
+                {#if pivotOpen}
+                  <div class="tp-cue-body">
+                    {#if expandedCues['[Pivot]']?.loading}
+                      <div class="cue-sentence cue-loading">…</div>
+                    {:else if expandedCues['[Pivot]']?.sentence}
+                      <div class="cue-sentence">{expandedCues['[Pivot]'].sentence}</div>
+                    {:else}
+                      <div class="cue-sentence cue-loading">Loading…</div>
+                    {/if}
+                  </div>
+                {/if}
               </div>
             </div>
           {/if}
@@ -313,7 +362,7 @@
       <div class="tp-empty">Waiting for a question...</div>
     {/if}
 
-    <span class="tp-hint">Acknowledge = their pain point · Answer = speak · Ask = follow-up</span>
+    <span class="tp-hint">Acknowledge → Bridge → Answer → Close · Ask = follow-up · Pivot = recovery</span>
   </div>
 
 {:else}
@@ -367,9 +416,22 @@
                   <span class="affirm-text">{parsed.solve}</span>
                 </div>
               {/if}
+              <!-- BRIDGE -->
+              {#if parsed.bridge}
+                <div class="e-sec e-sec-bridge">
+                  <span class="cue-badge cue-bridge">Bridge</span>
+                  <span class="affirm-text">{parsed.bridge}</span>
+                </div>
+              {/if}
               <!-- ANSWER -->
               <div class="e-sec e-sec-say">
-                <span class="cue-badge" class:cue-ask={parsed.cue === 'Ask'}>{parsed.cue}</span>
+                <div class="e-sec-header">
+                  <span class="cue-badge" class:cue-ask={parsed.cue === 'Ask'}>{parsed.cue}</span>
+                  {#if parsed.tell && !entry.streaming}
+                    {@const secs = estimateSecs(parsed)}
+                    <span class="tp-time-est">~{secs < 60 ? secs + 's' : Math.floor(secs/60) + 'm ' + (secs%60) + 's'}</span>
+                  {/if}
+                </div>
                 <span class="tell-text">{parsed.tell}{#if entry.streaming && !parsed.body}<span class="cursor">|</span>{/if}</span>
                 {#if parsed.body}
                   <button class="expand-btn" onclick={() => toggleExpand(i)}>
@@ -383,35 +445,57 @@
                   {/if}
                 {/if}
               </div>
-              <!-- ASK -->
+              <!-- CLOSE -->
+              {#if parsed.close}
+                <div class="e-sec e-sec-close">
+                  <span class="cue-badge cue-close">Close</span>
+                  <span class="affirm-text">{parsed.close}</span>
+                </div>
+              {/if}
+              <!-- ASK — always visible -->
               {#if parsed.asks.length > 0}
                 <div class="e-sec e-sec-ask">
-                  <div class="e-sec-row">
-                    <span class="cue-badge cue-ask">Ask</span>
-                  </div>
-                  <div class="tp-cues">
+                  <span class="cue-badge cue-ask">Ask</span>
+                  <div class="tp-ask-list">
                     {#each parsed.asks as ask, ai}
                       {@const askKey = '[Ask] ' + ask.topic}
-                      {@const askOpen = !!openCues[askKey]}
-                      <div class="tp-cue-block tp-cue-block-ask" class:tp-cue-open={askOpen}>
-                        <button class="tp-cue-toggle" onclick={() => { const opening = !askOpen; toggleCueOpen(askKey); if (opening) expandCue(entry.question, askKey); }}>
-                          <span class="cue-label-sm cue-label-ask">Q{ai + 1}</span>
-                          <span class="tp-cue-preview tp-ask-preview">{ask.topic}</span>
-                          <span class="tp-cue-chevron">{askOpen ? '▾' : '▸'}</span>
-                        </button>
-                        {#if askOpen}
-                          <div class="tp-cue-body">
-                            {#if expandedCues[askKey]?.loading}
-                              <div class="ask-sentence cue-loading">…</div>
-                            {:else if expandedCues[askKey]?.sentence}
-                              <div class="ask-sentence">{expandedCues[askKey].sentence}</div>
-                            {:else}
-                              <div class="ask-sentence cue-loading">Loading…</div>
-                            {/if}
-                          </div>
-                        {/if}
+                      <div class="tp-ask-item">
+                        <span class="cue-label-sm cue-label-ask">Q{ai + 1}</span>
+                        <div class="tp-ask-content">
+                          <span class="tp-ask-topic">{ask.topic}</span>
+                          {#if expandedCues[askKey]?.sentence}
+                            <span class="tp-ask-question">{expandedCues[askKey].sentence}</span>
+                          {:else if expandedCues[askKey]?.loading}
+                            <span class="tp-ask-question cue-loading">…</span>
+                          {/if}
+                        </div>
                       </div>
                     {/each}
+                  </div>
+                </div>
+              {/if}
+              <!-- PIVOT -->
+              {#if !entry.streaming}
+                {@const pivotKey = '[Pivot]_' + i}
+                {@const pivotOpen = !!openCues[pivotKey]}
+                <div class="e-pivot-row">
+                  <div class="tp-cue-block tp-cue-block-pivot" class:tp-cue-open={pivotOpen}>
+                    <button class="tp-cue-toggle" onclick={() => { const opening = !pivotOpen; toggleCueOpen(pivotKey); if (opening) expandCue(entry.question, pivotKey); }}>
+                      <span class="cue-label-sm cue-label-pivot">Pivot</span>
+                      <span class="tp-cue-preview" style="color: #6b7280">Recovery phrase</span>
+                      <span class="tp-cue-chevron">{pivotOpen ? '▾' : '▸'}</span>
+                    </button>
+                    {#if pivotOpen}
+                      <div class="tp-cue-body">
+                        {#if expandedCues[pivotKey]?.loading}
+                          <div class="cue-sentence cue-loading">…</div>
+                        {:else if expandedCues[pivotKey]?.sentence}
+                          <div class="cue-sentence">{expandedCues[pivotKey].sentence}</div>
+                        {:else}
+                          <div class="cue-sentence cue-loading">Loading…</div>
+                        {/if}
+                      </div>
+                    {/if}
                   </div>
                 </div>
               {/if}
@@ -477,7 +561,9 @@
   }
   .tp-sec-ack    { background: var(--bg-ack);    border-left-color: var(--border-ack); }
   .tp-sec-solve  { background: #071a1a;          border-left-color: #0e7490; }
+  .tp-sec-bridge { background: #0d0d07;          border-left-color: #78716c; }
   .tp-sec-say    { background: var(--bg-say);    border-left-color: var(--border-say); }
+  .tp-sec-close  { background: #080d1a;          border-left-color: #3b82f6; }
   .tp-sec-ask    { background: var(--bg-ask);    border-left-color: var(--border-ask); }
 
   /* CUE badges */
@@ -496,9 +582,11 @@
     flex-shrink: 0;
     margin-top: 0.1rem;
   }
-  .cue-badge.cue-ask   { background: #422006; color: #fbbf24; }
-  .cue-badge.cue-ack   { background: #2e1065; color: #c084fc; }
-  .cue-badge.cue-solve { background: #164e63; color: #67e8f9; }
+  .cue-badge.cue-ask    { background: #422006; color: #fbbf24; }
+  .cue-badge.cue-ack    { background: #2e1065; color: #c084fc; }
+  .cue-badge.cue-solve  { background: #164e63; color: #67e8f9; }
+  .cue-badge.cue-bridge { background: #292524; color: #a8a29e; }
+  .cue-badge.cue-close  { background: #1e3a5f; color: #93c5fd; }
 
   /* Acknowledge text (purple section) */
   .tp-ack-text {
@@ -518,6 +606,46 @@
     flex: 1;
   }
 
+  /* Bridge text (stone section) */
+  .tp-bridge-text {
+    color: #d6d3d1;
+    font-size: var(--fs-lg);
+    line-height: 1.4;
+    overflow-wrap: break-word;
+    flex: 1;
+    font-style: italic;
+  }
+
+  /* Close text (blue section) */
+  .tp-close-text {
+    color: #ffffff;
+    font-size: var(--fs-lg);
+    line-height: 1.4;
+    overflow-wrap: break-word;
+    flex: 1;
+  }
+
+  /* Answer header row with time estimate */
+  .tp-sec-header { display: flex; align-items: center; gap: 0.5rem; }
+  .e-sec-header  { display: flex; align-items: center; gap: 0.5rem; }
+  .tp-time-est {
+    font-size: var(--fs-xs); color: #334155;
+    font-variant-numeric: tabular-nums; font-style: italic;
+  }
+
+  /* Ask inline list */
+  .tp-ask-list { display: flex; flex-direction: column; gap: 0.35rem; }
+  .tp-ask-item { display: flex; align-items: flex-start; gap: 0.4rem; }
+  .tp-ask-content { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; }
+  .tp-ask-topic { font-size: var(--fs-sm); color: #7c4a1a; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .tp-ask-question { font-size: var(--fs-lg); color: #fde68a; line-height: 1.4; overflow-wrap: break-word; }
+
+  /* Pivot chip */
+  .tp-pivot-row { flex-shrink: 0; }
+  .e-pivot-row { margin-top: 0.1rem; }
+  .tp-cue-block-pivot { border-color: #1f2937 !important; background: #05070a !important; }
+  .tp-cue-block-pivot.tp-cue-open { border-color: #374151 !important; }
+  .cue-label-pivot { color: #6b7280 !important; }
 
   /* Say text */
   .tp-tell {
@@ -702,7 +830,9 @@
   }
   .e-sec-ack    { background: var(--bg-ack);    border-left-color: var(--border-ack); }
   .e-sec-solve  { background: #071a1a;          border-left-color: #0e7490; }
+  .e-sec-bridge { background: #0d0d07;          border-left-color: #78716c; }
   .e-sec-say    { background: var(--bg-say);    border-left-color: var(--border-say); }
+  .e-sec-close  { background: #080d1a;          border-left-color: #3b82f6; }
   .e-sec-ask    { background: var(--bg-ask);    border-left-color: var(--border-ask); }
   .affirm-text, .tell-text {
     color: #f1f5f9; font-size: var(--fs-lg); font-weight: 400;

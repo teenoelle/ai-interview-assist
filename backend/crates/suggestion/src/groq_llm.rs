@@ -43,7 +43,7 @@ pub async fn stream_openai_compat(
             { "role": "system", "content": system_prompt },
             { "role": "user",   "content": user_prompt }
         ],
-        "max_tokens": 400,
+        "max_tokens": 800,
         "stream": true
     });
 

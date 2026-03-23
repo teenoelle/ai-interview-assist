@@ -633,7 +633,8 @@
     if (answerStartTime !== null) return;
     const parsed = parseSuggestion(text);
     if (!parsed.acknowledge) return;
-    ttsClient.speak(parsed.acknowledge, ttsVoiceId, ttsRate, ttsVolume);
+    const toSpeak = [parsed.acknowledge, parsed.solve, parsed.tell].filter(Boolean).join(" ");
+    ttsClient.speak(toSpeak, ttsVoiceId, ttsRate, ttsVolume);
     lastSpeechAt = Date.now();
   }
 

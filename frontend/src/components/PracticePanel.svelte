@@ -69,7 +69,8 @@
     readOn = true;
     const parsed = parseSuggestion(text);
     if (!parsed.acknowledge) { readOn = false; return; }
-    ttsClient.speak(parsed.acknowledge, voiceId, voiceRate, voiceVolume);
+    const toSpeak = [parsed.acknowledge, parsed.solve, parsed.tell].filter(Boolean).join(' ');
+    ttsClient.speak(toSpeak, voiceId, voiceRate, voiceVolume);
   }
 
 
@@ -365,6 +366,13 @@
             </div>
           {/if}
 
+          {#if parsed.solve}
+            <div class="h-sec h-sec-solve">
+              <span class="h-cue-badge h-cue-solve">Solve</span>
+              <span class="h-speak-text">{parsed.solve}</span>
+            </div>
+          {/if}
+
           <div class="h-sec h-sec-say">
             <span class="h-cue-badge">{parsed.cue}</span>
             <span class="h-speak-text h-speak-main">{parsed.tell}</span>
@@ -620,6 +628,7 @@
     border-left: 3px solid transparent;
   }
   .h-sec-ack    { background: #110823; border-left-color: #6d28d9; }
+  .h-sec-solve  { background: #071a1a; border-left-color: #0e7490; }
   .h-sec-say    { background: #060e0a; border-left-color: #166534; }
   .h-sec-ask    { background: #0e0700; border-left-color: #92400e; }
   .font-select {
@@ -638,6 +647,7 @@
   }
   .h-cue-badge.h-cue-ask    { background: #422006; color: #fbbf24; }
   .h-cue-badge.h-cue-ack    { background: #2e1065; color: #c084fc; }
+  .h-cue-badge.h-cue-solve  { background: #164e63; color: #67e8f9; }
 
   /* Spoken text */
   .h-speak-text { color: #e2e8f0; font-size: var(--fs-lg); line-height: 1.5; flex: 1; }

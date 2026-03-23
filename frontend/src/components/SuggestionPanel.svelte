@@ -220,6 +220,14 @@
             </div>
           {/if}
 
+          <!-- SOLVE section -->
+          {#if parsed.solve}
+            <div class="tp-sec tp-sec-solve">
+              <span class="cue-badge cue-solve">Solve</span>
+              <span class="tp-solve-text">{parsed.solve}</span>
+            </div>
+          {/if}
+
           <!-- ANSWER section (includes cue points) -->
           <div class="tp-sec tp-sec-say">
             <span class="cue-badge">{parsed.cue}</span>
@@ -344,6 +352,13 @@
                   <span class="affirm-text">{parsed.acknowledge}</span>
                 </div>
               {/if}
+              <!-- SOLVE -->
+              {#if parsed.solve}
+                <div class="e-sec e-sec-solve">
+                  <span class="cue-badge cue-solve">Solve</span>
+                  <span class="affirm-text">{parsed.solve}</span>
+                </div>
+              {/if}
               <!-- ANSWER -->
               <div class="e-sec e-sec-say">
                 <span class="cue-badge" class:cue-ask={parsed.cue === 'Ask'}>{parsed.cue}</span>
@@ -447,6 +462,7 @@
     flex-shrink: 0;
   }
   .tp-sec-ack    { background: var(--bg-ack);    border-left-color: var(--border-ack); }
+  .tp-sec-solve  { background: #071a1a;          border-left-color: #0e7490; }
   .tp-sec-say    { background: var(--bg-say);    border-left-color: var(--border-say); }
   .tp-sec-ask    { background: var(--bg-ask);    border-left-color: var(--border-ask); }
 
@@ -466,11 +482,21 @@
     flex-shrink: 0;
     margin-top: 0.1rem;
   }
-  .cue-badge.cue-ask { background: #422006; color: #fbbf24; }
-  .cue-badge.cue-ack { background: #2e1065; color: #c084fc; }
+  .cue-badge.cue-ask   { background: #422006; color: #fbbf24; }
+  .cue-badge.cue-ack   { background: #2e1065; color: #c084fc; }
+  .cue-badge.cue-solve { background: #164e63; color: #67e8f9; }
 
   /* Acknowledge text (purple section) */
   .tp-ack-text {
+    color: #ffffff;
+    font-size: var(--fs-lg);
+    line-height: 1.4;
+    overflow-wrap: break-word;
+    flex: 1;
+  }
+
+  /* Solve text (teal section) */
+  .tp-solve-text {
     color: #ffffff;
     font-size: var(--fs-lg);
     line-height: 1.4;
@@ -661,6 +687,7 @@
     border-left: 2px solid transparent;
   }
   .e-sec-ack    { background: var(--bg-ack);    border-left-color: var(--border-ack); }
+  .e-sec-solve  { background: #071a1a;          border-left-color: #0e7490; }
   .e-sec-say    { background: var(--bg-say);    border-left-color: var(--border-say); }
   .e-sec-ask    { background: var(--bg-ask);    border-left-color: var(--border-ask); }
   .affirm-text, .tell-text {

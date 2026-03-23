@@ -1,5 +1,6 @@
 export interface ParsedSuggestion {
   acknowledge: string;
+  solve: string;
   affirm: string;
   cue: string;     // 'Answer'
   tell: string;    // main spoken line
@@ -10,7 +11,7 @@ export interface ParsedSuggestion {
 
 export function parseSuggestion(text: string): ParsedSuggestion {
   const lines = text.split('\n');
-  let acknowledge = '', affirm = '', tell = '', cue = 'Answer';
+  let acknowledge = '', solve = '', affirm = '', tell = '', cue = 'Answer';
   const asks: { topic: string; question: string }[] = [];
   const bodyLines: string[] = [];
   let pendingAskTopic = '';
@@ -28,6 +29,10 @@ export function parseSuggestion(text: string): ParsedSuggestion {
     if (c.match(/^Acknowledge:/i)) {
       pendingTell = false;
       acknowledge = c.replace(/^Acknowledge:\s*/i, '').trim();
+      pendingAskTopic = '';
+    } else if (c.match(/^Solve:/i)) {
+      pendingTell = false;
+      solve = c.replace(/^Solve:\s*/i, '').trim();
       pendingAskTopic = '';
     } else if (c.match(/^Affirm:/i)) {
       pendingTell = false;
@@ -107,7 +112,7 @@ export function parseSuggestion(text: string): ParsedSuggestion {
     tell = first.length > 80 ? first.slice(0, 80) + '…' : first;
   }
 
-  return { acknowledge, affirm, cue, tell, body, cues: [], asks };
+  return { acknowledge, solve, affirm, cue, tell, body, cues: [], asks };
 }
 
 // Strip [General] / [Example] prefix from display text

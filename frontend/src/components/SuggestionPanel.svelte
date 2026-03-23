@@ -75,11 +75,13 @@
   // so they're ready before the user clicks, regardless of capture state
   $effect(() => {
     if (!current || current.streaming) return;
-    const body = parseSuggestion(current.suggestion).body;
-    if (!body) return;
-    const cues = parseCues(body);
+    const parsed = parseSuggestion(current.suggestion);
+    const cues = parseCues(parsed.body);
     for (const cue of cues) {
       expandCue(current.question, cue.text);
+    }
+    for (const ask of parsed.asks) {
+      expandCue(current.question, '[Ask] ' + ask.topic);
     }
   });
 
@@ -281,17 +283,23 @@
               <span class="cue-badge cue-ask">Ask</span>
               <div class="tp-cues">
                 {#each parsed.asks as ask, i}
-                  {@const askKey = `tp-ask-${currentIndex}-${i}`}
+                  {@const askKey = '[Ask] ' + ask.topic}
                   {@const askOpen = !!openCues[askKey]}
                   <div class="tp-cue-block tp-cue-block-ask" class:tp-cue-open={askOpen}>
-                    <button class="tp-cue-toggle" onclick={() => toggleCueOpen(askKey)}>
+                    <button class="tp-cue-toggle" onclick={() => { const opening = !askOpen; toggleCueOpen(askKey); if (opening) expandCue(current.question, askKey); }}>
                       <span class="cue-label-sm cue-label-ask">Q{i + 1}</span>
                       <span class="tp-cue-preview tp-ask-preview">{ask.topic}</span>
                       <span class="tp-cue-chevron">{askOpen ? '▾' : '▸'}</span>
                     </button>
                     {#if askOpen}
                       <div class="tp-cue-body">
-                        <div class="ask-sentence">{ask.question}</div>
+                        {#if expandedCues[askKey]?.loading}
+                          <div class="ask-sentence cue-loading">…</div>
+                        {:else if expandedCues[askKey]?.sentence}
+                          <div class="ask-sentence">{expandedCues[askKey].sentence}</div>
+                        {:else}
+                          <div class="ask-sentence cue-loading">Loading…</div>
+                        {/if}
                       </div>
                     {/if}
                   </div>
@@ -383,17 +391,23 @@
                   </div>
                   <div class="tp-cues">
                     {#each parsed.asks as ask, ai}
-                      {@const askKey = `e-ask-${i}-${ai}`}
+                      {@const askKey = '[Ask] ' + ask.topic}
                       {@const askOpen = !!openCues[askKey]}
                       <div class="tp-cue-block tp-cue-block-ask" class:tp-cue-open={askOpen}>
-                        <button class="tp-cue-toggle" onclick={() => toggleCueOpen(askKey)}>
+                        <button class="tp-cue-toggle" onclick={() => { const opening = !askOpen; toggleCueOpen(askKey); if (opening) expandCue(entry.question, askKey); }}>
                           <span class="cue-label-sm cue-label-ask">Q{ai + 1}</span>
                           <span class="tp-cue-preview tp-ask-preview">{ask.topic}</span>
                           <span class="tp-cue-chevron">{askOpen ? '▾' : '▸'}</span>
                         </button>
                         {#if askOpen}
                           <div class="tp-cue-body">
-                            <div class="ask-sentence">{ask.question}</div>
+                            {#if expandedCues[askKey]?.loading}
+                              <div class="ask-sentence cue-loading">…</div>
+                            {:else if expandedCues[askKey]?.sentence}
+                              <div class="ask-sentence">{expandedCues[askKey].sentence}</div>
+                            {:else}
+                              <div class="ask-sentence cue-loading">Loading…</div>
+                            {/if}
                           </div>
                         {/if}
                       </div>

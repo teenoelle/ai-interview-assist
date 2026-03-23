@@ -99,8 +99,8 @@
   let openCues = $state<Record<string, boolean>>({});
   function toggleCueOpen(key: string) { openCues = { ...openCues, [key]: !openCues[key] }; }
 
-  async function toggleCue(qIdx: number, cueIdx: number, cue: string) {
-    const key = `${qIdx}-${cueIdx}`;
+  async function toggleCue(qIdx: number, cueIdx: number | string, cue: string) {
+    const key = typeof cueIdx === 'string' ? cueIdx : `${qIdx}-${cueIdx}`;
     if (expandedCues[key]) { expandedCues = { ...expandedCues, [key]: '' }; return; }
     loadingCue = key;
     try {
@@ -411,17 +411,23 @@
               <span class="h-cue-badge h-cue-ask">Ask</span>
               <div class="h-cues-section">
                 {#each parsed.asks as ask, ai}
-                  {@const askKey = `ask-${currentIdx}-${ai}`}
+                  {@const askKey = '[Ask] ' + ask.topic}
                   {@const askOpen = !!openCues[askKey]}
                   <div class="h-cue-block h-cue-block-ask" class:h-cue-open={askOpen}>
-                    <button class="h-cue-toggle" onclick={() => toggleCueOpen(askKey)}>
+                    <button class="h-cue-toggle" onclick={() => { const opening = !askOpen; toggleCueOpen(askKey); if (opening) toggleCue(currentIdx, askKey, askKey); }}>
                       <span class="h-cue-label h-cue-label-ask">Q{ai + 1}</span>
                       <span class="h-cue-preview h-ask-preview">{ask.topic}</span>
                       <span class="h-cue-chevron">{askOpen ? '▾' : '▸'}</span>
                     </button>
                     {#if askOpen}
                       <div class="h-cue-body">
-                        <div class="h-ask-sentence">{ask.question}</div>
+                        {#if loadingCue === askKey}
+                          <div class="h-cue-sentence h-cue-loading">…</div>
+                        {:else if expandedCues[askKey]}
+                          <div class="h-ask-sentence">{expandedCues[askKey]}</div>
+                        {:else}
+                          <div class="h-cue-sentence h-cue-loading">Loading…</div>
+                        {/if}
                       </div>
                     {/if}
                   </div>

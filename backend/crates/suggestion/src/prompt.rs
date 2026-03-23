@@ -51,10 +51,11 @@ Rules:\n\
 - Acknowledge: one complete sentence the candidate reads aloud. Empathetic and conversational — names the business priority without restating the question. Never starts with 'I'.\n\
 - Solve: one sentence starting with 'I'. Names the specific business outcome from Acknowledge. Max 12 words. No vague pronouns.\n\
 - Answer text must be on the same line as 'Answer:' — not on a new line.\n\
-- Answer: first sentence frames the approach as directly addressing the business outcome; last sentence names the specific impact achieved.\n\
+- Answer: first sentence frames the approach as directly addressing the business outcome; second sentence is a signpost that names the 2-3 strategies from the General/Example cues below (e.g. 'I do this through intent-based targeting, cohort segmentation, and retargeting.'); last sentence names the specific business impact achieved.\n\
 - Answer: strategy and approach only. No specific stories, anecdotes, or named examples — those belong in Example cues.\n\
 - Answer: no adjectives or adverbs. No 'utilize'. Facts and actions only.\n\
 - General cues: include '→ business impact' showing what the approach achieves (e.g. 'intent targeting → lower CAC').\n\
+- Acronyms: always write in full on first use followed by the abbreviation in parentheses — e.g. 'Customer Acquisition Cost (CAC)', 'Return on Ad Spend (ROAS)', 'Search Engine Optimization (SEO)'. Never use a bare acronym without first defining it.\n\
 - NEVER invent metrics, percentages, or numbers. Only use figures explicitly stated in the candidate background. If an outcome improved but the magnitude is unknown, describe the direction only (e.g. 'improved conversion') — never fabricate a number.\n\
 - General and Example hints: max 6 words total (keyword phrase + 2-3 word result/approach).\n\
 - Only add a second General or Example if it addresses a genuinely DIFFERENT part of the question or a different story. No repeating the same point in different words.\n\
@@ -85,10 +86,11 @@ Rules:\n\
 - Acknowledge: one complete sentence the candidate reads aloud. Empathetic and conversational — names the business priority without restating the question. Never starts with 'I'.\n\
 - Solve: one sentence starting with 'I'. Names the specific business outcome from Acknowledge. Max 12 words. No vague pronouns.\n\
 - Answer text must be on the same line as 'Answer:' — not on a new line.\n\
-- Answer: first sentence frames the approach as directly addressing the business outcome; last sentence names the specific impact achieved.\n\
+- Answer: first sentence frames the approach as directly addressing the business outcome; second sentence is a signpost that names the 2-3 strategies from the General/Example cues below (e.g. 'I do this through intent-based targeting, cohort segmentation, and retargeting.'); last sentence names the specific business impact achieved.\n\
 - Answer: strategy and approach only. No specific stories, anecdotes, or named examples — those belong in Example cues.\n\
 - Answer: no adjectives or adverbs. No 'utilize'. Facts and actions only.\n\
 - General cues: include '→ business impact' showing what the approach achieves (e.g. 'intent targeting → lower CAC').\n\
+- Acronyms: always write in full on first use followed by the abbreviation in parentheses — e.g. 'Customer Acquisition Cost (CAC)', 'Return on Ad Spend (ROAS)', 'Search Engine Optimization (SEO)'. Never use a bare acronym without first defining it.\n\
 - NEVER invent metrics, percentages, or numbers. Only use figures explicitly stated in the candidate background. If an outcome improved but the magnitude is unknown, describe the direction only (e.g. 'improved conversion') — never fabricate a number.\n\
 - General and Example hints: max 6 words total (keyword phrase + 2-3 word result/approach).\n\
 - Only add a second General or Example if it addresses a genuinely DIFFERENT part of the question or a different story. No repeating the same point in different words.\n\

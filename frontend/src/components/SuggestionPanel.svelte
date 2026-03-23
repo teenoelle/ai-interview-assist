@@ -83,7 +83,6 @@
     for (const ask of parsed.asks) {
       expandCue(current.question, '[Ask] ' + ask.topic);
     }
-    expandCue(current.question, '[Pivot]');
   });
 
   function wordCount(text: string): number {
@@ -332,37 +331,13 @@
             </div>
           {/if}
 
-          <!-- PIVOT chip -->
-          {#if !current.streaming}
-            {@const pivotOpen = !!openCues['[Pivot]']}
-            <div class="tp-pivot-row">
-              <div class="tp-cue-block tp-cue-block-pivot" class:tp-cue-open={pivotOpen}>
-                <button class="tp-cue-toggle" onclick={() => { const opening = !pivotOpen; toggleCueOpen('[Pivot]'); if (opening) expandCue(current.question, '[Pivot]'); }}>
-                  <span class="cue-label-sm cue-label-pivot">Pivot</span>
-                  <span class="tp-cue-preview" style="color: #6b7280">Recovery phrase if interrupted</span>
-                  <span class="tp-cue-chevron">{pivotOpen ? '▾' : '▸'}</span>
-                </button>
-                {#if pivotOpen}
-                  <div class="tp-cue-body">
-                    {#if expandedCues['[Pivot]']?.loading}
-                      <div class="cue-sentence cue-loading">…</div>
-                    {:else if expandedCues['[Pivot]']?.sentence}
-                      <div class="cue-sentence">{expandedCues['[Pivot]'].sentence}</div>
-                    {:else}
-                      <div class="cue-sentence cue-loading">Loading…</div>
-                    {/if}
-                  </div>
-                {/if}
-              </div>
-            </div>
-          {/if}
         {/if}
       </div>
     {:else}
       <div class="tp-empty">Waiting for a question...</div>
     {/if}
 
-    <span class="tp-hint">Acknowledge → Bridge → Answer → Close · Ask = follow-up · Pivot = recovery</span>
+    <span class="tp-hint">Acknowledge → Bridge → Answer → Close · Ask = follow-up question</span>
   </div>
 
 {:else}
@@ -471,31 +446,6 @@
                         </div>
                       </div>
                     {/each}
-                  </div>
-                </div>
-              {/if}
-              <!-- PIVOT -->
-              {#if !entry.streaming}
-                {@const pivotKey = '[Pivot]_' + i}
-                {@const pivotOpen = !!openCues[pivotKey]}
-                <div class="e-pivot-row">
-                  <div class="tp-cue-block tp-cue-block-pivot" class:tp-cue-open={pivotOpen}>
-                    <button class="tp-cue-toggle" onclick={() => { const opening = !pivotOpen; toggleCueOpen(pivotKey); if (opening) expandCue(entry.question, pivotKey); }}>
-                      <span class="cue-label-sm cue-label-pivot">Pivot</span>
-                      <span class="tp-cue-preview" style="color: #6b7280">Recovery phrase</span>
-                      <span class="tp-cue-chevron">{pivotOpen ? '▾' : '▸'}</span>
-                    </button>
-                    {#if pivotOpen}
-                      <div class="tp-cue-body">
-                        {#if expandedCues[pivotKey]?.loading}
-                          <div class="cue-sentence cue-loading">…</div>
-                        {:else if expandedCues[pivotKey]?.sentence}
-                          <div class="cue-sentence">{expandedCues[pivotKey].sentence}</div>
-                        {:else}
-                          <div class="cue-sentence cue-loading">Loading…</div>
-                        {/if}
-                      </div>
-                    {/if}
                   </div>
                 </div>
               {/if}
@@ -639,13 +589,6 @@
   .tp-ask-content { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; }
   .tp-ask-topic { font-size: var(--fs-sm); color: #7c4a1a; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
   .tp-ask-question { font-size: var(--fs-lg); color: #fde68a; line-height: 1.4; overflow-wrap: break-word; }
-
-  /* Pivot chip */
-  .tp-pivot-row { flex-shrink: 0; }
-  .e-pivot-row { margin-top: 0.1rem; }
-  .tp-cue-block-pivot { border-color: #1f2937 !important; background: #05070a !important; }
-  .tp-cue-block-pivot.tp-cue-open { border-color: #374151 !important; }
-  .cue-label-pivot { color: #6b7280 !important; }
 
   /* Say text */
   .tp-tell {

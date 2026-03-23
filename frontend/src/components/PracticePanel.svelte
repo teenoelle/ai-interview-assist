@@ -451,27 +451,6 @@
             </div>
           {/if}
 
-          <!-- PIVOT -->
-          <div class="h-pivot-row">
-            <div class="h-cue-block h-cue-block-pivot" class:h-cue-open={!!openCues['[Pivot]_' + currentIdx]}>
-              <button class="h-cue-toggle" onclick={() => { const pk = '[Pivot]_' + currentIdx; const opening = !openCues[pk]; toggleCueOpen(pk); if (opening) toggleCue(currentIdx, pk, '[Pivot]'); }}>
-                <span class="h-cue-label h-cue-label-pivot">Pivot</span>
-                <span class="h-cue-preview" style="color: #6b7280">Recovery phrase if interrupted</span>
-                <span class="h-cue-chevron">{!!openCues['[Pivot]_' + currentIdx] ? '▾' : '▸'}</span>
-              </button>
-              {#if openCues['[Pivot]_' + currentIdx]}
-                <div class="h-cue-body">
-                  {#if loadingCue === '[Pivot]_' + currentIdx}
-                    <div class="h-cue-sentence h-cue-loading">…</div>
-                  {:else if expandedCues['[Pivot]_' + currentIdx]}
-                    <div class="h-cue-sentence">{expandedCues['[Pivot]_' + currentIdx]}</div>
-                  {:else}
-                    <div class="h-cue-sentence h-cue-loading">Loading…</div>
-                  {/if}
-                </div>
-              {/if}
-            </div>
-          </div>
         </div>
       {/if}
 
@@ -711,11 +690,6 @@
   .h-ask-question { font-size: var(--fs-lg); color: #fde68a; line-height: 1.4; overflow-wrap: break-word; }
   .h-ask-load-btn { background: none; border: none; color: #374151; font-size: var(--fs-xs); cursor: pointer; padding: 0; text-decoration: underline; }
 
-  /* Pivot */
-  .h-pivot-row { margin-top: 0.1rem; }
-  .h-cue-block-pivot { border-color: #1f2937 !important; background: #05070a !important; }
-  .h-cue-block-pivot.h-cue-open { border-color: #374151 !important; }
-  .h-cue-label-pivot { color: #6b7280 !important; }
 
 
   /* Cue blocks — matching interview teleprompter */

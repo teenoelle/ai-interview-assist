@@ -80,9 +80,26 @@ pub struct ReviewConfig {
     pub diarize_url: Option<String>,
     pub keywords: Vec<String>,
     pub reviews_dir: PathBuf,
+    pub ffmpeg_bin: Option<String>,
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
+
+fn ffmpeg_cmd(bin_dir: Option<&str>) -> Command {
+    let exe = match bin_dir {
+        Some(dir) => PathBuf::from(dir).join("ffmpeg.exe").to_string_lossy().into_owned(),
+        None => "ffmpeg".to_string(),
+    };
+    Command::new(exe)
+}
+
+fn ffprobe_cmd(bin_dir: Option<&str>) -> Command {
+    let exe = match bin_dir {
+        Some(dir) => PathBuf::from(dir).join("ffprobe.exe").to_string_lossy().into_owned(),
+        None => "ffprobe".to_string(),
+    };
+    Command::new(exe)
+}
 
 pub fn new_id() -> String {
     let ts = SystemTime::now()
@@ -164,8 +181,8 @@ pub async fn delete_all_reviews(reviews_dir: &Path) -> Result<()> {
 
 enum AudioLayout { Mono, StereoMixed, StereoSeparate }
 
-async fn detect_channels(path: &Path) -> AudioLayout {
-    let out = Command::new("ffprobe")
+async fn detect_channels(path: &Path, bin: Option<&str>) -> AudioLayout {
+    let out = ffprobe_cmd(bin)
         .args(["-v", "quiet", "-print_format", "json", "-show_streams", "-select_streams", "a:0"])
         .arg(path)
         .output().await;
@@ -175,17 +192,17 @@ async fn detect_channels(path: &Path) -> AudioLayout {
     if channels < 2 { return AudioLayout::Mono; }
 
     // Compare RMS of left vs right channel over first 30s
-    let left = channel_rms(path, "FL", 30).await.unwrap_or(0.0);
-    let right = channel_rms(path, "FR", 30).await.unwrap_or(0.0);
+    let left = channel_rms(path, "FL", 30, bin).await.unwrap_or(0.0);
+    let right = channel_rms(path, "FR", 30, bin).await.unwrap_or(0.0);
     if left == 0.0 || right == 0.0 { return AudioLayout::Mono; }
     let ratio = (left / right).max(right / left);
     // > 4.0 (~12 dB) = separate tracks; otherwise it's a mixed stereo downmix
     if ratio > 4.0 { AudioLayout::StereoSeparate } else { AudioLayout::StereoMixed }
 }
 
-async fn channel_rms(path: &Path, channel: &str, secs: u32) -> Option<f64> {
+async fn channel_rms(path: &Path, channel: &str, secs: u32, bin: Option<&str>) -> Option<f64> {
     let filter = format!("pan=mono|c0={},volumedetect", channel);
-    let out = Command::new("ffmpeg")
+    let out = ffmpeg_cmd(bin)
         .args(["-t", &secs.to_string(), "-i"]).arg(path)
         .args(["-af", &filter, "-f", "null", "-"])
         .output().await.ok()?;
@@ -205,8 +222,8 @@ async fn channel_rms(path: &Path, channel: &str, secs: u32) -> Option<f64> {
 // ── Audio extraction ──────────────────────────────────────────────────────────
 
 /// Extract audio as raw 16-bit LE PCM at 16 kHz mono.
-async fn extract_pcm(src: &Path, dst: &Path) -> Result<()> {
-    let status = Command::new("ffmpeg")
+async fn extract_pcm(src: &Path, dst: &Path, bin: Option<&str>) -> Result<()> {
+    let status = ffmpeg_cmd(bin)
         .args(["-y", "-i"]).arg(src)
         .args(["-vn", "-ac", "1", "-ar", "16000", "-f", "s16le"])
         .arg(dst)
@@ -216,9 +233,9 @@ async fn extract_pcm(src: &Path, dst: &Path) -> Result<()> {
 }
 
 /// Extract a single stereo channel as raw PCM.
-async fn extract_channel_pcm(src: &Path, dst: &Path, channel: &str) -> Result<()> {
+async fn extract_channel_pcm(src: &Path, dst: &Path, channel: &str, bin: Option<&str>) -> Result<()> {
     let filter = format!("pan=mono|c0={}", channel);
-    let status = Command::new("ffmpeg")
+    let status = ffmpeg_cmd(bin)
         .args(["-y", "-i"]).arg(src)
         .args(["-af", &filter, "-ar", "16000", "-f", "s16le"])
         .arg(dst)
@@ -228,8 +245,8 @@ async fn extract_channel_pcm(src: &Path, dst: &Path, channel: &str) -> Result<()
 }
 
 /// Get duration in seconds via ffprobe.
-async fn probe_duration(path: &Path) -> f64 {
-    let out = Command::new("ffprobe")
+async fn probe_duration(path: &Path, bin: Option<&str>) -> f64 {
+    let out = ffprobe_cmd(bin)
         .args(["-v", "quiet", "-print_format", "json", "-show_format"])
         .arg(path)
         .output().await;
@@ -498,10 +515,12 @@ pub async fn process_review(
         serde_json::json!({ "id": id, "source_filename": source_filename, "started_at": now_ms() }).to_string(),
     ).await;
 
+    let bin = cfg.ffmpeg_bin.as_deref();
+
     // 1. Probe duration + channel layout
     send_progress(&progress_tx, 5, "Detecting audio layout…");
-    let layout = detect_channels(&source_path).await;
-    let duration = probe_duration(&source_path).await;
+    let layout = detect_channels(&source_path, bin).await;
+    let duration = probe_duration(&source_path, bin).await;
 
     // 2. Extract audio as PCM
     send_progress(&progress_tx, 10, "Extracting audio…");
@@ -509,8 +528,8 @@ pub async fn process_review(
         AudioLayout::StereoSeparate => {
             let you_pcm = work_dir.join("you.pcm");
             let them_pcm = work_dir.join("them.pcm");
-            extract_channel_pcm(&source_path, &you_pcm, "FL").await?;
-            extract_channel_pcm(&source_path, &them_pcm, "FR").await?;
+            extract_channel_pcm(&source_path, &you_pcm, "FL", bin).await?;
+            extract_channel_pcm(&source_path, &them_pcm, "FR", bin).await?;
 
             send_progress(&progress_tx, 15, "Chunking audio…");
             let you_chunks = make_chunks(&you_pcm, &work_dir, duration).await?;
@@ -524,7 +543,7 @@ pub async fn process_review(
         }
         _ => {
             let pcm_path = work_dir.join("audio.pcm");
-            extract_pcm(&source_path, &pcm_path).await?;
+            extract_pcm(&source_path, &pcm_path, bin).await?;
 
             send_progress(&progress_tx, 15, "Chunking audio…");
             let chunks = make_chunks(&pcm_path, &work_dir, duration).await?;

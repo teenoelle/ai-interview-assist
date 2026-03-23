@@ -21,6 +21,7 @@ pub struct Config {
     pub piper_binary: Option<String>,
     pub piper_models_dir: Option<String>,
     pub app_token: Option<String>,
+    pub ffmpeg_bin: Option<String>,
 }
 
 impl Config {
@@ -65,6 +66,7 @@ impl Config {
         let piper_binary = std::env::var("PIPER_BINARY").ok().filter(|s| !s.is_empty());
         let piper_models_dir = std::env::var("PIPER_MODELS_DIR").ok().filter(|s| !s.is_empty());
         let app_token = std::env::var("APP_TOKEN").ok().filter(|s| !s.is_empty());
-        Ok(Self { gemini_api_key, groq_api_key, groq_api_key_2, openrouter_api_key, mistral_api_key, cerebras_api_key, anthropic_api_key, qwen_api_key, whisper_url, whisper_model, ollama_url, ollama_model, ollama_models, ollama_vision_model, diarize_url, port, piper_binary, piper_models_dir, app_token })
+        let ffmpeg_bin = std::env::var("FFMPEG_BIN").ok().filter(|s| !s.is_empty());
+        Ok(Self { gemini_api_key, groq_api_key, groq_api_key_2, openrouter_api_key, mistral_api_key, cerebras_api_key, anthropic_api_key, qwen_api_key, whisper_url, whisper_model, ollama_url, ollama_model, ollama_models, ollama_vision_model, diarize_url, port, piper_binary, piper_models_dir, app_token, ffmpeg_bin })
     }
 }

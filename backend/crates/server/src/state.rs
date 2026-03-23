@@ -35,6 +35,7 @@ pub struct AppState {
     pub piper_binary: Option<String>,
     pub piper_models_dir: Option<String>,
     pub app_token: Option<String>,
+    pub ffmpeg_bin: Option<String>,
     pub reviews_dir: PathBuf,
     pub review_sessions: Arc<std::sync::Mutex<std::collections::HashMap<String, watch::Receiver<ReviewProgress>>>>,
 }

@@ -22,6 +22,7 @@ fn make_cfg(state: &AppState, keywords: Vec<String>) -> ReviewConfig {
         diarize_url: state.diarize_url.clone(),
         keywords,
         reviews_dir: state.reviews_dir.clone(),
+        ffmpeg_bin: state.ffmpeg_bin.clone(),
     }
 }
 

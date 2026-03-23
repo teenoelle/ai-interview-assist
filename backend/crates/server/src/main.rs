@@ -137,6 +137,7 @@ async fn main() -> anyhow::Result<()> {
         piper_binary: config.piper_binary.clone(),
         piper_models_dir: config.piper_models_dir.clone(),
         app_token: config.app_token.clone(),
+        ffmpeg_bin: config.ffmpeg_bin.clone(),
         reviews_dir,
         review_sessions: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
     };

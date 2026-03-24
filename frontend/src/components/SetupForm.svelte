@@ -1,9 +1,6 @@
 <script lang="ts">
   import { submitSetup, type CompanyBrief, type InterviewerSummary } from '../lib/api';
   import { saveKeywords } from '../lib/keywordTracker';
-  import CompanyBriefPanel from './CompanyBriefPanel.svelte';
-  import InterviewerProfilePanel from './InterviewerProfilePanel.svelte';
-  import KeywordTrackerPanel from './KeywordTrackerPanel.svelte';
   function load(key: string, fallback: string) { return localStorage.getItem(key) ?? fallback; }
   function loadArr(key: string, fallback: string[]): string[] {
     try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
@@ -24,42 +21,18 @@
   $effect(() => { localStorage.setItem('setup-interviewee-linkedin', intervieweeLinkedin); });
   $effect(() => { localStorage.setItem('setup-portfolio-urls', JSON.stringify(portfolioUrls)); });
   $effect(() => { localStorage.setItem('setup-extra-experience', extraExperience); });
-  let questionsExpanded = $state(true);
   let loading = $state(false);
   let loadingStep = $state('');
   let error = $state('');
   let formEl: HTMLDivElement | undefined = $state();
 
-  // Restore previous results so back-navigation preserves the overview
-  function loadSaved<T>(key: string, fallback: T): T {
-    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
-  }
-  let systemPromptPreview = $state(loadSaved('setup-system-prompt-preview', ''));
-  let predictedQuestions = $state<string[]>(loadSaved('setup-predicted-questions', []));
-  let companyBrief = $state<CompanyBrief | null>(loadSaved('setup-company-brief', null));
-  let interviewerSummaries = $state<InterviewerSummary[]>(loadSaved('setup-interviewer-summaries', []));
-  let jdKeywords = $state<string[]>(loadSaved('setup-jd-keywords-result', []));
-  let setupDone = $state(loadSaved<boolean>('setup-done', false));
+  let predictedQuestions = $state<string[]>([]);
+  let companyBrief = $state<CompanyBrief | null>(null);
+  let interviewerSummaries = $state<InterviewerSummary[]>([]);
+  let jdKeywords = $state<string[]>([]);
   const props = $props<{
-    onSetupComplete: (data?: { companyBrief?: any; interviewerSummaries?: any[]; jdKeywords?: string[] }) => void;
-    onPractice: (questions: string[]) => void;
+    onSetupComplete: (data?: { companyBrief?: any; interviewerSummaries?: any[]; jdKeywords?: string[]; predictedQuestions?: string[] }) => void;
   }>();
-
-  function startInterview() {
-    try {
-      props.onSetupComplete({ companyBrief, interviewerSummaries, jdKeywords });
-    } catch (e) {
-      error = 'Error starting interview: ' + String(e);
-    }
-  }
-
-  function startPractice() {
-    try {
-      props.onPractice(predictedQuestions);
-    } catch (e) {
-      error = 'Error starting practice: ' + String(e);
-    }
-  }
 
   function addInterviewer() {
     interviewers = [...interviewers, ''];
@@ -107,20 +80,12 @@
 
       loadingStep = 'Generating your coaching profile…';
       const result = await submitSetup(formData);
-      systemPromptPreview = result.system_prompt_preview;
       predictedQuestions = result.predicted_questions ?? [];
       companyBrief = result.company_brief ?? null;
       interviewerSummaries = result.interviewer_summaries ?? [];
       jdKeywords = result.jd_keywords ?? [];
       if (jdKeywords.length > 0) saveKeywords(jdKeywords);
-      setupDone = true;
-      // Persist so back-navigation restores the overview
-      localStorage.setItem('setup-system-prompt-preview', JSON.stringify(systemPromptPreview));
-      localStorage.setItem('setup-predicted-questions', JSON.stringify(predictedQuestions));
-      localStorage.setItem('setup-company-brief', JSON.stringify(companyBrief));
-      localStorage.setItem('setup-interviewer-summaries', JSON.stringify(interviewerSummaries));
-      localStorage.setItem('setup-jd-keywords-result', JSON.stringify(jdKeywords));
-      localStorage.setItem('setup-done', JSON.stringify(true));
+      props.onSetupComplete({ companyBrief, interviewerSummaries, jdKeywords, predictedQuestions });
     } catch (e) {
       error = String(e);
       formEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -149,66 +114,7 @@
     <div class="error">{error}</div>
   {/if}
 
-  {#if setupDone}
-    <div class="post-setup">
-      <div class="setup-success">✓ Setup complete — review your brief below, then start the interview</div>
-
-      {#if companyBrief}
-          <CompanyBriefPanel brief={companyBrief} />
-        {/if}
-
-        {#if interviewerSummaries.length > 0}
-          <div class="section-block">
-            <div class="section-block-label">Interviewer Profiles</div>
-            <InterviewerProfilePanel interviewers={interviewerSummaries} />
-          </div>
-        {/if}
-
-        {#if jdKeywords.length > 0}
-          <div class="section-block">
-            <div class="section-block-label">Keywords to mention</div>
-            <KeywordTrackerPanel keywords={jdKeywords} mentionedSet={new Set()} />
-          </div>
-        {/if}
-
-        {#if predictedQuestions.length > 0}
-          {@const firstIsQuestion = predictedQuestions[0]?.includes('?')}
-          <div class="predicted">
-            <button class="predicted-toggle" onclick={() => questionsExpanded = !questionsExpanded}>
-              <span class="predicted-label">Predicted Interview Questions</span>
-              <span class="predicted-count">{predictedQuestions.length - (firstIsQuestion ? 0 : 1)}</span>
-              <span class="predicted-chevron">{questionsExpanded ? '▴' : '▾'}</span>
-            </button>
-            {#if questionsExpanded}
-              {#if !firstIsQuestion && predictedQuestions.length > 1}
-                <p class="predicted-context">{predictedQuestions[0]}</p>
-              {/if}
-              <ol class="questions-list">
-                {#each (firstIsQuestion ? predictedQuestions : predictedQuestions.slice(1)) as q}
-                  <li>{q}</li>
-                {/each}
-              </ol>
-            {/if}
-          </div>
-        {/if}
-
-        {#if systemPromptPreview}
-          <details class="preview">
-            <summary>System prompt preview</summary>
-            <pre>{systemPromptPreview}</pre>
-          </details>
-        {/if}
-
-      <div class="action-row">
-        <button onclick={() => { setupDone = false; }} class="btn-back">← Edit Setup</button>
-        <div class="action-row-right">
-          <button onclick={startPractice} class="btn-secondary">Practice First</button>
-          <button onclick={startInterview} class="btn-primary">Start Interview →</button>
-        </div>
-      </div>
-    </div>
-  {:else}
-    <div class="field">
+  <div class="field">
       <label for="job-desc">Job Description</label>
       <textarea
         id="job-desc"
@@ -311,12 +217,11 @@
     </div>
 
     <button onclick={handleSubmit} disabled={loading} class="btn-primary">
-      {loading ? (loadingStep || 'Processing…') : 'Start Session'}
+      {loading ? (loadingStep || 'Processing…') : 'Start Interview →'}
     </button>
     {#if loading}
       <p class="loading-note">This can take 30–60 seconds if a company URL was provided.</p>
     {/if}
-  {/if}
 </div>
 
 <style>

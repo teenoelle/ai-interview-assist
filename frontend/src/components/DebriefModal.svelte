@@ -1,11 +1,13 @@
 <script lang="ts">
   import type { TranscriptEntry, SuggestionEntry } from '../lib/types';
+  import type { ReviewReport } from './ReviewPanel.svelte';
 
-  const { transcript, suggestions, onClose, onSave } = $props<{
+  const { transcript, suggestions, onClose, onSave, onOpenReport } = $props<{
     transcript: TranscriptEntry[];
     suggestions: SuggestionEntry[];
     onClose: () => void;
     onSave?: (result: DebriefResult) => void;
+    onOpenReport?: (report: ReviewReport) => void;
   }>();
 
   interface DebriefResult {
@@ -24,6 +26,32 @@
   let emailSent = $state(false);
   let nextSteps = $state<string[]>([]);
   let loadingNextSteps = $state(false);
+  let showReports = $state(false);
+  let reportList = $state<ReviewReport[]>([]);
+  let reportsLoading = $state(false);
+  let reportSearch = $state('');
+  const filteredReports = $derived(
+    reportSearch.trim()
+      ? reportList.filter(r => (r.source_filename ?? '').toLowerCase().includes(reportSearch.toLowerCase()))
+      : reportList
+  );
+
+  async function toggleReports() {
+    showReports = !showReports;
+    if (showReports && reportList.length === 0) {
+      reportsLoading = true;
+      try {
+        const resp = await fetch('/api/reviews');
+        if (resp.ok) reportList = await resp.json();
+      } catch { /* ignore */ }
+      reportsLoading = false;
+    }
+  }
+
+  async function deleteReport(id: string) {
+    await fetch(`/api/review/${id}`, { method: 'DELETE' });
+    reportList = reportList.filter(r => r.id !== id);
+  }
 
   async function fetchNextSteps() {
     if (transcript.length === 0) return;
@@ -191,6 +219,41 @@
           {/if}
         </section>
       {/if}
+
+      <!-- Past Reports -->
+      <section class="reports-section">
+        <button class="reports-toggle" onclick={toggleReports}>
+          {showReports ? '▴' : '▾'} Past Reports
+        </button>
+        {#if showReports}
+          {#if reportsLoading}
+            <p class="steps-loading">Loading reports…</p>
+          {:else if reportList.length === 0}
+            <p class="steps-empty">No reports yet. Upload a recording from the home screen to get started.</p>
+          {:else}
+            <input class="report-search" type="text" placeholder="Search reports…" bind:value={reportSearch} />
+            {#if filteredReports.length === 0}
+              <p class="steps-empty">No matching reports.</p>
+            {:else}
+              <div class="report-list">
+                {#each filteredReports as r}
+                  <div class="report-item">
+                    <div class="report-meta">
+                      <span class="report-name">{r.source_filename ?? 'Untitled'}</span>
+                      <span class="report-date">{r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}</span>
+                    </div>
+                    <p class="report-summary">{r.qa_pairs.length} Q&A · {r.vocal_summary.avg_wpm} wpm · {Math.round(r.speaker_summary.you_pct)}% you</p>
+                    <div class="report-actions">
+                      <button class="report-open" onclick={() => { onOpenReport?.(r); onClose(); }}>Open</button>
+                      <button class="report-delete" onclick={() => deleteReport(r.id)}>Delete</button>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          {/if}
+        {/if}
+      </section>
     </div>
 
     <!-- Email footer — always visible when result is ready -->
@@ -326,4 +389,41 @@
   .send-btn:hover:not(:disabled) { background: #2563eb; }
   .send-btn:disabled { opacity: 0.4; cursor: default; }
   .send-btn.sent { background: #166534; }
+
+  .reports-section { display: flex; flex-direction: column; gap: 0.5rem; }
+  .reports-toggle {
+    align-self: flex-start; background: none; border: 1px solid #1e293b;
+    color: #64748b; font-size: var(--fs-sm); font-weight: 600;
+    padding: 0.25rem 0.75rem; border-radius: 0.3rem; cursor: pointer;
+    transition: all 0.12s;
+  }
+  .reports-toggle:hover { border-color: #334155; color: #94a3b8; }
+  .report-search {
+    width: 100%; padding: 0.35rem 0.6rem; background: #0f172a;
+    border: 1px solid #1e293b; border-radius: 0.3rem; color: #e2e8f0;
+    font-size: var(--fs-sm); outline: none;
+  }
+  .report-search:focus { border-color: #3b82f6; }
+  .report-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: 240px; overflow-y: auto; }
+  .report-item {
+    background: #060e1a; border: 1px solid #1e293b; border-radius: 0.35rem;
+    padding: 0.5rem 0.65rem; display: flex; flex-direction: column; gap: 0.2rem;
+  }
+  .report-meta { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+  .report-name { font-size: var(--fs-sm); font-weight: 600; color: #cbd5e1; }
+  .report-date { font-size: var(--fs-xs); color: #475569; }
+  .report-summary { font-size: var(--fs-xs); color: #64748b; margin: 0; }
+  .report-actions { display: flex; gap: 0.4rem; }
+  .report-open {
+    background: #1e3a5f; border: 1px solid #3b82f6; color: #93c5fd;
+    font-size: var(--fs-xs); font-weight: 700; padding: 0.15rem 0.5rem;
+    border-radius: 0.25rem; cursor: pointer; transition: all 0.12s;
+  }
+  .report-open:hover { background: #2d4f7c; }
+  .report-delete {
+    background: none; border: 1px solid #4b1a1a; color: #ef4444;
+    font-size: var(--fs-xs); padding: 0.15rem 0.5rem;
+    border-radius: 0.25rem; cursor: pointer; transition: all 0.12s;
+  }
+  .report-delete:hover { background: #2d0a0a; }
 </style>

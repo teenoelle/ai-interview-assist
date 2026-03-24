@@ -904,15 +904,15 @@ Ask: team | How long have you been with the team?`;
     } catch { /* keep static fallback */ }
   }
 
-  function handleSetupComplete(data?: { companyBrief?: any; interviewerSummaries?: any[]; jdKeywords?: string[] }) {
+  function handleSetupComplete(data?: { companyBrief?: any; interviewerSummaries?: any[]; jdKeywords?: string[]; predictedQuestions?: string[] }) {
     if (data?.companyBrief) companyBrief = data.companyBrief;
     if (data?.interviewerSummaries) interviewerSummaries = data.interviewerSummaries;
     if (data?.jdKeywords) { jdKeywords = data.jdKeywords; mentionedKeywords = new Set(); interviewerRaisedKeywords = new Set(); }
+    if (data?.predictedQuestions) predictedQuestions = data.predictedQuestions;
     phase = 'interview';
     connectWs();
     void fetchOpeningSuggestion();
   }
-  function handlePractice(questions: string[]) { predictedQuestions = questions; phase = 'practice'; connectWs(); }
 
   function connectWs() {
     eventWs?.disconnect();
@@ -1320,13 +1320,10 @@ Ask: team | How long have you been with the team?`;
           </select>
         </div>
       </header>
-      <SetupForm onSetupComplete={handleSetupComplete} onPractice={handlePractice} />
+      <SetupForm onSetupComplete={handleSetupComplete} />
       <div class="setup-review-row">
         <button class="setup-review-btn" onclick={() => showReviewUpload = true}>
           ⬆ Review a Recording
-        </button>
-        <button class="setup-review-btn" onclick={() => { showReviewList = !showReviewList; if (!showReviewList) return; loadReviewList(); }}>
-          {showReviewList ? '▴' : '▾'} Past Reports
         </button>
         {#if reviewReport}
           <button class="setup-review-view-btn" onclick={() => { showReviewPanel = true; }}>
@@ -1364,14 +1361,6 @@ Ask: team | How long have you been with the team?`;
         </div>
       {/if}
     </div>
-
-  {:else if phase === 'practice'}
-    <PracticePanel
-      questions={predictedQuestions}
-      systemPrompt=""
-      onStartInterview={() => { phase = 'interview'; void fetchOpeningSuggestion(); }}
-      onBackToSetup={() => { phase = 'setup'; }}
-    />
 
   {:else}
     <div class="interview-layout">
@@ -2189,6 +2178,7 @@ Ask: team | How long have you been with the team?`;
         {transcript}
         {suggestions}
         onClose={() => showDebrief = false}
+        onOpenReport={(r) => { reviewReport = r; showReviewPanel = true; }}
         onSave={(r) => saveInterview({
           summary: r.summary,
           strong_points: r.strong_points,
@@ -2204,7 +2194,7 @@ Ask: team | How long have you been with the team?`;
 {#if showHistory}
   <InterviewHistoryPanel
     onClose={() => showHistory = false}
-    onRehearsal={(questions) => { predictedQuestions = questions; phase = 'practice'; connectWs(); showHistory = false; }}
+    onRehearsal={(questions) => { predictedQuestions = questions; showHistory = false; }}
   />
 {/if}
 {#if showReviewUpload}

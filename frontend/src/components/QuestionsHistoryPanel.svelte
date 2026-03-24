@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { SuggestionEntry } from '../lib/types';
   import { TAG_CONFIG } from '../lib/questionTagger';
+  import { parseSuggestion, getAnswerType } from '../lib/parseSuggestion';
 
   const { suggestions, currentIndex, onJump, scrollToLatestKey = 0 } = $props<{
     suggestions: SuggestionEntry[];
@@ -40,6 +41,14 @@
             {#if entry.tag}
               {@const tc = TAG_CONFIG[entry.tag]}
               <span class="qhist-tag" style="color: {tc.color}; background: {tc.bg}">{tc.label}</span>
+            {/if}
+            {#if entry.secondaryTag}
+              {@const tc2 = TAG_CONFIG[entry.secondaryTag]}
+              <span class="qhist-tag qhist-tag-secondary" style="color: {tc2.color}; background: {tc2.bg}" title="Also: {tc2.label}">+{tc2.label}</span>
+            {/if}
+            {#if entry.suggestion && !entry.streaming}
+              {@const at = getAnswerType(parseSuggestion(entry.suggestion), entry.tag)}
+              {#if at.framework}<span class="qhist-ans-type">{at.framework}</span>{/if}
             {/if}
             <span class="qhist-status-dot"
               class:dot-answered={entry.answered === true}
@@ -150,6 +159,22 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 0.05em 0.35em;
+    border-radius: 0.2em;
+    flex-shrink: 0;
+  }
+  .qhist-tag-secondary {
+    opacity: 0.7;
+    border: 1px solid currentColor;
+  }
+
+  .qhist-ans-type {
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    color: #475569;
+    letter-spacing: 0.03em;
+    padding: 0.05em 0.3em;
+    background: #080d18;
+    border: 1px solid #1a2540;
     border-radius: 0.2em;
     flex-shrink: 0;
   }

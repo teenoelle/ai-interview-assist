@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { countFillers, totalFillers } from '../lib/filler';
-  import { parseSuggestion, parseCues } from '../lib/parseSuggestion';
+  import { parseSuggestion, parseCues, getAnswerType } from '../lib/parseSuggestion';
   import * as ttsClient from '../lib/ttsClient';
   import type { CombinedVoice } from '../lib/ttsClient';
 
@@ -68,9 +68,15 @@
     }
     readOn = true;
     const parsed = parseSuggestion(text);
-    if (!parsed.acknowledge) { readOn = false; return; }
-    const toSpeak = [parsed.acknowledge, parsed.solve, parsed.bridge, parsed.tell, parsed.close].filter(Boolean).join(' ');
-    ttsClient.speak(toSpeak, voiceId, voiceRate, voiceVolume);
+    // Find the opening field for whichever answer type was generated
+    const openingField =
+      parsed.present   || parsed.company  || parsed.direction ||
+      parsed.acknowledge || parsed.tell   ||
+      (parsed.asks.length > 0 ? parsed.asks[0].question : '');
+    if (!openingField) { readOn = false; return; }
+    // Speak only the first sentence of the opening field
+    const firstSentence = openingField.split(/(?<=[.!?])\s+/)[0] ?? openingField;
+    ttsClient.speak(firstSentence, voiceId, voiceRate, voiceVolume);
   }
 
 
@@ -98,6 +104,7 @@
   let loadingCue = $state<string | null>(null);
   let openCues = $state<Record<string, boolean>>({});
   function toggleCueOpen(key: string) { openCues = { ...openCues, [key]: !openCues[key] }; }
+
 
   async function toggleCue(qIdx: number, cueIdx: number | string, cue: string) {
     const key = typeof cueIdx === 'string' ? cueIdx : `${qIdx}-${cueIdx}`;
@@ -354,101 +361,191 @@
         <div class="hint-loading-inline">Loading suggestions…</div>
       {:else if hints[currentIdx]}
         {@const parsed = parseSuggestion(hints[currentIdx])}
+        {@const hIsIntro    = !!(parsed.present || parsed.thread || parsed.past || parsed.future)}
+        {@const hIsMotiv    = !!(parsed.company || parsed.role || parsed.self)}
+        {@const hIsFutureTy = !!(parsed.direction || parsed.alignment || parsed.contribution)}
+        {@const hIsClosing  = parsed.asks.length >= 3 && !parsed.acknowledge && !parsed.present && !parsed.company && !parsed.direction && !parsed.tell}
+        {@const hAnsType = getAnswerType(parsed)}
         <div class="hints-card">
           <div class="h-read-row">
             <button class="read-btn" class:active={readOn} onclick={() => speakSay(hints[currentIdx])}>{readOn ? '⏹ Stop' : '🔊 Read'}</button>
+            {#if hAnsType.framework}
+              <span class="h-breadcrumb">{hAnsType.label}</span>
+            {/if}
           </div>
 
-          {#if parsed.acknowledge}
-            <div class="h-sec h-sec-ack">
-              <span class="h-cue-badge h-cue-ack">Acknowledge</span>
-              <span class="h-speak-text">{parsed.acknowledge}</span>
-            </div>
-          {/if}
+          {#if hIsIntro}
+            {#if parsed.present}<div class="h-sec h-sec-present"><span class="h-cue-badge h-cue-present">Summary</span><span class="h-speak-text">{parsed.present}</span></div>{/if}
+            {#if parsed.thread}<div class="h-sec h-sec-thread"><span class="h-cue-badge h-cue-thread">Thread</span><span class="h-speak-text">{parsed.thread}</span></div>{/if}
+            {#if parsed.transition1}<div class="h-transition">{parsed.transition1}</div>{/if}
+            {#if parsed.past}<div class="h-sec h-sec-past"><span class="h-cue-badge h-cue-past">Story</span><span class="h-speak-text">{parsed.past}</span></div>{/if}
+            {#if parsed.transition2}<div class="h-transition">{parsed.transition2}</div>{/if}
+            {#if parsed.future}<div class="h-sec h-sec-future"><span class="h-cue-badge h-cue-future">Next</span><span class="h-speak-text">{parsed.future}</span></div>{/if}
+            {#if parsed.transition3}<div class="h-transition">{parsed.transition3}</div>{/if}
+            {#if parsed.close}<div class="h-sec h-sec-close"><span class="h-cue-badge h-cue-close">Close</span><span class="h-speak-text">{parsed.close}</span></div>{/if}
+            {#if parsed.asks.length > 0}<div class="h-sec h-sec-ask"><span class="h-cue-badge h-cue-ask">Ask</span><div class="h-ask-list">{#each parsed.asks as ask, ai}<div class="h-ask-item"><div class="h-ask-content"><span class="h-ask-topic">{ask.topic}</span><span class="h-ask-question">{ask.question}</span>{#if ask.followUp}<span class="h-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
-          {#if parsed.solve}
-            <div class="h-sec h-sec-solve">
-              <span class="h-cue-badge h-cue-solve">Solve</span>
-              <span class="h-speak-text">{parsed.solve}</span>
-            </div>
-          {/if}
+          {:else if hIsMotiv}
+            {#if parsed.company}<div class="h-sec h-sec-company"><span class="h-cue-badge h-cue-company">Company</span><span class="h-speak-text">{parsed.company}</span></div>{/if}
+            {#if parsed.transition1}<div class="h-transition">{parsed.transition1}</div>{/if}
+            {#if parsed.role}<div class="h-sec h-sec-role"><span class="h-cue-badge h-cue-role">Role</span><span class="h-speak-text">{parsed.role}</span></div>{/if}
+            {#if parsed.transition2}<div class="h-transition">{parsed.transition2}</div>{/if}
+            {#if parsed.self}<div class="h-sec h-sec-self"><span class="h-cue-badge h-cue-self">Self</span><span class="h-speak-text">{parsed.self}</span></div>{/if}
+            {#if parsed.transition3}<div class="h-transition">{parsed.transition3}</div>{/if}
+            {#if parsed.close}<div class="h-sec h-sec-close"><span class="h-cue-badge h-cue-close">Close</span><span class="h-speak-text">{parsed.close}</span></div>{/if}
+            {#if parsed.asks.length > 0}<div class="h-sec h-sec-ask"><span class="h-cue-badge h-cue-ask">Ask</span><div class="h-ask-list">{#each parsed.asks as ask, ai}<div class="h-ask-item"><div class="h-ask-content"><span class="h-ask-topic">{ask.topic}</span><span class="h-ask-question">{ask.question}</span>{#if ask.followUp}<span class="h-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
-          {#if parsed.bridge}
-            <div class="h-sec h-sec-bridge">
-              <span class="h-cue-badge h-cue-bridge">Bridge</span>
-              <span class="h-speak-text h-bridge-text">{parsed.bridge}</span>
-            </div>
-          {/if}
+          {:else if hIsFutureTy}
+            {#if parsed.direction}<div class="h-sec h-sec-direction"><span class="h-cue-badge h-cue-direction">Direction</span><span class="h-speak-text">{parsed.direction}</span></div>{/if}
+            {#if parsed.transition1}<div class="h-transition">{parsed.transition1}</div>{/if}
+            {#if parsed.alignment}<div class="h-sec h-sec-alignment"><span class="h-cue-badge h-cue-alignment">Alignment</span><span class="h-speak-text">{parsed.alignment}</span></div>{/if}
+            {#if parsed.transition2}<div class="h-transition">{parsed.transition2}</div>{/if}
+            {#if parsed.contribution}<div class="h-sec h-sec-contribution"><span class="h-cue-badge h-cue-contribution">Contribution</span><span class="h-speak-text">{parsed.contribution}</span></div>{/if}
+            {#if parsed.transition3}<div class="h-transition">{parsed.transition3}</div>{/if}
+            {#if parsed.close}<div class="h-sec h-sec-close"><span class="h-cue-badge h-cue-close">Close</span><span class="h-speak-text">{parsed.close}</span></div>{/if}
+            {#if parsed.asks.length > 0}<div class="h-sec h-sec-ask"><span class="h-cue-badge h-cue-ask">Ask</span><div class="h-ask-list">{#each parsed.asks as ask, ai}<div class="h-ask-item"><div class="h-ask-content"><span class="h-ask-topic">{ask.topic}</span><span class="h-ask-question">{ask.question}</span>{#if ask.followUp}<span class="h-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
-          <div class="h-sec h-sec-say">
-            <div class="h-sec-header">
-              <span class="h-cue-badge">{parsed.cue}</span>
-              {#if parsed.tell}
-                {@const words = parsed.tell.trim().split(/\s+/).filter(Boolean).length}
-                {@const secs = Math.round((words / 130) * 60)}
-                <span class="h-time-est">~{secs < 60 ? secs + 's' : Math.floor(secs/60) + 'm ' + (secs%60) + 's'}</span>
-              {/if}
+          {:else if hIsClosing}
+            <div class="h-closing-wrap">
+              <div class="h-closing-header">Questions to Ask</div>
+              {#each parsed.asks as ask, ai}
+                <div class="h-closing-card">
+                  <span class="h-closing-num">{ai + 1}</span>
+                  <div class="h-closing-content">
+                    <span class="h-ask-topic">{ask.topic}</span>
+                    <span class="h-ask-question">{ask.question}</span>
+                    {#if ask.followUp}<span class="h-ask-followup">↳ {ask.followUp}</span>{/if}
+                  </div>
+                </div>
+              {/each}
             </div>
-            <span class="h-speak-text h-speak-main">{parsed.tell}</span>
-            {#if parsed.body}
-              {@const cues = parseCues(parsed.body)}
-              {#if cues.length > 0}
-                <div class="h-cues-section">
-                  {#each cues as c, ci}
-                    {@const isOpen = !!openCues[`${currentIdx}-${ci}`]}
-                    <div class="h-cue-block" class:h-cue-open={isOpen}>
-                      <button class="h-cue-toggle" onclick={() => { const opening = !isOpen; toggleCueOpen(`${currentIdx}-${ci}`); if (opening) toggleCue(currentIdx, ci, c.text); }}>
-                        <span class="h-cue-label" class:h-cue-label-example={c.typeTag === 'Example' || c.typeTag === 'Story' || c.label === 'Example' || c.label === 'Story'}>{c.typeTag || (c.label === 'General' ? 'Point' : c.label)}</span>
-                        <span class="h-cue-preview">{c.text}</span>
-                        <span class="h-cue-chevron">{isOpen ? '▾' : '▸'}</span>
+
+          {:else}
+            {#if parsed.acknowledge}
+              <div class="h-sec h-sec-ack">
+                <span class="h-cue-badge h-cue-ack">Acknowledge</span>
+                <span class="h-speak-text">{parsed.acknowledge}</span>
+              </div>
+            {/if}
+
+            {#if parsed.solve}
+              <div class="h-sec h-sec-solve">
+                <span class="h-cue-badge h-cue-solve">Solve</span>
+                <span class="h-speak-text">{parsed.solve}</span>
+              </div>
+            {/if}
+
+            {#if parsed.bridge}
+              <div class="h-sec h-sec-bridge">
+                <span class="h-cue-badge h-cue-bridge">Bridge</span>
+                <span class="h-speak-text h-bridge-text">{parsed.bridge}</span>
+              </div>
+            {/if}
+
+            <div class="h-sec h-sec-say">
+              <div class="h-sec-header">
+                <span class="h-cue-badge">{parsed.cue}</span>
+                {#if parsed.tell}
+                  {@const words = parsed.tell.trim().split(/\s+/).filter(Boolean).length}
+                  {@const secs = Math.round((words / 130) * 60)}
+                  <span class="h-time-est">~{secs < 60 ? secs + 's' : Math.floor(secs/60) + 'm ' + (secs%60) + 's'}</span>
+                  {#if parsed.body}
+                    {@const _tc = parseCues(parsed.body)}
+                    {#if _tc.some(c => c.label === 'Example' || c.typeTag === 'Example')}<span class="h-type-tag h-type-example">Example</span>{/if}
+                    {#if _tc.some(c => c.label === 'Pivot' || c.typeTag === 'Pivot')}<span class="h-type-tag h-type-pivot">Pivot</span>{/if}
+                  {/if}
+                {/if}
+              </div>
+              <div class="h-speak-text h-speak-main">
+                {#if parsed.strategies.length > 1 || parsed.strategies[0]?.keyword}
+                  {#each parsed.strategies as strategy, si}
+                    {@const stratKey = `strat-hint-${currentIdx}-${si}`}
+                    {@const isStratOpen = !!openCues[stratKey]}
+                    <div class="tp-strat-block" class:tp-strat-open={isStratOpen}>
+                      <button class="tp-strat-toggle" onclick={() => toggleCueOpen(stratKey)}>
+                        {#if strategy.keyword}<span class="tp-strat-kw">{strategy.keyword}</span>{/if}
+                        <span class="tp-strat-preview">{strategy.text.split(/(?<=[.!?])\s+/)[0] ?? strategy.text}</span>
+                        <span class="tp-strat-chevron">{isStratOpen ? '▾' : '▸'}</span>
                       </button>
-                      {#if isOpen}
-                        <div class="h-cue-body">
-                          {#if loadingCue === `${currentIdx}-${ci}`}
-                            <div class="h-cue-sentence h-cue-loading">…</div>
-                          {:else if expandedCues[`${currentIdx}-${ci}`]}
-                            <div class="h-cue-sentence">{#each expandedCues[`${currentIdx}-${ci}`].split(/(?<=[.!?])\s+/) as s}{s.trim()}<br/>{/each}</div>
-                          {:else}
-                            <div class="h-cue-sentence h-cue-loading">Loading…</div>
-                          {/if}
+                      {#if isStratOpen}
+                        <div class="tp-strat-body">
+                          {#each strategy.text.split(/(?<=[.!?])\s+/).filter(Boolean) as s}
+                            <span class="tp-strat-sent">{s.trim()}</span>
+                          {/each}
                         </div>
                       {/if}
                     </div>
                   {/each}
-                </div>
-              {/if}
-            {/if}
-          </div>
-
-          {#if parsed.close}
-            <div class="h-sec h-sec-close">
-              <span class="h-cue-badge h-cue-close">Close</span>
-              <span class="h-speak-text">{parsed.close}</span>
-            </div>
-          {/if}
-
-          {#if parsed.asks.length > 0}
-            <div class="h-sec h-sec-ask">
-              <span class="h-cue-badge h-cue-ask">Ask</span>
-              <div class="h-ask-list">
-                {#each parsed.asks as ask, ai}
-                  {@const askKey = '[Ask] ' + ask.topic}
-                  <div class="h-ask-item">
-                    <span class="h-cue-label h-cue-label-ask">Q{ai + 1}</span>
-                    <div class="h-ask-content">
-                      <span class="h-ask-topic">{ask.topic}</span>
-                      {#if loadingCue === askKey}
-                        <span class="h-ask-question h-cue-loading">…</span>
-                      {:else if expandedCues[askKey]}
-                        <span class="h-ask-question">{expandedCues[askKey]}</span>
-                      {:else}
-                        <button class="h-ask-load-btn" onclick={() => toggleCue(currentIdx, askKey, askKey)}>Load question</button>
-                      {/if}
-                    </div>
-                  </div>
-                {/each}
+                {:else}
+                  {#each parsed.tell.split(/(?<=[.!?])\s+/).filter(Boolean) as s}
+                    <span class="h-tell-sent" class:h-strategy-gap={/^(I also|Beyond that|On top of that)/i.test(s.trim())}>{s.trim()}</span>
+                  {/each}
+                {/if}
               </div>
+              {#if parsed.body}
+                {@const cues = parseCues(parsed.body)}
+                {#if cues.length > 0}
+                  <div class="h-cues-section">
+                    {#each cues as c, ci}
+                      {@const isFlat = c.label === 'Pivot' || c.typeTag === 'Pivot'}
+                      {@const isOpen = !isFlat && !!openCues[`${currentIdx}-${ci}`]}
+                      {#if isFlat}
+                        <div class="h-cue-flat">
+                          <span class="h-cue-label" class:h-cue-label-transfer={c.typeTag === 'Pivot' || c.label === 'Pivot'}>{c.typeTag || (c.label === 'General' ? 'Point' : c.label)}</span>
+                          <span class="h-cue-flat-text">{c.text}</span>
+                        </div>
+                      {:else}
+                        <div class="h-cue-block" class:h-cue-open={isOpen}>
+                          <button class="h-cue-toggle" onclick={() => { const opening = !isOpen; toggleCueOpen(`${currentIdx}-${ci}`); if (opening) toggleCue(currentIdx, ci, c.text); }}>
+                            <span class="h-cue-label" class:h-cue-label-example={c.label === 'Example' || c.label === 'Story'}>{c.label}</span>
+                            {#if c.typeTag}<span class="h-cue-keyword">{c.typeTag}</span>{/if}
+                            <span class="h-cue-preview">{c.title || (c.text.split(/(?<=[.!?])\s+/)[0] ?? c.text)}</span>
+                            <span class="h-cue-chevron">{isOpen ? '▾' : '▸'}</span>
+                          </button>
+                          {#if isOpen}
+                            <div class="h-cue-body">
+                              {#if loadingCue === `${currentIdx}-${ci}`}
+                                <div class="h-cue-sentence h-cue-loading">…</div>
+                              {:else if expandedCues[`${currentIdx}-${ci}`]}
+                                <div class="h-cue-sentence">{#each expandedCues[`${currentIdx}-${ci}`].split(/(?<=[.!?])\s+/) as s}{s.trim()}<br/>{/each}</div>
+                              {:else}
+                                <div class="h-cue-sentence">{#each c.text.split(/(?<=[.!?])\s+/).filter(Boolean) as s}{s.trim()}<br/>{/each}</div>
+                              {/if}
+                            </div>
+                          {/if}
+                        </div>
+                      {/if}
+                    {/each}
+                  </div>
+                {/if}
+              {/if}
             </div>
+
+            {#if parsed.close}
+              <div class="h-sec h-sec-close">
+                <span class="h-cue-badge h-cue-close">Close</span>
+                <span class="h-speak-text">{parsed.close}</span>
+              </div>
+            {/if}
+
+            {#if parsed.asks.length > 0}
+              <div class="h-sec h-sec-ask">
+                <span class="h-cue-badge h-cue-ask">Ask</span>
+                <div class="h-ask-list">
+                  {#each parsed.asks as ask, ai}
+                    {@const askKey = '[Ask] ' + ask.topic}
+                    <div class="h-ask-item">
+                      <span class="h-cue-label h-cue-label-ask">Q{ai + 1}</span>
+                      <div class="h-ask-content">
+                        <span class="h-ask-topic">{ask.topic}</span>
+                        <span class="h-ask-question">{expandedCues[askKey] || ask.question}</span>
+                        {#if ask.followUp}<span class="h-ask-followup">↳ {ask.followUp}</span>{/if}
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
           {/if}
 
         </div>
@@ -649,12 +746,31 @@
     padding: 0.45rem 0.6rem; border-radius: 0.4rem;
     border-left: 3px solid transparent;
   }
-  .h-sec-ack    { background: #110823; border-left-color: #6d28d9; }
-  .h-sec-solve  { background: #071a1a; border-left-color: #0e7490; }
-  .h-sec-bridge { background: #0d0d07; border-left-color: #78716c; }
-  .h-sec-say    { background: #060e0a; border-left-color: #166534; }
-  .h-sec-close  { background: #080d1a; border-left-color: #3b82f6; }
-  .h-sec-ask    { background: #0e0700; border-left-color: #92400e; }
+  .h-sec-ack          { background: #110823; border-left-color: #6d28d9; }
+  .h-sec-solve        { background: #071a1a; border-left-color: #0e7490; }
+  .h-sec-bridge       { background: #0d0d07; border-left-color: #78716c; }
+  .h-sec-say          { background: #060e0a; border-left-color: #166534; }
+  .h-sec-close        { background: #080d1a; border-left-color: #3b82f6; }
+  .h-sec-ask          { background: #0e0700; border-left-color: #92400e; }
+  /* Introduction */
+  .h-sec-present      { background: #071020; border-left-color: #2563eb; }
+  .h-sec-thread       { background: #0d0a20; border-left-color: #7c3aed; }
+  .h-sec-past         { background: #120a00; border-left-color: #b45309; }
+  .h-sec-future       { background: #071a0d; border-left-color: #059669; }
+  /* Motivation */
+  .h-sec-company      { background: #0d0720; border-left-color: #7c3aed; }
+  .h-sec-role         { background: #071a1a; border-left-color: #0e7490; }
+  .h-sec-self         { background: #071622; border-left-color: #0ea5e9; }
+  /* Future growth */
+  .h-sec-direction    { background: #071a0d; border-left-color: #059669; }
+  .h-sec-alignment    { background: #071a1a; border-left-color: #0e7490; }
+  .h-sec-contribution { background: #120a00; border-left-color: #b45309; }
+  /* Closing */
+  .h-closing-wrap { display: flex; flex-direction: column; gap: 0.4rem; }
+  .h-closing-header { font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #475569; padding: 0 0.1rem; }
+  .h-closing-card { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.45rem 0.6rem; background: #080d1a; border-radius: 0.4rem; border-left: 2px solid #3b82f6; }
+  .h-closing-num { font-size: var(--fs-base); font-weight: 800; color: #3b82f6; flex-shrink: 0; min-width: 1rem; text-align: right; }
+  .h-closing-content { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; }
   .font-select {
     padding: 0.2rem 0.4rem; background: #0a0f1a; border: 1px solid #1e293b;
     border-radius: 0.3rem; color: #64748b; font-size: var(--fs-sm); cursor: pointer;
@@ -669,15 +785,31 @@
     font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
     letter-spacing: 0.06em; flex-shrink: 0; margin-top: 0.1rem;
   }
-  .h-cue-badge.h-cue-ask    { background: #422006; color: #fbbf24; }
-  .h-cue-badge.h-cue-ack    { background: #2e1065; color: #c084fc; }
-  .h-cue-badge.h-cue-solve  { background: #164e63; color: #67e8f9; }
-  .h-cue-badge.h-cue-bridge { background: #292524; color: #a8a29e; }
-  .h-cue-badge.h-cue-close  { background: #1e3a5f; color: #93c5fd; }
+  .h-cue-badge.h-cue-ask         { background: #422006; color: #fbbf24; }
+  .h-cue-badge.h-cue-ack         { background: #2e1065; color: #c084fc; }
+  .h-cue-badge.h-cue-solve       { background: #164e63; color: #67e8f9; }
+  .h-cue-badge.h-cue-bridge      { background: #292524; color: #a8a29e; }
+  .h-cue-badge.h-cue-close       { background: #1e3a5f; color: #93c5fd; }
+  .h-cue-badge.h-cue-present     { background: #1e3a8a; color: #93c5fd; }
+  .h-cue-badge.h-cue-thread      { background: #3b0764; color: #d8b4fe; }
+  .h-cue-badge.h-cue-past        { background: #451a03; color: #fcd34d; }
+  .h-cue-badge.h-cue-future      { background: #14532d; color: #4ade80; }
+  .h-cue-badge.h-cue-company     { background: #3b0764; color: #d8b4fe; }
+  .h-cue-badge.h-cue-role        { background: #164e63; color: #67e8f9; }
+  .h-cue-badge.h-cue-self        { background: #0c4a6e; color: #7dd3fc; }
+  .h-cue-badge.h-cue-direction   { background: #14532d; color: #86efac; }
+  .h-cue-badge.h-cue-alignment   { background: #134e4a; color: #5eead4; }
+  .h-cue-badge.h-cue-contribution { background: #451a03; color: #fca5a5; }
+  .h-sec > .h-cue-badge { align-self: flex-start; }
+  .h-type-tag { display: inline-block; font-size: var(--fs-xs); font-weight: 800; padding: 0.1rem 0.4rem; border-radius: 0.25rem; background: #14532d; color: #4ade80; text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0; }
+  .h-type-example { background: #1a3a1a; color: #86efac; }
+  .h-type-pivot { background: #3b1506; color: #fb923c; }
 
   /* Spoken text */
   .h-speak-text { color: #e2e8f0; font-size: var(--fs-lg); line-height: 1.5; flex: 1; }
-  .h-speak-main { font-weight: 600; color: #f1f5f9; }
+  .h-speak-main { color: #f1f5f9; display: flex; flex-direction: column; gap: 0.1rem; }
+  .h-tell-sent { display: block; line-height: 1.5; }
+  .h-strategy-gap { margin-top: 0.55rem; }
   .h-bridge-text { color: #d6d3d1; font-style: italic; }
   .h-sec-header { display: flex; align-items: center; gap: 0.5rem; }
   .h-time-est { font-size: var(--fs-xs); color: #334155; font-style: italic; font-variant-numeric: tabular-nums; }
@@ -688,7 +820,18 @@
   .h-ask-content { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; }
   .h-ask-topic { font-size: var(--fs-xs); color: #7c4a1a; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
   .h-ask-question { font-size: var(--fs-lg); color: #fde68a; line-height: 1.4; overflow-wrap: break-word; }
-  .h-ask-load-btn { background: none; border: none; color: #374151; font-size: var(--fs-xs); cursor: pointer; padding: 0; text-decoration: underline; }
+  .h-ask-followup { font-size: var(--fs-sm); color: #57534e; line-height: 1.4; overflow-wrap: break-word; font-style: italic; }
+
+  .h-breadcrumb {
+    font-size: var(--fs-xs); font-weight: 600; color: #475569;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    margin-left: auto;
+  }
+  .h-transition {
+    font-size: var(--fs-sm); color: #475569; font-style: italic;
+    padding: 0.05rem 0 0.05rem 0.75rem; line-height: 1.4;
+    overflow-wrap: break-word;
+  }
 
 
 
@@ -709,6 +852,11 @@
     letter-spacing: 0.07em; color: #4ade80; flex-shrink: 0;
   }
   .h-cue-label-ask { color: #fbbf24 !important; }
+  .h-cue-keyword {
+    font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #86efac; background: #14532d;
+    padding: 0.05rem 0.35rem; border-radius: 0.2rem; flex-shrink: 0;
+  }
   .h-cue-preview { flex: 1; font-size: var(--fs-base); color: #3d8c52; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .h-ask-preview { color: #7c4a1a !important; white-space: normal !important; overflow: visible !important; text-overflow: unset !important; }
   .h-cue-chevron { font-size: var(--fs-sm); color: #2d6e40; flex-shrink: 0; }
@@ -718,6 +866,12 @@
     border-radius: 0 0.25rem 0.25rem 0; color: #f1f5f9; font-size: var(--fs-lg); line-height: 1.5; font-weight: 400;
   }
   .h-cue-label-example { background: #1a3a1a !important; color: #86efac !important; }
+  .h-cue-label-transfer { color: #fb923c !important; }
+  .h-type-tag { font-size: 0.62rem; font-weight: 600; padding: 0.1rem 0.35rem; border-radius: 3px; background: #0d2010; color: #3d8c52; letter-spacing: 0.03em; }
+  .h-type-example { color: #86efac; }
+  .h-type-pivot { color: #fb923c; }
+  .h-cue-flat { display: flex; align-items: center; gap: 0.4rem; padding: 0.15rem 0.4rem; }
+  .h-cue-flat-text { flex: 1; font-size: var(--fs-base); color: #3d8c52; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .h-cue-loading { color: #334155; }
   .h-ask-sentence {
     padding: 0.3rem 0.4rem; background: #060300; border-left: 2px solid #92400e;
@@ -855,4 +1009,33 @@
   }
   .read-btn:hover { background: #1e3a5f; border-color: #3b82f6; }
   .read-btn.active { background: #1e3a5f; border-color: #ef4444; color: #ef4444; }
+
+  .tp-strat-block {
+    border-radius: 0.3rem; border: 1px solid #0d2010;
+    overflow: hidden; background: #040b06; flex-shrink: 0;
+  }
+  .tp-strat-block.tp-strat-open { border-color: #1e4a2a; }
+  .tp-strat-toggle {
+    display: flex; align-items: center; gap: 0.4rem;
+    width: 100%; padding: 0.3rem 0.5rem;
+    background: none; border: none; cursor: pointer; text-align: left;
+  }
+  .tp-strat-toggle:hover { background: #071a0f; }
+  .tp-strat-kw {
+    font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #4ade80; background: #14532d;
+    padding: 0.05rem 0.35rem; border-radius: 0.2rem; flex-shrink: 0;
+  }
+  .tp-strat-preview {
+    flex: 1; font-size: var(--fs-base); color: #94a3b8;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .tp-strat-chevron { font-size: var(--fs-sm); color: #2d6e40; flex-shrink: 0; }
+  .tp-strat-body {
+    display: flex; flex-direction: column; gap: 0.35rem;
+    padding: 0.45rem 0.6rem; border-top: 1px solid #0d2010;
+  }
+  .tp-strat-sent {
+    color: #f1f5f9; font-size: var(--fs-base); line-height: 1.5; display: block;
+  }
 </style>

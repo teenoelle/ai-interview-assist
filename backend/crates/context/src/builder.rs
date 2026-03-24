@@ -1,6 +1,27 @@
 use common::messages::SetupPayload;
 use crate::linkedin::InterviewerProfile;
 
+/// Detect the employer's company type from the job description and company info.
+/// Returns a static string used to inject a Company Type block into the system prompt.
+fn detect_company_type(jd: &str, company_info: &str) -> Option<&'static str> {
+    let combined = format!("{} {}", jd, company_info).to_lowercase();
+    // Strong agency/consultancy signals
+    let agency_keywords: &[&str] = &[
+        "agency", "agencies", "client accounts", "client work", "client base",
+        "our clients", "for clients", "client relationships", "client brands",
+        "managed services", "consultancy", "consulting firm", "media buying",
+        "account management", "account manager", "client services",
+        "advertising agency", "digital agency", "marketing agency",
+        "media agency", "pr agency", "creative agency",
+    ];
+    let agency_score = agency_keywords.iter().filter(|&&kw| combined.contains(kw)).count();
+    // A single strong keyword (e.g. "agency") or two weaker signals is enough
+    if agency_score >= 1 {
+        return Some("agency");
+    }
+    None
+}
+
 fn trunc(s: &str, chars: usize) -> &str {
     match s.char_indices().nth(chars) {
         Some((i, _)) => &s[..i],
@@ -37,7 +58,7 @@ pub fn build_system_prompt(
 
     if !payload.interviewee_linkedin.is_empty() {
         prompt.push_str("## Candidate LinkedIn Profile\n");
-        let li_preview = trunc(&payload.interviewee_linkedin, 5000);
+        let li_preview = trunc(&payload.interviewee_linkedin, 10000);
         prompt.push_str(li_preview);
         prompt.push_str("\n\n");
     }
@@ -50,7 +71,8 @@ pub fn build_system_prompt(
     }
 
     if !payload.extra_experience.is_empty() {
-        prompt.push_str("## Additional Experience / Notes\n");
+        prompt.push_str("## Early Career & Additional Context\n");
+        prompt.push_str("This section contains early career history, pre-CV roles, volunteering, education context, or other background the candidate wants to draw on — especially for career story and throughline questions.\n");
         prompt.push_str(&payload.extra_experience);
         prompt.push_str("\n\n");
     }
@@ -60,6 +82,18 @@ pub fn build_system_prompt(
         let company_preview = trunc(company_info, 15000);
         prompt.push_str(company_preview);
         prompt.push_str("\n\n");
+    }
+
+    // Inject company type based on JD + company info so the LLM never makes wrong assumptions
+    match detect_company_type(&payload.job_description, company_info) {
+        Some("agency") => {
+            prompt.push_str("## Company Type\n");
+            prompt.push_str("This employer is an AGENCY or client-services firm that manages work ACROSS MULTIPLE CLIENTS. ");
+            prompt.push_str("Frame ALL answers in terms of client account work — delivering strategy, results, and relationships across a portfolio of clients. ");
+            prompt.push_str("NEVER suggest the candidate is moving from agency to in-house. NEVER say they want to own one company's strategy long-term. ");
+            prompt.push_str("The candidate is applying to continue and grow in client-facing agency work.\n\n");
+        }
+        _ => {}
     }
 
     let non_empty: Vec<&InterviewerProfile> = interviewers
@@ -90,13 +124,10 @@ pub fn build_system_prompt(
         }
     }
 
-    prompt.push_str("## Instructions\n");
-    prompt.push_str("When the interviewer asks a question, provide exactly 3 talking points in this scannable format:\n\n");
-    prompt.push_str("**1. [2-4 WORD KEYWORD]** — one sentence grounded in the candidate's actual documented experience.\n");
-    prompt.push_str("**2. [2-4 WORD KEYWORD]** — one sentence grounded in the candidate's actual documented experience.\n");
-    prompt.push_str("**3. [2-4 WORD KEYWORD]** — one sentence grounded in the candidate's actual documented experience.\n\n");
-    prompt.push_str("The KEYWORD is a memory trigger the candidate glances at — make it a vivid 2-4 word phrase (e.g. 'Led 3 migrations', 'Reduced costs 40%', 'Python + Kubernetes'). ");
-    prompt.push_str("The supporting sentence must reference specific facts from their CV, LinkedIn profile, or extra experience notes. If no direct experience exists, say so honestly rather than inventing details.");
+    prompt.push_str("## Context Rules\n");
+    prompt.push_str("Draw ONLY from the candidate background, CV, LinkedIn, portfolio, and job description provided above. ");
+    prompt.push_str("Never invent experiences, metrics, company names, or outcomes not present in the provided context. ");
+    prompt.push_str("Follow the output format specified in each user message exactly — do not add extra sections or change the structure.");
 
     prompt
 }
@@ -111,10 +142,10 @@ mod tests {
     }
 
     #[test]
-    fn prompt_contains_instructions() {
+    fn prompt_contains_context_rules() {
         let p = build_system_prompt(&empty_payload(), "", &[]);
-        assert!(p.contains("## Instructions"));
-        assert!(p.contains("3 talking points"));
+        assert!(p.contains("## Context Rules"));
+        assert!(p.contains("Draw ONLY from the candidate background"));
     }
 
     #[test]

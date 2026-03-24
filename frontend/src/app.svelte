@@ -5,6 +5,7 @@
   import SentimentBar from './components/SentimentBar.svelte';
   import BodyLanguagePanel from './components/BodyLanguagePanel.svelte';
   import SuggestionPanel from './components/SuggestionPanel.svelte';
+  import TestQuestionBar from './components/TestQuestionBar.svelte';
   import RateLimitPanel from './components/RateLimitPanel.svelte';
   import DebriefModal from './components/DebriefModal.svelte';
   import ReviewUpload from './components/ReviewUpload.svelte';
@@ -789,6 +790,8 @@
   interface RateLimitEntry { remaining: number; limit: number; history: Array<{ r: number; t: number }>; }
   let rateLimits = $state<Record<string, RateLimitEntry>>({});
   let callCounts = $state<Record<string, number>>({});
+  // Last successful provider per service (transcription / suggestions / sentiment)
+  let providerStatus = $state<Record<string, { name: string; local: boolean }>>({});
 
   $effect(() => {
     const id = setInterval(async () => {
@@ -1095,18 +1098,25 @@ Ask: team | How long have you been with the team?`;
         }
 
         const subQuestions = splitMultiQuestions(event.question);
+        const secondaryTag = event.secondary_tag as import('./lib/types').QuestionTag | undefined;
         youSegmentsSinceQuestion = [];
 
         for (let qi = 0; qi < subQuestions.length; qi++) {
           const q = subQuestions[qi];
           const isFirst = qi === 0;
           const newIdx = suggestions.length;
-          if (isFirst) currentQuestionIdx = newIdx;
+          if (isFirst) { currentQuestionIdx = newIdx; jumpSignal = { idx: newIdx, key: Date.now() }; }
+          const isCompound = isFirst && !!secondaryTag;
           suggestions = [...suggestions, {
             question: q,
             suggestion: isFirst ? '' : '(Additional question — will generate suggestion when you navigate here)',
-            streaming: isFirst,
+            streaming: isFirst && !isCompound,    // primary starts streaming only for single-type
             tag: tagQuestion(q),
+            secondaryTag: isFirst ? secondaryTag : undefined,
+            compoundSuggestion: isCompound ? '' : undefined,
+            compoundStreaming: isCompound,          // compound streams first for compound questions
+            secondarySuggestion: isCompound ? '' : undefined,
+            secondaryStreaming: false,
             redFlag: detectRedFlag(q) ?? undefined,
           }];
         }
@@ -1118,15 +1128,41 @@ Ask: team | How long have you been with the team?`;
         break;
       }
       case 'suggestion_token':
-        suggestions = suggestions.map((s, i) =>
-          i === suggestions.length - 1 && s.streaming ? { ...s, suggestion: s.suggestion + event.token } : s
-        );
+        if (event.mode === 'compound') {
+          suggestions = suggestions.map(s =>
+            s.compoundStreaming ? { ...s, compoundSuggestion: (s.compoundSuggestion ?? '') + event.token } : s
+          );
+        } else if (event.mode === 'secondary') {
+          suggestions = suggestions.map(s =>
+            s.secondaryStreaming ? { ...s, secondarySuggestion: (s.secondarySuggestion ?? '') + event.token } : s
+          );
+        } else {
+          suggestions = suggestions.map(s =>
+            s.streaming ? { ...s, suggestion: s.suggestion + event.token } : s
+          );
+        }
         break;
       case 'suggestion_complete': {
-        suggestions = suggestions.map((s, i) =>
-          i === suggestions.length - 1 && s.streaming ? { ...s, suggestion: event.full_text, streaming: false } : s
-        );
-        speakText(event.full_text);
+        if (event.mode === 'compound') {
+          suggestions = suggestions.map(s =>
+            s.compoundStreaming
+              ? { ...s, compoundSuggestion: event.full_text, compoundStreaming: false, streaming: true }
+              : s
+          );
+          speakText(event.full_text);
+        } else if (event.mode === 'secondary') {
+          suggestions = suggestions.map(s =>
+            s.secondaryStreaming ? { ...s, secondarySuggestion: event.full_text, secondaryStreaming: false } : s
+          );
+        } else {
+          suggestions = suggestions.map(s => {
+            if (!s.streaming) return s;
+            // If compound question: after primary completes, prepare secondary slot
+            const next = s.secondaryTag ? { ...s, suggestion: event.full_text, streaming: false, secondaryStreaming: true } : { ...s, suggestion: event.full_text, streaming: false };
+            return next;
+          });
+          speakText(event.full_text);
+        }
         break;
       }
       case 'status':
@@ -1140,6 +1176,13 @@ Ask: team | How long have you been with the team?`;
         const point = { r: event.requests_remaining, t: Date.now() };
         const history = prev ? [...prev.history.slice(-14), point] : [point];
         rateLimits = { ...rateLimits, [event.provider]: { remaining: event.requests_remaining, limit: event.requests_limit, history } };
+        break;
+      }
+      case 'provider_used': {
+        providerStatus = { ...providerStatus, [event.service]: { name: event.provider, local: event.local } };
+        if (event.service === 'suggestions') {
+          suggestions = suggestions.map(s => s.streaming ? { ...s, provider: event.provider, providerLocal: event.local } : s);
+        }
         break;
       }
     }
@@ -1337,7 +1380,8 @@ Ask: team | How long have you been with the team?`;
           <span class="ws-header-dot"
             class:ws-connected={wsStatus === 'connected'}
             class:ws-reconnecting={wsStatus === 'reconnecting'}
-            title="WebSocket: {wsStatus}">●</span>
+            title={wsStatus === 'connected' ? 'Server connected — AI events (transcripts, suggestions, sentiment) are live' : wsStatus === 'reconnecting' ? `Reconnecting to server (attempt ${wsAttempt}) — AI responses paused` : 'Disconnected from server — AI responses unavailable'}
+          >{wsStatus === 'connected' ? '●' : wsStatus === 'reconnecting' ? `↻ ${wsAttempt}` : '○'}</span>
         </div>
         <div class="header-right">
           <div class="shortcuts-hint">F: focus · W: whisper · T: voice · 1/2/3: expand cue · Esc: clear · +/−: font</div>
@@ -1489,6 +1533,9 @@ Ask: team | How long have you been with the team?`;
               <div class="col-header col-drag-handle" draggable={true} ondragstart={(e) => onColDragStart('left', e)}>
                 <span class="col-label">{collapsedCols.has('left') ? '…' : 'Transcript'}</span>
                 {#if !collapsedCols.has('left')}
+                  {#if providerStatus.transcription}
+                    <span class="provider-chip" class:provider-chip-local={providerStatus.transcription.local} title={providerStatus.transcription.local ? 'Local' : 'API'}>{providerStatus.transcription.name}</span>
+                  {/if}
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('left', -10)} title="Decrease font size">A−</button>
                     <button class="zoom-btn" onclick={() => adjustZoom('left', +10)} title="Increase font size">A+</button>
@@ -1526,7 +1573,8 @@ Ask: team | How long have you been with the team?`;
               </div>
               {#if !collapsedCols.has('hist')}
                 <div class="col-body" bind:this={histColBodyEl}>
-                  <div class="col-body-scroll" style="zoom: {histZoom/100}; padding: 0.3rem 0.4rem 0.75rem;">
+                  <div class="col-body-scroll" style="zoom: {histZoom/100}; padding: 0.3rem 0.4rem 0.4rem; display: flex; flex-direction: column; gap: 0.4rem;">
+                    <TestQuestionBar {capturing} />
                     <QuestionsHistoryPanel
                       {suggestions}
                       currentIndex={histViewIdx === -1 ? currentQuestionIdx : histViewIdx}
@@ -1592,6 +1640,9 @@ Ask: team | How long have you been with the team?`;
               <div class="col-header col-drag-handle" draggable={true} ondragstart={(e) => onColDragStart('center', e)} style="padding-top: 0.35rem;">
                 <span class="col-label">{collapsedCols.has('center') ? '…' : 'AI Suggestions'}</span>
                 {#if !collapsedCols.has('center')}
+                  {#if providerStatus.suggestions}
+                    <span class="provider-chip" class:provider-chip-local={providerStatus.suggestions.local} title={providerStatus.suggestions.local ? 'Local' : 'API'}>{providerStatus.suggestions.name}</span>
+                  {/if}
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('center', -10)} title="Decrease font size">A−</button>
                     <button class="zoom-btn" onclick={() => adjustZoom('center', +10)} title="Increase font size">A+</button>
@@ -1652,6 +1703,9 @@ Ask: team | How long have you been with the team?`;
                 {/if}
                 <div class="col-header col-drag-handle" draggable={true} ondragstart={(e) => onColDragStart('right', e)}>
                   <span class="col-label">Interviewer</span>
+                  {#if providerStatus.sentiment}
+                    <span class="provider-chip" class:provider-chip-local={providerStatus.sentiment.local} title={providerStatus.sentiment.local ? 'Local' : 'API'}>{providerStatus.sentiment.name}</span>
+                  {/if}
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('rightTop', -10)} title="Decrease font size">A−</button>
                     <button class="zoom-btn" onclick={() => adjustZoom('rightTop', +10)} title="Increase font size">A+</button>
@@ -1900,12 +1954,6 @@ Ask: team | How long have you been with the team?`;
                         {/each}
                       </div>
                     {/if}
-                    <div class="side-stat" title="WebSocket connection">
-                      <span class="side-label">WS</span>
-                      <span class="side-value ws-dot" class:connected={wsStatus === 'connected'} class:reconnecting={wsStatus === 'reconnecting'}>
-                        {wsStatus === 'connected' ? '●' : wsStatus === 'reconnecting' ? `↻ #${wsAttempt}` : '○'}
-                      </span>
-                    </div>
                   </div>
                   {#if energySignal || youLog.length > 0 || suggestions.some(s => s.answerFeedback || s.vocalFeedback)}
                     {@const latestFeedback = suggestions.slice().reverse().find(s => s.answerFeedback || s.vocalFeedback)}
@@ -1976,7 +2024,7 @@ Ask: team | How long have you been with the team?`;
                       <span class="side-section-chevron">{modelUsageExpanded ? '▴' : '▾'}</span>
                     </button>
                     {#if modelUsageExpanded}
-                      <RateLimitPanel {rateLimits} {callCounts} />
+                      <RateLimitPanel {rateLimits} {callCounts} {providerStatus} />
                     {/if}
                   </div>
                 {/if}
@@ -2474,6 +2522,7 @@ Ask: team | How long have you been with the team?`;
   .header-title-row { display: flex; align-items: center; gap: 0.4rem; }
   .ws-header-dot {
     font-size: var(--fs-xs); color: #334155; flex-shrink: 0;
+    font-variant-numeric: tabular-nums; cursor: default;
     transition: color 0.3s;
   }
   .ws-header-dot.ws-connected { color: #22c55e; }
@@ -2721,6 +2770,29 @@ Ask: team | How long have you been with the team?`;
     transition: opacity 0.15s;
   }
   .col-header:hover .zoom-btns { opacity: 1; }
+
+  .provider-chip {
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 0.08rem 0.35rem;
+    border-radius: 9999px;
+    background: #1e3a5f;
+    color: #7eb8f7;
+    border: 1px solid #2a4a7f;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 90px;
+    flex-shrink: 0;
+    cursor: default;
+    transition: opacity 0.3s;
+  }
+  .provider-chip-local {
+    background: #14302a;
+    color: #4ade80;
+    border-color: #166534;
+  }
 
   .zoom-btn {
     padding: 0.08rem 0.28rem;
@@ -3136,9 +3208,7 @@ Ask: team | How long have you been with the team?`;
   }
   .side-label { font-size: var(--fs-xs); color: #475569; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
   .side-value { font-size: var(--fs-sm); font-weight: 700; font-variant-numeric: tabular-nums; color: #475569; }
-  .ws-dot { font-size: var(--fs-base); }
-  .ws-dot.connected { color: #22c55e; }
-  .ws-dot.reconnecting { color: #f59e0b; }
+
   .filler-block {
     display: flex; flex-direction: column; gap: 0.2rem;
     padding: 0.2rem 0.25rem;

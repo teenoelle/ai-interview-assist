@@ -32,12 +32,17 @@ async fn transcribe_with_fallback(
     pcm: &[u8],
     rate_limiter: &RateLimiter,
     call_counts: &Option<CallCounts>,
+    event_tx: &broadcast::Sender<WsEvent>,
 ) -> Result<String, anyhow::Error> {
     // 1. Local Whisper — completely free, no quota; silently skip if not running
     if let Some(url) = whisper_url {
         let endpoint = format!("{}/v1/audio/transcriptions", url.trim_end_matches('/'));
         match groq::transcribe_openai_asr(&endpoint, "", whisper_model, pcm).await {
-            Ok(text) => { inc(call_counts, "Whisper (local)"); return Ok(text); }
+            Ok(text) => {
+                inc(call_counts, "Whisper (local)");
+                let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Whisper (local)".to_string(), local: true });
+                return Ok(text);
+            }
             Err(e) => tracing::warn!("Local Whisper unavailable, trying Groq: {}", e),
         }
     }
@@ -45,7 +50,11 @@ async fn transcribe_with_fallback(
     // 2. Groq Whisper key 1
     if let Some(key) = groq_key {
         match groq::transcribe(key, pcm).await {
-            Ok(text) => { inc(call_counts, "Groq Whisper"); return Ok(text); }
+            Ok(text) => {
+                inc(call_counts, "Groq Whisper");
+                let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Groq Whisper".to_string(), local: false });
+                return Ok(text);
+            }
             Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
                 tracing::warn!("Groq key 1 transcription quota/rate-limit, trying key 2");
             }
@@ -56,7 +65,11 @@ async fn transcribe_with_fallback(
     // 2b. Groq Whisper key 2 — higher-limit secondary key
     if let Some(key) = groq_key_2 {
         match groq::transcribe(key, pcm).await {
-            Ok(text) => { inc(call_counts, "Groq Whisper #2"); return Ok(text); }
+            Ok(text) => {
+                inc(call_counts, "Groq Whisper #2");
+                let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Groq Whisper #2".to_string(), local: false });
+                return Ok(text);
+            }
             Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
                 tracing::warn!("Groq key 2 transcription quota/rate-limit, falling back to Gemini");
             }
@@ -73,7 +86,11 @@ async fn transcribe_with_fallback(
     .await;
 
     match result {
-        Ok(text) => { inc(call_counts, "Gemini Transcription"); return Ok(text); }
+        Ok(text) => {
+            inc(call_counts, "Gemini Transcription");
+            let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Gemini".to_string(), local: false });
+            return Ok(text);
+        }
         Err(e) if is_quota_exhausted(&e) => {
             tracing::warn!("Gemini transcription quota exhausted");
         }
@@ -324,7 +341,7 @@ pub async fn run_mic_agent(
                     let cc = call_counts.clone();
 
                     tokio::spawn(async move {
-                        match transcribe_with_fallback(&gkey, grkey.as_deref(), grkey2.as_deref(), wurl.as_deref(), &wmodel, &pcm, &rl, &cc).await {
+                        match transcribe_with_fallback(&gkey, grkey.as_deref(), grkey2.as_deref(), wurl.as_deref(), &wmodel, &pcm, &rl, &cc, &etx).await {
                             Ok(text) if !text.trim().is_empty() => {
                                 let ts = SystemTime::now()
                                     .duration_since(UNIX_EPOCH)
@@ -419,7 +436,7 @@ pub async fn run_agent(
 
                         // Run transcription and diarization concurrently
                         let (transcription_result, diarization_result) = tokio::join!(
-                            transcribe_with_fallback(&gkey, grkey.as_deref(), grkey2.as_deref(), wurl.as_deref(), &wmodel, &segment_pcm, &rl, &cc),
+                            transcribe_with_fallback(&gkey, grkey.as_deref(), grkey2.as_deref(), wurl.as_deref(), &wmodel, &segment_pcm, &rl, &cc, &etx),
                             async {
                                 match (durl.as_deref(), wav_for_diarize) {
                                     (Some(url), Some(wav)) => {

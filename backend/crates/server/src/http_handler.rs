@@ -590,3 +590,20 @@ pub async fn handle_usage(
         .unwrap_or_default();
     Json(map)
 }
+
+#[derive(serde::Deserialize)]
+pub struct SimulateQuestionRequest {
+    pub question: String,
+}
+
+pub async fn handle_simulate_question(
+    State(state): State<AppState>,
+    Json(req): Json<SimulateQuestionRequest>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    if req.question.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "Question is empty".to_string()));
+    }
+    state.question_tx.send(req.question.trim().to_string()).await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(StatusCode::OK)
+}

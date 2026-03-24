@@ -33,6 +33,7 @@ pub async fn run_agent(
                         match claude_vision::analyze_sentiment(key, &jpeg_bytes).await {
                             Ok(result) => {
                                 let _ = etx.send(WsEvent::Sentiment { emotion: result.emotion, reason: result.reason, coaching: result.coaching, coaching_why: result.coaching_why });
+                                let _ = etx.send(WsEvent::ProviderUsed { service: "sentiment".to_string(), provider: "Claude".to_string(), local: false });
                                 // Broadcast rate limit info so the frontend can display it
                                 if let (Some(remaining), Some(limit)) =
                                     (result.requests_remaining, result.requests_limit)
@@ -62,6 +63,7 @@ pub async fn run_agent(
                     match ollama_vision::analyze_sentiment(&ourl, &ovmodel, &jpeg_bytes).await {
                         Ok(result) => {
                             let _ = etx.send(WsEvent::Sentiment { emotion: result.emotion, reason: result.reason, coaching: result.coaching, coaching_why: result.coaching_why });
+                            let _ = etx.send(WsEvent::ProviderUsed { service: "sentiment".to_string(), provider: format!("Ollama ({})", ovmodel), local: true });
                             return;
                         }
                         Err(e) => tracing::warn!("Ollama vision unavailable, trying Gemini: {}", e),
@@ -78,6 +80,7 @@ pub async fn run_agent(
                     match result {
                         Ok(result) => {
                             let _ = etx.send(WsEvent::Sentiment { emotion: result.emotion, reason: result.reason, coaching: result.coaching, coaching_why: result.coaching_why });
+                            let _ = etx.send(WsEvent::ProviderUsed { service: "sentiment".to_string(), provider: "Gemini Vision".to_string(), local: false });
                         }
                         Err(e) => {
                             tracing::error!("Sentiment error: {}", e);

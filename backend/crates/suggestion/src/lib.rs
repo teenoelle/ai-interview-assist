@@ -11,7 +11,7 @@ pub mod prompt;
 
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, RwLock};
-use common::messages::{TranscriptSegment, WsEvent};
+use common::messages::{TranscriptSegment, WsEvent, SuggestionMode};
 use common::rate_limiter::RateLimiter;
 use common::providers::{is_quota_exhausted, is_rate_limit};
 
@@ -25,10 +25,22 @@ fn inc(counts: &Option<CallCounts>, name: &str) {
     }
 }
 
+fn provider_is_local(name: &str) -> bool {
+    name.starts_with("Ollama") || name == "Whisper (local)"
+}
+
 macro_rules! try_provider {
-    ($name:expr, $call:expr, $counts:expr) => {
+    ($name:expr, $call:expr, $counts:expr, $etx:expr) => {
         match $call.await {
-            Ok(()) => { inc($counts, $name); return Ok(()); }
+            Ok(()) => {
+                inc($counts, $name);
+                let _ = $etx.send(WsEvent::ProviderUsed {
+                    service: "suggestions".to_string(),
+                    provider: $name.to_string(),
+                    local: provider_is_local($name),
+                });
+                return Ok(());
+            }
             Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
                 tracing::warn!("{} unavailable (quota/rate-limit), trying next provider: {}", $name, e);
             }
@@ -50,6 +62,7 @@ async fn suggest_with_fallback(
     ollama_models: &[String],
     system_prompt: &str,
     user_prompt: &str,
+    mode: SuggestionMode,
     rate_limiter: &RateLimiter,
     event_tx: broadcast::Sender<WsEvent>,
     call_counts: &Option<CallCounts>,
@@ -57,69 +70,99 @@ async fn suggest_with_fallback(
     // 1. Claude Haiku — primary, high quality
     if let Some(key) = anthropic_key {
         try_provider!("Claude",
-            claude_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
-            call_counts);
+            claude_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()),
+            call_counts, event_tx);
     }
 
     // 2. Groq key 1 — fast fallback
     if let Some(key) = groq_key {
         try_provider!("Groq",
-            groq_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
-            call_counts);
+            groq_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()),
+            call_counts, event_tx);
     }
 
     // 3. Groq key 2 — higher-limit secondary key
     if let Some(key) = groq_key_2 {
         try_provider!("Groq #2",
-            groq_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
-            call_counts);
+            groq_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()),
+            call_counts, event_tx);
     }
 
     // 4. Cerebras — wafer-scale fast inference
     if let Some(key) = cerebras_key {
         try_provider!("Cerebras",
-            cerebras_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
-            call_counts);
+            cerebras_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()),
+            call_counts, event_tx);
     }
 
     // 5. OpenRouter — no daily cap, just RPM throttled
     if let Some(key) = openrouter_key {
         try_provider!("OpenRouter",
-            openrouter_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
-            call_counts);
+            openrouter_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()),
+            call_counts, event_tx);
     }
 
     // 6. Qwen (DashScope) — generous free tier for qwen-turbo
     if let Some(key) = qwen_key {
         try_provider!("Qwen",
-            qwen_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
-            call_counts);
+            qwen_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()),
+            call_counts, event_tx);
     }
 
     // 7. Mistral — free tier mistral-small
     if let Some(key) = mistral_key {
         try_provider!("Mistral",
-            mistral_llm::stream_suggestions(key, system_prompt, user_prompt, event_tx.clone()),
-            call_counts);
+            mistral_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()),
+            call_counts, event_tx);
     }
 
     // 8. Ollama — try each configured model in order (fastest first)
     for model in ollama_models {
-        match ollama_llm::stream_suggestions(ollama_url, model, system_prompt, user_prompt, event_tx.clone()).await {
-            Ok(()) => { inc(call_counts, &format!("Ollama ({})", model)); return Ok(()); }
+        match ollama_llm::stream_suggestions(ollama_url, model, system_prompt, user_prompt, mode, event_tx.clone()).await {
+            Ok(()) => {
+                let name = format!("Ollama ({})", model);
+                inc(call_counts, &name);
+                let _ = event_tx.send(WsEvent::ProviderUsed {
+                    service: "suggestions".to_string(),
+                    provider: name,
+                    local: true,
+                });
+                return Ok(());
+            }
             Err(e) => tracing::warn!("Ollama {} unavailable, trying next: {}", model, e),
         }
     }
 
     // 9. Gemini — absolute last resort, keep credits for sentiment analysis
     rate_limiter.acquire().await;
-    match gemini_llm::stream_suggestions(gemini_key, system_prompt, user_prompt, event_tx).await {
-        Ok(()) => { inc(call_counts, "Gemini"); return Ok(()); }
+    match gemini_llm::stream_suggestions(gemini_key, system_prompt, user_prompt, mode, event_tx.clone()).await {
+        Ok(()) => {
+            inc(call_counts, "Gemini");
+            let _ = event_tx.send(WsEvent::ProviderUsed {
+                service: "suggestions".to_string(),
+                provider: "Gemini".to_string(),
+                local: false,
+            });
+            return Ok(());
+        }
         Err(e) if is_quota_exhausted(&e) => tracing::warn!("Gemini suggestions quota exhausted"),
         Err(e) => return Err(e),
     }
 
     anyhow::bail!("All suggestion providers exhausted")
+}
+
+// Helper to run suggest_with_fallback with all provider keys cloned from run_agent scope
+macro_rules! run_suggest {
+    ($mode:expr, $prompt:expr, $gkey:expr, $akey:expr, $grkey:expr, $grkey2:expr,
+     $orkey:expr, $mkey:expr, $ckey:expr, $qkey:expr,
+     $ourl:expr, $omodels:expr, $sp:expr, $rl:expr, $etx:expr, $cc:expr) => {
+        suggest_with_fallback(
+            &$gkey, $akey.as_deref(), $grkey.as_deref(), $grkey2.as_deref(),
+            $orkey.as_deref(), $mkey.as_deref(), $ckey.as_deref(), $qkey.as_deref(),
+            &$ourl, &$omodels, &$sp, $prompt, $mode, &$rl, $etx.clone(), &$cc,
+        )
+    };
 }
 
 pub async fn run_agent(
@@ -159,36 +202,48 @@ pub async fn run_agent(
                 let rl = rate_limiter.clone();
                 let cc = call_counts.clone();
 
-                let user_prompt = prompt::build_user_prompt(&question, &tr);
-                let _ = etx.send(WsEvent::QuestionDetected { question: question.clone() });
+                let (primary_type, secondary_type) = prompt::classify_question(&question);
+                let secondary_tag = secondary_type.map(|qt| prompt::question_type_to_tag(qt).to_string());
+
+                let _ = etx.send(WsEvent::QuestionDetected {
+                    question: question.clone(),
+                    secondary_tag: secondary_tag.clone(),
+                });
 
                 tokio::spawn(async move {
-                    match suggest_with_fallback(
-                        &gkey,
-                        akey.as_deref(),
-                        grkey.as_deref(),
-                        grkey2.as_deref(),
-                        orkey.as_deref(),
-                        mkey.as_deref(),
-                        ckey.as_deref(),
-                        qkey.as_deref(),
-                        &ourl,
-                        &omodels,
-                        &sp,
-                        &user_prompt,
-                        &rl,
-                        etx.clone(),
-                        &cc,
-                    )
-                    .await
-                    {
-                        Ok(()) => {}
-                        Err(e) => {
-                            tracing::error!("Suggestion error: {}", e);
-                            let _ = etx.send(WsEvent::Error {
-                                message: format!("Suggestion error: {}", e),
-                            });
+                    let run = async {
+                        if let Some(sec_type) = secondary_type {
+                            // Compound first
+                            let compound_prompt = prompt::build_compound_user_prompt(&question, &tr, primary_type, sec_type);
+                            run_suggest!(SuggestionMode::Compound, &compound_prompt,
+                                gkey, akey, grkey, grkey2, orkey, mkey, ckey, qkey,
+                                ourl, omodels, sp, rl, etx, cc).await?;
+
+                            // Primary second
+                            let primary_prompt = prompt::build_user_prompt_for_type(&question, &tr, primary_type);
+                            run_suggest!(SuggestionMode::Primary, &primary_prompt,
+                                gkey, akey, grkey, grkey2, orkey, mkey, ckey, qkey,
+                                ourl, omodels, sp, rl, etx, cc).await?;
+
+                            // Secondary last
+                            let secondary_prompt = prompt::build_user_prompt_for_type(&question, &tr, sec_type);
+                            run_suggest!(SuggestionMode::Secondary, &secondary_prompt,
+                                gkey, akey, grkey, grkey2, orkey, mkey, ckey, qkey,
+                                ourl, omodels, sp, rl, etx, cc).await?;
+                        } else {
+                            // Single type — primary only
+                            let user_prompt = prompt::build_user_prompt(&question, &tr);
+                            run_suggest!(SuggestionMode::Primary, &user_prompt,
+                                gkey, akey, grkey, grkey2, orkey, mkey, ckey, qkey,
+                                ourl, omodels, sp, rl, etx, cc).await?;
                         }
+                        anyhow::Ok(())
+                    };
+                    if let Err(e) = run.await {
+                        tracing::error!("Suggestion error: {}", e);
+                        let _ = etx.send(WsEvent::Error {
+                            message: format!("Suggestion error: {}", e),
+                        });
                     }
                 });
             }

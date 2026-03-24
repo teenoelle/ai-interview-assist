@@ -1,18 +1,19 @@
 use anyhow::{anyhow, Result};
 use serde_json::{json, Value};
 use tokio::sync::broadcast;
-use common::messages::WsEvent;
+use common::messages::{WsEvent, SuggestionMode};
 use futures::StreamExt;
 
 pub async fn stream_suggestions(
     api_key: &str,
     system_prompt: &str,
     user_prompt: &str,
+    mode: SuggestionMode,
     event_tx: broadcast::Sender<WsEvent>,
 ) -> Result<()> {
     let body = json!({
         "model": "claude-haiku-4-5-20251001",
-        "max_tokens": 800,
+        "max_tokens": 1000,
         "stream": true,
         "system": system_prompt,
         "messages": [{ "role": "user", "content": user_prompt }]
@@ -61,7 +62,7 @@ pub async fn stream_suggestions(
                         if json["type"] == "content_block_delta" {
                             if let Some(token) = json["delta"]["text"].as_str() {
                                 full_text.push_str(token);
-                                let _ = event_tx.send(WsEvent::SuggestionToken { token: token.to_string() });
+                                let _ = event_tx.send(WsEvent::SuggestionToken { token: token.to_string(), mode });
                             }
                         }
                     }
@@ -70,7 +71,7 @@ pub async fn stream_suggestions(
         }
     }
 
-    let _ = event_tx.send(WsEvent::SuggestionComplete { full_text });
+    let _ = event_tx.send(WsEvent::SuggestionComplete { full_text, mode });
 
     if let (Some(remaining), Some(limit)) = (requests_remaining, requests_limit) {
         let _ = event_tx.send(WsEvent::RateLimit {

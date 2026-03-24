@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use serde_json::{json, Value};
 use tokio::sync::broadcast;
-use common::messages::WsEvent;
+use common::messages::{WsEvent, SuggestionMode};
 use futures::StreamExt;
 use std::sync::OnceLock;
 
@@ -14,6 +14,7 @@ pub async fn stream_suggestions(
     api_key: &str,
     system_prompt: &str,
     user_prompt: &str,
+    mode: SuggestionMode,
     event_tx: broadcast::Sender<WsEvent>,
 ) -> Result<()> {
     stream_openai_compat(
@@ -23,6 +24,7 @@ pub async fn stream_suggestions(
         "Groq",
         system_prompt,
         user_prompt,
+        mode,
         event_tx,
     )
     .await
@@ -35,6 +37,7 @@ pub async fn stream_openai_compat(
     provider: &str,
     system_prompt: &str,
     user_prompt: &str,
+    mode: SuggestionMode,
     event_tx: broadcast::Sender<WsEvent>,
 ) -> Result<()> {
     let body = json!({
@@ -43,7 +46,7 @@ pub async fn stream_openai_compat(
             { "role": "system", "content": system_prompt },
             { "role": "user",   "content": user_prompt }
         ],
-        "max_tokens": 800,
+        "max_tokens": 1000,
         "stream": true
     });
 
@@ -102,7 +105,7 @@ pub async fn stream_openai_compat(
                     if let Ok(json) = serde_json::from_str::<Value>(data) {
                         if let Some(token) = json["choices"][0]["delta"]["content"].as_str() {
                             full_text.push_str(token);
-                            let _ = event_tx.send(WsEvent::SuggestionToken { token: token.to_string() });
+                            let _ = event_tx.send(WsEvent::SuggestionToken { token: token.to_string(), mode });
                         }
                     }
                 }
@@ -110,6 +113,6 @@ pub async fn stream_openai_compat(
         }
     }
 
-    let _ = event_tx.send(WsEvent::SuggestionComplete { full_text });
+    let _ = event_tx.send(WsEvent::SuggestionComplete { full_text, mode });
     Ok(())
 }

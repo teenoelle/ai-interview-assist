@@ -1,13 +1,14 @@
 use anyhow::{anyhow, Result};
 use serde_json::{json, Value};
 use tokio::sync::broadcast;
-use common::messages::WsEvent;
+use common::messages::{WsEvent, SuggestionMode};
 use futures::StreamExt;
 
 pub async fn stream_suggestions(
     api_key: &str,
     system_prompt: &str,
     user_prompt: &str,
+    mode: SuggestionMode,
     event_tx: broadcast::Sender<WsEvent>,
 ) -> Result<()> {
     let body = json!({
@@ -18,7 +19,7 @@ pub async fn stream_suggestions(
             "role": "user",
             "parts": [{ "text": user_prompt }]
         }],
-        "generationConfig": { "maxOutputTokens": 400 }
+        "generationConfig": { "maxOutputTokens": 1000 }
     });
 
     let client = reqwest::Client::new();
@@ -63,7 +64,7 @@ pub async fn stream_suggestions(
                         if let Some(token) = json["candidates"][0]["content"]["parts"][0]["text"].as_str() {
                             full_text.push_str(token);
                             let _ = event_tx.send(WsEvent::SuggestionToken {
-                                token: token.to_string(),
+                                token: token.to_string(), mode,
                             });
                         }
                     }
@@ -72,6 +73,6 @@ pub async fn stream_suggestions(
         }
     }
 
-    let _ = event_tx.send(WsEvent::SuggestionComplete { full_text });
+    let _ = event_tx.send(WsEvent::SuggestionComplete { full_text, mode });
     Ok(())
 }

@@ -12,12 +12,12 @@
   const sysWarn = $derived(capturing && !paused && sysPct < 2);
 </script>
 
-<div class="meter" class:paused>
-  <div class="bar-wrap" title="Mic level">
+<div class="meter" class:paused title="Audio input levels — MIC is your microphone, SYS is system audio (interviewer's voice via screen share)">
+  <div class="bar-wrap" title="MIC — your microphone input level. Green bar = audio is being picked up and will be transcribed as 'You'">
     <span class="lbl">MIC</span>
     <div class="track"><div class="fill mic" style="width: {micPct}%"></div></div>
   </div>
-  <div class="bar-wrap" title="System audio level">
+  <div class="bar-wrap" title={sysWarn ? "SYS — no system audio detected. Stop capture, reshare your screen, and tick 'Share system audio' in the browser dialog" : "SYS — system audio level (interviewer's voice from Zoom/Teams). Blue bar = audio is being received and will be transcribed as 'Interviewer'"}>
     <span class="lbl" class:lbl-warn={sysWarn}>SYS</span>
     <div class="track"><div class="fill sys" style="width: {sysPct}%"></div></div>
   </div>
@@ -25,7 +25,7 @@
     <span class="sys-warn">no system audio</span>
   {/if}
   {#if paused}
-    <span class="paused-badge">PAUSED</span>
+    <span class="paused-badge" title="Audio capture is paused — transcription and AI responses are suspended">PAUSED</span>
   {/if}
 </div>
 

@@ -55,7 +55,9 @@ async fn auth_middleware(
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::from_default_env().add_directive("server=debug".parse()?),
+            EnvFilter::from_default_env()
+                .add_directive("server=debug".parse()?)
+                .add_directive("suggestion=info".parse()?),
         )
         .init();
 
@@ -221,6 +223,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/expand-cue", post(http_handler::handle_expand_cue))
         .route("/api/next-steps", post(http_handler::handle_next_steps))
         .route("/api/presence-check", post(http_handler::handle_presence_check))
+        .route("/api/simulate-question", post(http_handler::handle_simulate_question))
         .route("/api/usage", get(http_handler::handle_usage))
         .route("/api/tts/voices", get(tts_handler::handle_tts_voices))
         .route("/api/tts/speak", post(tts_handler::handle_speak))

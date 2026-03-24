@@ -1,6 +1,6 @@
 use anyhow::Result;
 use tokio::sync::broadcast;
-use common::messages::WsEvent;
+use common::messages::{WsEvent, SuggestionMode};
 use crate::groq_llm::stream_openai_compat;
 
 /// Stream suggestions from a local Ollama instance.
@@ -11,6 +11,7 @@ pub async fn stream_suggestions(
     model: &str,
     system_prompt: &str,
     user_prompt: &str,
+    mode: SuggestionMode,
     event_tx: broadcast::Sender<WsEvent>,
 ) -> Result<()> {
     let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
@@ -21,6 +22,7 @@ pub async fn stream_suggestions(
         "Ollama",
         system_prompt,
         user_prompt,
+        mode,
         event_tx,
     )
     .await

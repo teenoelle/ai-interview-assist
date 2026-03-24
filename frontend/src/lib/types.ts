@@ -1,16 +1,19 @@
+export type SuggestionMode = 'compound' | 'primary' | 'secondary';
+
 export type WsEvent =
   | { type: 'transcript'; text: string; timestamp_ms: number; speaker: string }
   | { type: 'sentiment'; emotion: string; reason?: string; coaching?: string; coaching_why?: string }
-  | { type: 'question_detected'; question: string }
-  | { type: 'suggestion_token'; token: string }
-  | { type: 'suggestion_complete'; full_text: string }
+  | { type: 'question_detected'; question: string; secondary_tag?: string }
+  | { type: 'suggestion_token'; token: string; mode: SuggestionMode }
+  | { type: 'suggestion_complete'; full_text: string; mode: SuggestionMode }
   | { type: 'error'; message: string }
   | { type: 'status'; message: string }
-  | { type: 'rate_limit'; provider: string; requests_remaining: number; requests_limit: number };
+  | { type: 'rate_limit'; provider: string; requests_remaining: number; requests_limit: number }
+  | { type: 'provider_used'; service: string; provider: string; local: boolean };
 
 export type Emotion = 'engaged' | 'curious' | 'neutral' | 'skeptical' | 'confused' | 'bored' | 'pleased';
 
-export type QuestionTag = 'behavioral' | 'technical' | 'culture' | 'salary' | 'closing' | 'general';
+export type QuestionTag = 'behavioral' | 'technical' | 'culture' | 'salary' | 'closing' | 'personal' | 'motivation' | 'future' | 'strengths' | 'weaknesses' | 'situational' | 'general';
 
 export interface RedFlag {
   category: string;
@@ -42,11 +45,19 @@ export interface SuggestionEntry {
   suggestion: string;
   streaming: boolean;
   tag?: QuestionTag;
+  secondaryTag?: QuestionTag;
+  // Compound mode slots (only present when secondaryTag is set)
+  compoundSuggestion?: string;
+  compoundStreaming?: boolean;
+  secondarySuggestion?: string;
+  secondaryStreaming?: boolean;
   redFlag?: RedFlag;
-answerFeedback?: AnswerFeedback;
+  answerFeedback?: AnswerFeedback;
   vocalFeedback?: VocalSentiment;
   confidenceScore?: number;
   matchedKeywords?: string[];
   missedKeywords?: string[];
   answered?: boolean;
+  provider?: string;
+  providerLocal?: boolean;
 }

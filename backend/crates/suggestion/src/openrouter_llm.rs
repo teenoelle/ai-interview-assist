@@ -1,6 +1,6 @@
 use anyhow::Result;
 use tokio::sync::broadcast;
-use common::messages::WsEvent;
+use common::messages::{WsEvent, SuggestionMode};
 use crate::groq_llm::stream_openai_compat;
 
 const FREE_MODELS: &[&str] = &[
@@ -15,6 +15,7 @@ pub async fn stream_suggestions(
     api_key: &str,
     system_prompt: &str,
     user_prompt: &str,
+    mode: SuggestionMode,
     event_tx: broadcast::Sender<WsEvent>,
 ) -> Result<()> {
     let mut last_err = anyhow::anyhow!("No OpenRouter free models available");
@@ -26,6 +27,7 @@ pub async fn stream_suggestions(
             "OpenRouter",
             system_prompt,
             user_prompt,
+            mode,
             event_tx.clone(),
         )
         .await

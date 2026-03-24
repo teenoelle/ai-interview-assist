@@ -5,10 +5,23 @@
     history: Array<{ r: number; t: number }>;
   }
 
-  const { rateLimits, callCounts = {} } = $props<{
+  interface ProviderEntry { name: string; local: boolean; }
+
+  const { rateLimits, callCounts = {}, providerStatus = {} } = $props<{
     rateLimits: Record<string, RateLimitEntry>;
     callCounts?: Record<string, number>;
+    providerStatus?: Record<string, ProviderEntry>;
   }>();
+
+  const SERVICE_LABELS: Record<string, string> = {
+    transcription: 'Transcription',
+    suggestions: 'Suggestions',
+    sentiment: 'Sentiment',
+  };
+
+  const serviceEntries = $derived(
+    Object.entries(providerStatus).map(([svc, p]) => ({ svc, label: SERVICE_LABELS[svc] ?? svc, ...p }))
+  );
 
   function pct(entry: RateLimitEntry) {
     return entry.limit > 0 ? (entry.remaining / entry.limit) * 100 : 0;
@@ -77,6 +90,16 @@
 
 <div class="rate-panel">
   <div class="panel-inner">
+    {#if serviceEntries.length > 0}
+      <div class="service-summary">
+        {#each serviceEntries as s}
+          <div class="service-row">
+            <span class="service-label">{s.label}</span>
+            <span class="service-provider" class:service-local={s.local} title={s.local ? 'Local' : 'API'}>{s.name}{s.local ? ' ·local' : ''}</span>
+          </div>
+        {/each}
+      </div>
+    {/if}
     {#if entries.length === 0}
       <p class="empty">API usage will appear here once the interview starts.</p>
     {:else}
@@ -134,6 +157,35 @@
   .rate-panel {
     height: 100%;
     overflow-y: auto;
+  }
+  .service-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.5rem 0.75rem;
+    background: #0c1929;
+    border-radius: 0.4rem;
+    border: 1px solid #1e3a5f;
+  }
+  .service-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .service-label {
+    font-size: var(--fs-xs);
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .service-provider {
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    color: #7eb8f7;
+  }
+  .service-local {
+    color: #4ade80;
   }
   .panel-inner {
     display: flex;

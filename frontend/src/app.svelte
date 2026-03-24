@@ -1498,6 +1498,7 @@ Ask: team | How long have you been with the team?`;
             onStreams={(screen, webcam) => { screenStream = screen; webcamStream = webcam; }}
             onReady={(cap) => { captureInst = cap; }}
             onLevel={(_mic, sys) => updateSysEnergy(sys)}
+            onRecording={(url) => { recordingUrl = url; }}
           />
         </div>
       </header>

@@ -6,6 +6,7 @@ export type StreamsCallback = (screen: MediaStream, webcam: MediaStream | null) 
 export type AudioFeatures = { dominantBand: 'low' | 'mid' | 'high' | 'none'; flux: number };
 export type AudioFeaturesCallback = (features: AudioFeatures) => void;
 export type LiveEmotionCallback = (emotion: string) => void;
+export type RecordingCallback = (url: string) => void;
 
 export class MediaCapture {
   private systemStream: MediaStream | null = null;
@@ -29,6 +30,10 @@ export class MediaCapture {
   private _streamsCallback: StreamsCallback | null = null;
   private _audioFeaturesCallback: AudioFeaturesCallback | null = null;
   private _liveEmotionCallback: LiveEmotionCallback | null = null;
+  private _recordingCallback: RecordingCallback | null = null;
+  private screenRecordStream: MediaStream | null = null;
+  private screenRecorder: MediaRecorder | null = null;
+  private screenChunks: Blob[] = [];
 
   public micActive = false;
 
@@ -42,6 +47,7 @@ export class MediaCapture {
   onStreamsReady(cb: StreamsCallback) { this._streamsCallback = cb; }
   onAudioFeatures(cb: AudioFeaturesCallback) { this._audioFeaturesCallback = cb; }
   onLiveEmotion(cb: LiveEmotionCallback) { this._liveEmotionCallback = cb; }
+  onRecording(cb: RecordingCallback) { this._recordingCallback = cb; }
 
   get paused() { return this._paused; }
   pause()  { this._paused = true;  }
@@ -84,6 +90,33 @@ export class MediaCapture {
       console.warn('Face detection unavailable:', e);
       this.faceDetector = null;
     });
+    // Start app screen recording (second getDisplayMedia — preferCurrentTab pre-selects this tab in Chrome)
+    // Silently skipped if user cancels or browser doesn't support it
+    try {
+      this.screenRecordStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true,
+        preferCurrentTab: true,
+      } as DisplayMediaStreamOptions);
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+        ? 'video/webm;codecs=vp9'
+        : 'video/webm';
+      this.screenChunks = [];
+      this.screenRecorder = new MediaRecorder(this.screenRecordStream, { mimeType });
+      this.screenRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) this.screenChunks.push(e.data);
+      };
+      this.screenRecorder.onstop = () => {
+        const blob = new Blob(this.screenChunks, { type: mimeType });
+        this._recordingCallback?.(URL.createObjectURL(blob));
+        this.screenRecordStream?.getTracks().forEach((t) => t.stop());
+        this.screenRecordStream = null;
+      };
+      this.screenRecorder.start(5000);
+    } catch {
+      console.info('App screen recording not started (cancelled or unsupported).');
+    }
+
     // Notify caller with both streams for display
     if (this._streamsCallback) {
       this._streamsCallback(this.systemStream!, this.webcamStream);
@@ -239,6 +272,15 @@ export class MediaCapture {
     this.webcamStream = null;
     this.micActive = false;
     this._paused = false;
+    // Finalise screen recording — onstop handler assembles blob and fires _recordingCallback
+    if (this.screenRecorder && this.screenRecorder.state !== 'inactive') {
+      this.screenRecorder.stop();
+    } else {
+      // No recording was started; stop any lingering tracks
+      this.screenRecordStream?.getTracks().forEach((t) => t.stop());
+      this.screenRecordStream = null;
+    }
+    this.screenRecorder = null;
   }
 
   get active() { return this.systemStream !== null; }

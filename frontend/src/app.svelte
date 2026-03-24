@@ -6,6 +6,7 @@
   import BodyLanguagePanel from './components/BodyLanguagePanel.svelte';
   import SuggestionPanel from './components/SuggestionPanel.svelte';
   import TestQuestionBar from './components/TestQuestionBar.svelte';
+  import PracticeQuestionsBar from './components/PracticeQuestionsBar.svelte';
   import RateLimitPanel from './components/RateLimitPanel.svelte';
   import DebriefModal from './components/DebriefModal.svelte';
   import ReviewUpload from './components/ReviewUpload.svelte';
@@ -1576,6 +1577,7 @@ Ask: team | How long have you been with the team?`;
                 <div class="col-body" bind:this={histColBodyEl}>
                   <div class="col-body-scroll" style="zoom: {histZoom/100}; padding: 0.3rem 0.4rem 0.4rem; display: flex; flex-direction: column; gap: 0.4rem;">
                     <TestQuestionBar {capturing} />
+                    <PracticeQuestionsBar questions={predictedQuestions} {capturing} />
                     <QuestionsHistoryPanel
                       {suggestions}
                       currentIndex={histViewIdx === -1 ? currentQuestionIdx : histViewIdx}

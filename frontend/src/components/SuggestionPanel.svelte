@@ -1,8 +1,9 @@
 <script lang="ts">
-  import type { SuggestionEntry } from '../lib/types';
+  import type { SuggestionEntry, VocalSentiment } from '../lib/types';
   import { TAG_CONFIG } from '../lib/questionTagger';
   import { parseSuggestion, parseCues, getAnswerType } from '../lib/parseSuggestion';
   import PanelHeader from './PanelHeader.svelte';
+  import { PracticeRecorder } from '../lib/practiceRecorder';
 
   // Expand-cue state: cue text → { sentence, loading }
   let expandedCues = $state<Record<string, { sentence: string; loading: boolean }>>({});
@@ -195,6 +196,54 @@
     if (mode === 'compound') return entry.compoundStreaming ?? false;
     if (mode === 'secondary') return entry.secondaryStreaming ?? false;
     return entry.streaming;
+  }
+
+  // ── Practice recording ─────────────────────────────────────────────────────
+  const practiceRecorder = new PracticeRecorder();
+  let practiceState = $state<Record<number, 'recording' | 'loading'>>({});
+  let practiceResults = $state<Record<number, VocalSentiment>>({});
+  let practiceLiveText = $state<Record<number, string>>({});
+  let practiceRecordingIdx = $state<number | null>(null);
+
+  function startPractice(i: number) {
+    if (practiceRecordingIdx !== null) {
+      practiceRecorder.abort();
+      const prev = practiceRecordingIdx;
+      const { [prev]: _, ...rest } = practiceState;
+      practiceState = rest;
+    }
+    practiceRecordingIdx = i;
+    practiceState = { ...practiceState, [i]: 'recording' };
+    practiceLiveText = { ...practiceLiveText, [i]: '' };
+    practiceRecorder.start((text) => {
+      practiceLiveText = { ...practiceLiveText, [i]: text };
+    });
+  }
+
+  async function stopPractice(i: number) {
+    practiceRecordingIdx = null;
+    const result = practiceRecorder.stop();
+    practiceState = { ...practiceState, [i]: 'loading' };
+    try {
+      const resp = await fetch('/api/vocal-sentiment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: suggestions[i].question,
+          transcript: result.transcript,
+          duration_seconds: result.duration,
+          word_count: result.wordCount,
+          filler_count: result.fillerCount,
+          filler_detail: result.fillerDetail,
+        }),
+      });
+      if (resp.ok) {
+        const data: VocalSentiment = await resp.json();
+        practiceResults = { ...practiceResults, [i]: data };
+      }
+    } catch { /* ignore */ }
+    const { [i]: _, ...rest } = practiceState;
+    practiceState = rest;
   }
 </script>
 
@@ -790,6 +839,39 @@
                 </div>
               {/if}
             {/if}
+            {/if}
+            <!-- Practice recording -->
+            {#if !eModeStreaming && eModeSuggestion && practiceRecorder.supported}
+              {@const pState = practiceState[i]}
+              {@const pResult = practiceResults[i]}
+              <div class="practice-bar">
+                {#if !pState}
+                  <button class="practice-btn" onclick={() => startPractice(i)}>● Practice answer</button>
+                {:else if pState === 'recording'}
+                  <div class="practice-recording-row">
+                    <span class="practice-rec-dot">●</span>
+                    <span class="practice-live-text">{practiceLiveText[i] || 'Listening…'}</span>
+                    <button class="practice-stop-btn" onclick={() => stopPractice(i)}>◼ Stop</button>
+                  </div>
+                {:else if pState === 'loading'}
+                  <span class="practice-scoring">Scoring<span class="dots">...</span></span>
+                {/if}
+                {#if pResult}
+                  <div class="practice-result">
+                    <div class="pr-header">
+                      <span class="pr-score"
+                        class:pr-score-good={pResult.confidence_score >= 70}
+                        class:pr-score-mid={pResult.confidence_score >= 50 && pResult.confidence_score < 70}
+                      >{pResult.confidence_score}</span>
+                      <span class="pr-tone">{pResult.tone}</span>
+                      <span class="pr-pace">{pResult.pace}</span>
+                      <button class="practice-btn practice-retry-btn" onclick={() => startPractice(i)}>↺ Retry</button>
+                    </div>
+                    {#if pResult.fillers_noted}<div class="pr-fillers">{pResult.fillers_noted}</div>{/if}
+                    <div class="pr-coaching">{pResult.coaching}</div>
+                  </div>
+                {/if}
+              </div>
             {/if}
             {/if}
           </div>
@@ -1445,5 +1527,132 @@
     font-style: italic;
     font-size: var(--fs-xs);
     border-top: 1px solid #0f1e30;
+  }
+
+  /* ── Practice recording ─────────────────────────────────── */
+  .practice-bar {
+    margin-top: 0.4rem;
+    border-top: 1px solid #0f1e30;
+    padding-top: 0.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .practice-btn {
+    align-self: flex-start;
+    background: #0a1a2e;
+    border: 1px solid #1e3a5f;
+    color: #60a5fa;
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    padding: 0.2rem 0.55rem;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .practice-btn:hover { background: #0f2847; border-color: #3b82f6; color: #93c5fd; }
+
+  .practice-recording-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+  }
+
+  .practice-rec-dot {
+    color: #ef4444;
+    font-size: 0.55rem;
+    flex-shrink: 0;
+    margin-top: 0.25rem;
+    animation: pulse 1s ease-in-out infinite;
+  }
+
+  .practice-live-text {
+    flex: 1;
+    font-size: var(--fs-xs);
+    color: #64748b;
+    font-style: italic;
+    line-height: 1.4;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  .practice-stop-btn {
+    flex-shrink: 0;
+    background: #2d0a0a;
+    border: 1px solid #7f1d1d;
+    color: #f87171;
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    padding: 0.2rem 0.5rem;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .practice-stop-btn:hover { background: #450a0a; }
+
+  .practice-scoring {
+    font-size: var(--fs-xs);
+    color: #475569;
+    font-style: italic;
+  }
+
+  .practice-result {
+    background: #060f1e;
+    border: 1px solid #1e2d45;
+    border-radius: 0.35rem;
+    padding: 0.4rem 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .pr-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .pr-score {
+    font-size: var(--fs-xs);
+    font-weight: 800;
+    color: #f87171;
+    background: #1a0505;
+    border-radius: 0.2em;
+    padding: 0.05em 0.4em;
+    flex-shrink: 0;
+  }
+  .pr-score.pr-score-good { color: #4ade80; background: #071a0f; }
+  .pr-score.pr-score-mid  { color: #fbbf24; background: #1a1200; }
+
+  .pr-tone {
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: capitalize;
+  }
+
+  .pr-pace {
+    font-size: var(--fs-xs);
+    color: #64748b;
+  }
+
+  .practice-retry-btn {
+    margin-left: auto;
+    padding: 0.1rem 0.4rem;
+    font-size: var(--fs-xs);
+    font-weight: 600;
+  }
+
+  .pr-fillers {
+    font-size: var(--fs-xs);
+    color: #f59e0b;
+  }
+
+  .pr-coaching {
+    font-size: var(--fs-xs);
+    color: #94a3b8;
+    line-height: 1.45;
   }
 </style>

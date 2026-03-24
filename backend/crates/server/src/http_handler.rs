@@ -111,7 +111,7 @@ pub async fn handle_setup_finalize(
     // Build system prompt
     let system_prompt = build_system_prompt(&payload, &company_info, &interviewer_profiles);
 
-    // Store
+    // Store system prompt
     {
         let mut sp = state.system_prompt.write().await;
         *sp = system_prompt.clone();
@@ -128,33 +128,36 @@ pub async fn handle_setup_finalize(
         message: "Setup complete. Ready for interview.".to_string(),
     });
 
-    // Build a focused context for question prediction — raw candidate background + JD,
-    // without the AI-coach preamble that consumes most of the 4000-char budget.
-    let mut prediction_context = String::new();
+    // Build a focused context for question prediction and store for deferred use
+    let mut prediction_ctx = String::new();
     if !payload.job_description.is_empty() {
-        prediction_context.push_str("JOB DESCRIPTION:\n");
-        prediction_context.push_str(&payload.job_description);
-        prediction_context.push_str("\n\n");
+        prediction_ctx.push_str("JOB DESCRIPTION:\n");
+        prediction_ctx.push_str(&payload.job_description);
+        prediction_ctx.push_str("\n\n");
     }
     if !payload.cv_text.is_empty() {
-        prediction_context.push_str("CANDIDATE CV:\n");
-        prediction_context.push_str(&payload.cv_text);
-        prediction_context.push_str("\n\n");
+        prediction_ctx.push_str("CANDIDATE CV:\n");
+        prediction_ctx.push_str(&payload.cv_text);
+        prediction_ctx.push_str("\n\n");
     }
     if !payload.interviewee_linkedin.is_empty() {
-        prediction_context.push_str("CANDIDATE LINKEDIN:\n");
-        prediction_context.push_str(&payload.interviewee_linkedin);
-        prediction_context.push_str("\n\n");
+        prediction_ctx.push_str("CANDIDATE LINKEDIN:\n");
+        prediction_ctx.push_str(&payload.interviewee_linkedin);
+        prediction_ctx.push_str("\n\n");
     }
     if !payload.portfolio_text.is_empty() {
-        prediction_context.push_str("PORTFOLIO / WEBSITE:\n");
-        prediction_context.push_str(&payload.portfolio_text);
-        prediction_context.push_str("\n\n");
+        prediction_ctx.push_str("PORTFOLIO / WEBSITE:\n");
+        prediction_ctx.push_str(&payload.portfolio_text);
+        prediction_ctx.push_str("\n\n");
     }
     if !payload.extra_experience.is_empty() {
-        prediction_context.push_str("ADDITIONAL EXPERIENCE:\n");
-        prediction_context.push_str(&payload.extra_experience);
-        prediction_context.push_str("\n\n");
+        prediction_ctx.push_str("ADDITIONAL EXPERIENCE:\n");
+        prediction_ctx.push_str(&payload.extra_experience);
+        prediction_ctx.push_str("\n\n");
+    }
+    {
+        let mut pc = state.prediction_context.write().await;
+        *pc = prediction_ctx;
     }
 
     let cfg = AiConfig {
@@ -167,8 +170,7 @@ pub async fn handle_setup_finalize(
         usage: Some(state.call_counts.clone()),
     };
 
-    let (predicted_questions, company_brief, interviewer_summaries, jd_keywords) = tokio::join!(
-        predict_questions(&prediction_context, &cfg),
+    let (company_brief, interviewer_summaries, jd_keywords) = tokio::join!(
         generate_company_brief(&company_info, &cfg),
         generate_interviewer_summary(&payload.linkedin_text, &cfg),
         extract_jd_keywords(&payload.job_description, &cfg),
@@ -186,7 +188,7 @@ pub async fn handle_setup_finalize(
         success: true,
         system_prompt_preview: preview,
         message: "Setup complete".to_string(),
-        predicted_questions,
+        predicted_questions: vec![],
         company_brief: company_brief_opt,
         interviewer_summaries,
         jd_keywords,
@@ -606,4 +608,26 @@ pub async fn handle_simulate_question(
     state.question_tx.send(req.question.trim().to_string()).await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(StatusCode::OK)
+}
+
+#[derive(serde::Serialize)]
+pub struct PredictQuestionsResponse {
+    pub questions: Vec<String>,
+}
+
+pub async fn handle_predict_questions(
+    State(state): State<AppState>,
+) -> Json<PredictQuestionsResponse> {
+    let ctx = state.prediction_context.read().await.clone();
+    let cfg = AiConfig {
+        gemini_key: &state.gemini_key,
+        anthropic_key: state.anthropic_key.as_deref(),
+        groq_key: state.groq_key.as_deref(),
+        groq_key_2: state.groq_key_2.as_deref(),
+        ollama_url: &state.ollama_url,
+        ollama_model: &state.ollama_model,
+        usage: Some(state.call_counts.clone()),
+    };
+    let questions = predict_questions(&ctx, &cfg).await;
+    Json(PredictQuestionsResponse { questions })
 }

@@ -904,14 +904,24 @@ Ask: team | How long have you been with the team?`;
     } catch { /* keep static fallback */ }
   }
 
-  function handleSetupComplete(data?: { companyBrief?: any; interviewerSummaries?: any[]; jdKeywords?: string[]; predictedQuestions?: string[] }) {
+  async function fetchPredictedQuestions() {
+    try {
+      const res = await fetch('/api/predict-questions', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.questions?.length) predictedQuestions = data.questions;
+      }
+    } catch { /* non-critical */ }
+  }
+
+  function handleSetupComplete(data?: { companyBrief?: any; interviewerSummaries?: any[]; jdKeywords?: string[]; }) {
     if (data?.companyBrief) companyBrief = data.companyBrief;
     if (data?.interviewerSummaries) interviewerSummaries = data.interviewerSummaries;
     if (data?.jdKeywords) { jdKeywords = data.jdKeywords; mentionedKeywords = new Set(); interviewerRaisedKeywords = new Set(); }
-    if (data?.predictedQuestions) predictedQuestions = data.predictedQuestions;
     phase = 'interview';
     connectWs();
     void fetchOpeningSuggestion();
+    void fetchPredictedQuestions();
   }
 
   function connectWs() {

@@ -113,6 +113,7 @@ async fn main() -> anyhow::Result<()> {
 
     let state = AppState {
         system_prompt: Arc::new(RwLock::new(String::new())),
+        prediction_context: Arc::new(RwLock::new(String::new())),
         transcript: Arc::new(RwLock::new(Vec::new())),
         jd_keywords: Arc::new(RwLock::new(Vec::new())),
         audio_tx,
@@ -224,6 +225,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/next-steps", post(http_handler::handle_next_steps))
         .route("/api/presence-check", post(http_handler::handle_presence_check))
         .route("/api/simulate-question", post(http_handler::handle_simulate_question))
+        .route("/api/predict-questions", post(http_handler::handle_predict_questions))
         .route("/api/usage", get(http_handler::handle_usage))
         .route("/api/tts/voices", get(tts_handler::handle_tts_voices))
         .route("/api/tts/speak", post(tts_handler::handle_speak))

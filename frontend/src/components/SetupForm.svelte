@@ -6,6 +6,30 @@
     try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
   }
 
+  interface Preset {
+    id: string;
+    name: string;
+    data: {
+      companyName: string;
+      roleName: string;
+      jobDescription: string;
+      companyUrl: string;
+      interviewers: string[];
+      intervieweeLinkedin: string;
+      portfolioUrls: string[];
+      extraExperience: string;
+    };
+  }
+
+  function loadPresets(): Preset[] {
+    try { const v = localStorage.getItem('setup-presets'); return v ? JSON.parse(v) : []; } catch { return []; }
+  }
+  function savePresetsToStorage(list: Preset[]) {
+    localStorage.setItem('setup-presets', JSON.stringify(list));
+  }
+
+  let companyName = $state(load('setup-company-name', ''));
+  let roleName = $state(load('setup-role-name', ''));
   let jobDescription = $state(load('setup-jd', ''));
   let companyUrl = $state(load('setup-company-url', ''));
   let interviewers = $state<string[]>(loadArr('setup-interviewers', ['']));
@@ -14,25 +38,66 @@
   let extraExperience = $state(load('setup-extra-experience', ''));
   let cvFile: File | null = $state(null);
   let extraFile: File | null = $state(null);
+  let presets = $state<Preset[]>(loadPresets());
+  let selectedPresetId = $state('');
+  let savedFlash = $state(false);
 
+  $effect(() => { localStorage.setItem('setup-company-name', companyName); });
+  $effect(() => { localStorage.setItem('setup-role-name', roleName); });
   $effect(() => { localStorage.setItem('setup-jd', jobDescription); });
   $effect(() => { localStorage.setItem('setup-company-url', companyUrl); });
   $effect(() => { localStorage.setItem('setup-interviewers', JSON.stringify(interviewers)); });
   $effect(() => { localStorage.setItem('setup-interviewee-linkedin', intervieweeLinkedin); });
   $effect(() => { localStorage.setItem('setup-portfolio-urls', JSON.stringify(portfolioUrls)); });
   $effect(() => { localStorage.setItem('setup-extra-experience', extraExperience); });
+
   let loading = $state(false);
   let loadingStep = $state('');
   let error = $state('');
   let formEl: HTMLDivElement | undefined = $state();
 
-  let predictedQuestions = $state<string[]>([]);
   let companyBrief = $state<CompanyBrief | null>(null);
   let interviewerSummaries = $state<InterviewerSummary[]>([]);
   let jdKeywords = $state<string[]>([]);
   const props = $props<{
-    onSetupComplete: (data?: { companyBrief?: any; interviewerSummaries?: any[]; jdKeywords?: string[]; predictedQuestions?: string[] }) => void;
+    onSetupComplete: (data?: { companyBrief?: any; interviewerSummaries?: any[]; jdKeywords?: string[]; }) => void;
   }>();
+
+  function currentData(): Preset['data'] {
+    return { companyName, roleName, jobDescription, companyUrl, interviewers: [...interviewers], intervieweeLinkedin, portfolioUrls: [...portfolioUrls], extraExperience };
+  }
+
+  function applyPreset(p: Preset) {
+    companyName = p.data.companyName;
+    roleName = p.data.roleName;
+    jobDescription = p.data.jobDescription;
+    companyUrl = p.data.companyUrl;
+    interviewers = p.data.interviewers.length ? [...p.data.interviewers] : [''];
+    intervieweeLinkedin = p.data.intervieweeLinkedin;
+    portfolioUrls = p.data.portfolioUrls.length ? [...p.data.portfolioUrls] : [''];
+    extraExperience = p.data.extraExperience;
+    selectedPresetId = p.id;
+  }
+
+  function savePreset() {
+    const name = [companyName.trim(), roleName.trim()].filter(Boolean).join(' — ') || 'Untitled';
+    // Replace existing preset with same name, or add new
+    const existing = presets.find(p => p.name === name);
+    const id = existing?.id ?? Date.now().toString();
+    const updated: Preset = { id, name, data: currentData() };
+    presets = [...presets.filter(p => p.id !== id), updated];
+    savePresetsToStorage(presets);
+    selectedPresetId = id;
+    savedFlash = true;
+    setTimeout(() => savedFlash = false, 1500);
+  }
+
+  function deleteSelectedPreset() {
+    if (!selectedPresetId) return;
+    presets = presets.filter(p => p.id !== selectedPresetId);
+    savePresetsToStorage(presets);
+    selectedPresetId = '';
+  }
 
   function addInterviewer() {
     interviewers = [...interviewers, ''];
@@ -80,12 +145,11 @@
 
       loadingStep = 'Generating your coaching profile…';
       const result = await submitSetup(formData);
-      predictedQuestions = result.predicted_questions ?? [];
       companyBrief = result.company_brief ?? null;
       interviewerSummaries = result.interviewer_summaries ?? [];
       jdKeywords = result.jd_keywords ?? [];
       if (jdKeywords.length > 0) saveKeywords(jdKeywords);
-      props.onSetupComplete({ companyBrief, interviewerSummaries, jdKeywords, predictedQuestions });
+      props.onSetupComplete({ companyBrief, interviewerSummaries, jdKeywords });
     } catch (e) {
       error = String(e);
       formEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -109,6 +173,40 @@
 <div class="setup-form" bind:this={formEl}>
   <h2>Interview Setup</h2>
   <p class="subtitle">Fill in your context before the interview begins</p>
+
+  <!-- Preset bar -->
+  <div class="preset-bar">
+    {#if presets.length > 0}
+      <select
+        class="preset-select"
+        value={selectedPresetId}
+        onchange={(e) => { const id = (e.target as HTMLSelectElement).value; if (id) applyPreset(presets.find(p => p.id === id)!); }}
+      >
+        <option value="">Load a saved setup…</option>
+        {#each presets as p (p.id)}
+          <option value={p.id}>{p.name}</option>
+        {/each}
+      </select>
+      {#if selectedPresetId}
+        <button type="button" class="preset-delete" onclick={deleteSelectedPreset} title="Delete preset">✕</button>
+      {/if}
+    {/if}
+    <button type="button" class="preset-save" onclick={savePreset}>
+      {savedFlash ? '✓ Saved' : '⬇ Save Setup'}
+    </button>
+  </div>
+
+  <!-- Company and role name (used for preset naming) -->
+  <div class="name-row">
+    <div class="field name-field">
+      <label for="company-name">Company Name</label>
+      <input id="company-name" type="text" bind:value={companyName} placeholder="Acme Corp" />
+    </div>
+    <div class="field name-field">
+      <label for="role-name">Role / Position</label>
+      <input id="role-name" type="text" bind:value={roleName} placeholder="Senior Product Manager" />
+    </div>
+  </div>
 
   {#if error}
     <div class="error">{error}</div>
@@ -226,6 +324,36 @@
 
 <style>
   .setup-form { max-width: 720px; margin: 0 auto; padding: 1rem 2rem 2rem; scroll-margin-top: 1rem; }
+  .preset-bar {
+    display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem;
+    padding: 0.6rem 0.75rem; background: #0f172a; border: 1px solid #1e293b;
+    border-radius: 0.5rem; flex-wrap: wrap;
+  }
+  .preset-select {
+    flex: 1; min-width: 10rem; padding: 0.35rem 0.5rem;
+    background: #1e293b; border: 1px solid #334155; border-radius: 0.375rem;
+    color: #e2e8f0; font-size: var(--fs-base); cursor: pointer;
+  }
+  .preset-save {
+    padding: 0.35rem 0.85rem; background: transparent; border: 1px solid #334155;
+    border-radius: 0.375rem; color: #60a5fa; font-size: var(--fs-base);
+    cursor: pointer; white-space: nowrap; transition: all 0.15s;
+  }
+  .preset-save:hover { border-color: #60a5fa; background: #1e3a5f; }
+  .preset-delete {
+    padding: 0.35rem 0.55rem; background: transparent; border: 1px solid #334155;
+    border-radius: 0.375rem; color: #64748b; font-size: var(--fs-base); cursor: pointer;
+    transition: all 0.15s;
+  }
+  .preset-delete:hover { border-color: #ef4444; color: #ef4444; }
+  .name-row { display: flex; gap: 1rem; margin-bottom: 0; }
+  .name-field { flex: 1; }
+  input[type='text'] {
+    width: 100%; padding: 0.75rem;
+    background: #1e293b; border: 1px solid #334155;
+    border-radius: 0.5rem; color: #e2e8f0;
+    font-size: var(--fs-base);
+  }
   .setup-success {
     padding: 0.75rem 1rem; background: #052e16; border: 1px solid #166534;
     border-radius: 0.5rem; color: #4ade80; font-size: 0.875rem; font-weight: 500;

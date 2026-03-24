@@ -2,13 +2,17 @@
   import type { TranscriptEntry, SuggestionEntry } from '../lib/types';
   import type { ReviewReport } from './ReviewPanel.svelte';
 
-  const { transcript, suggestions, onClose, onSave, onOpenReport } = $props<{
+  const { transcript, suggestions, onClose, onSave, onOpenReport, recordingUrl } = $props<{
     transcript: TranscriptEntry[];
     suggestions: SuggestionEntry[];
     onClose: () => void;
     onSave?: (result: DebriefResult) => void;
     onOpenReport?: (report: ReviewReport) => void;
+    recordingUrl?: string;
   }>();
+
+  type Tab = 'review' | 'recording' | 'reports';
+  let activeTab = $state<Tab>('review');
 
   interface DebriefResult {
     summary: string;
@@ -26,7 +30,6 @@
   let emailSent = $state(false);
   let nextSteps = $state<string[]>([]);
   let loadingNextSteps = $state(false);
-  let showReports = $state(false);
   let reportList = $state<ReviewReport[]>([]);
   let reportsLoading = $state(false);
   let reportSearch = $state('');
@@ -37,8 +40,7 @@
   );
 
   async function toggleReports() {
-    showReports = !showReports;
-    if (showReports && reportList.length === 0) {
+    if (reportList.length === 0) {
       reportsLoading = true;
       try {
         const resp = await fetch('/api/reviews');
@@ -144,88 +146,118 @@
       <button class="close-btn" onclick={onClose}>✕</button>
     </div>
 
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <button class="tab" class:active={activeTab === 'review'} onclick={() => activeTab = 'review'}>
+        AI Review
+      </button>
+      <button class="tab" class:active={activeTab === 'recording'} onclick={() => { activeTab = 'recording'; }}>
+        Recording
+      </button>
+      <button class="tab" class:active={activeTab === 'reports'} onclick={() => { activeTab = 'reports'; if (reportList.length === 0) toggleReports(); }}>
+        Past Reports {reportList.length > 0 ? `(${reportList.length})` : ''}
+      </button>
+    </div>
+
     <div class="modal-body">
-      {#if loading}
-        <div class="loading">Analyzing your interview...</div>
-      {:else if error}
-        <div class="error">{error}</div>
-      {:else if result}
 
-        <section>
-          <h3>Overall</h3>
-          <p class="summary">{result.summary}</p>
-        </section>
-
-        <div class="two-col">
+      <!-- AI Review tab -->
+      {#if activeTab === 'review'}
+        {#if loading}
+          <div class="loading">Analyzing your interview...</div>
+        {:else if error}
+          <div class="error">{error}</div>
+        {:else if result}
           <section>
-            <h3 class="green">Strong Moments</h3>
-            <ul>
-              {#each result.strong_points as point}
-                <li>{point}</li>
-              {/each}
-            </ul>
+            <h3>Overall</h3>
+            <p class="summary">{result.summary}</p>
           </section>
 
-          <section>
-            <h3 class="yellow">Areas to Improve</h3>
-            <ul>
-              {#each result.improvement_areas as area}
-                <li>{area}</li>
-              {/each}
-            </ul>
-          </section>
-        </div>
-
-        <section class="next-steps-section">
-          <h3 class="amber">Next Steps</h3>
-          {#if loadingNextSteps}
-            <p class="steps-loading">Extracting next steps...</p>
-          {:else if nextSteps.length > 0}
-            <ul>
-              {#each nextSteps as step}
-                <li>{step}</li>
-              {/each}
-            </ul>
-          {:else}
-            <p class="steps-empty">No specific next steps mentioned in the interview.</p>
-          {/if}
-        </section>
-
-        <section class="email-section">
-          <div class="followup-header">
-            <h3>Follow-up Email</h3>
-            <button class="copy-btn" class:copied onclick={copyEmail}>
-              {copied ? '✓ Copied!' : 'Copy email'}
-            </button>
+          <div class="two-col">
+            <section>
+              <h3 class="green">Strong Moments</h3>
+              <ul>
+                {#each result.strong_points as point}
+                  <li>{point}</li>
+                {/each}
+              </ul>
+            </section>
+            <section>
+              <h3 class="yellow">Areas to Improve</h3>
+              <ul>
+                {#each result.improvement_areas as area}
+                  <li>{area}</li>
+                {/each}
+              </ul>
+            </section>
           </div>
-          {#if result.followup_email_draft}
-            <div class="email-draft">
-              {#each result.followup_email_draft.split('\n') as line, i}
-                {#if line.trim().startsWith('Subject:')}
-                  <div class="email-subject">{line}</div>
-                {:else if line.trim() === ''}
-                  <div class="email-blank"></div>
-                {:else}
-                  <div class="email-line">{line}</div>
-                {/if}
-              {/each}
+
+          <section class="next-steps-section">
+            <h3 class="amber">Next Steps</h3>
+            {#if loadingNextSteps}
+              <p class="steps-loading">Extracting next steps...</p>
+            {:else if nextSteps.length > 0}
+              <ul>
+                {#each nextSteps as step}
+                  <li>{step}</li>
+                {/each}
+              </ul>
+            {:else}
+              <p class="steps-empty">No specific next steps mentioned in the interview.</p>
+            {/if}
+          </section>
+
+          <section class="email-section">
+            <div class="followup-header">
+              <h3>Follow-up Email</h3>
+              <button class="copy-btn" class:copied onclick={copyEmail}>
+                {copied ? '✓ Copied!' : 'Copy email'}
+              </button>
             </div>
-          {:else}
-            <ul>
-              {#each result.followup_email as point}
-                <li>{point}</li>
-              {/each}
-            </ul>
-          {/if}
-        </section>
+            {#if result.followup_email_draft}
+              <div class="email-draft">
+                {#each result.followup_email_draft.split('\n') as line}
+                  {#if line.trim().startsWith('Subject:')}
+                    <div class="email-subject">{line}</div>
+                  {:else if line.trim() === ''}
+                    <div class="email-blank"></div>
+                  {:else}
+                    <div class="email-line">{line}</div>
+                  {/if}
+                {/each}
+              </div>
+            {:else}
+              <ul>
+                {#each result.followup_email as point}
+                  <li>{point}</li>
+                {/each}
+              </ul>
+            {/if}
+          </section>
+        {/if}
       {/if}
 
-      <!-- Past Reports -->
-      <section class="reports-section">
-        <button class="reports-toggle" onclick={toggleReports}>
-          {showReports ? '▴' : '▾'} Past Reports
-        </button>
-        {#if showReports}
+      <!-- Recording tab -->
+      {#if activeTab === 'recording'}
+        {#if recordingUrl}
+          <section class="recording-section">
+            <h3>App Screen Recording</h3>
+            <video class="recording-player" src={recordingUrl} controls></video>
+            <a class="recording-download" href={recordingUrl} download="interview-recording.webm">
+              ⬇ Download recording
+            </a>
+          </section>
+        {:else}
+          <div class="recording-empty">
+            <p class="steps-empty">No recording for this session.</p>
+            <p class="steps-empty">To record the app screen during a future interview, click <strong>Record App Screen</strong> when starting the meeting capture.</p>
+          </div>
+        {/if}
+      {/if}
+
+      <!-- Past Reports tab -->
+      {#if activeTab === 'reports'}
+        <section class="reports-section">
           {#if reportsLoading}
             <p class="steps-loading">Loading reports…</p>
           {:else if reportList.length === 0}
@@ -244,7 +276,7 @@
                     </div>
                     <p class="report-summary">{r.qa_pairs.length} Q&A · {r.vocal_summary.avg_wpm} wpm · {Math.round(r.speaker_summary.you_pct)}% you</p>
                     <div class="report-actions">
-                      <button class="report-open" onclick={() => { onOpenReport?.(r); onClose(); }}>Open</button>
+                      <button class="report-open" onclick={() => { onOpenReport?.(r); onClose(); }}>Open →</button>
                       <button class="report-delete" onclick={() => deleteReport(r.id)}>Delete</button>
                     </div>
                   </div>
@@ -252,12 +284,13 @@
               </div>
             {/if}
           {/if}
-        {/if}
-      </section>
+        </section>
+      {/if}
+
     </div>
 
-    <!-- Email footer — always visible when result is ready -->
-    {#if result}
+    <!-- Email footer — only on AI Review tab when result is ready -->
+    {#if result && activeTab === 'review'}
       <div class="email-footer">
         <span class="email-footer-label">Email debrief to myself</span>
         <input
@@ -298,6 +331,17 @@
     cursor: pointer; padding: 0.2rem 0.4rem;
   }
   .close-btn:hover { color: #e2e8f0; }
+  .tab-bar {
+    display: flex; border-bottom: 1px solid #1e293b; flex-shrink: 0;
+    padding: 0 1rem;
+  }
+  .tab {
+    padding: 0.6rem 1rem; background: none; border: none; border-bottom: 2px solid transparent;
+    color: #475569; font-size: var(--fs-base); font-weight: 600; cursor: pointer;
+    margin-bottom: -1px; transition: all 0.15s; white-space: nowrap;
+  }
+  .tab:hover { color: #94a3b8; }
+  .tab.active { color: #60a5fa; border-bottom-color: #3b82f6; }
   .modal-body { overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; }
   section { display: flex; flex-direction: column; gap: 0.5rem; }
   h3 { font-size: var(--fs-base); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #94a3b8; margin: 0; }
@@ -390,15 +434,17 @@
   .send-btn:disabled { opacity: 0.4; cursor: default; }
   .send-btn.sent { background: #166534; }
 
-  .reports-section { display: flex; flex-direction: column; gap: 0.5rem; }
-  .reports-toggle {
-    align-self: flex-start; background: none; border: 1px solid #1e293b;
-    color: #64748b; font-size: var(--fs-sm); font-weight: 600;
-    padding: 0.25rem 0.75rem; border-radius: 0.3rem; cursor: pointer;
-    transition: all 0.12s;
+  .recording-section { display: flex; flex-direction: column; gap: 0.75rem; }
+  .recording-player { width: 100%; border-radius: 0.5rem; background: #000; max-height: 50vh; }
+  .recording-download {
+    align-self: flex-start; font-size: var(--fs-sm); color: #60a5fa;
+    text-decoration: none; padding: 0.25rem 0.75rem;
+    border: 1px solid #334155; border-radius: 0.375rem; transition: all 0.15s;
   }
-  .reports-toggle:hover { border-color: #334155; color: #94a3b8; }
-  .report-search {
+  .recording-download:hover { border-color: #60a5fa; background: #1e3a5f; }
+  .recording-empty { display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem 0; }
+  .reports-section { display: flex; flex-direction: column; gap: 0.5rem; }
+.report-search {
     width: 100%; padding: 0.35rem 0.6rem; background: #0f172a;
     border: 1px solid #1e293b; border-radius: 0.3rem; color: #e2e8f0;
     font-size: var(--fs-sm); outline: none;

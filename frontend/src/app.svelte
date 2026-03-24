@@ -79,6 +79,7 @@
   let errorMessages = $state<string[]>([]);
   let predictedQuestions = $state<string[]>([]);
   let showDebrief = $state(false);
+  let recordingUrl = $state<string | undefined>(undefined);
   let focusMode = $state(false);
   let showHistory = $state(false);
   let showReviewUpload = $state(false);
@@ -2187,6 +2188,7 @@ Ask: team | How long have you been with the team?`;
       <DebriefModal
         {transcript}
         {suggestions}
+        {recordingUrl}
         onClose={() => showDebrief = false}
         onOpenReport={(r) => { reviewReport = r; showReviewPanel = true; }}
         onSave={(r) => saveInterview({

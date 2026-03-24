@@ -914,6 +914,7 @@ Ask: team | How long have you been with the team?`;
   function handlePractice(questions: string[]) { predictedQuestions = questions; phase = 'practice'; connectWs(); }
 
   function connectWs() {
+    eventWs?.disconnect();
     eventWs = new EventWebSocket();
     eventWs.onEvent(handleWsEvent);
     eventWs.onStatus((status, attempt) => { wsStatus = status; wsAttempt = attempt; });
@@ -1367,7 +1368,7 @@ Ask: team | How long have you been with the team?`;
     <PracticePanel
       questions={predictedQuestions}
       systemPrompt=""
-      onStartInterview={() => { phase = 'interview'; }}
+      onStartInterview={() => { phase = 'interview'; void fetchOpeningSuggestion(); }}
       onBackToSetup={() => { phase = 'setup'; }}
     />
 

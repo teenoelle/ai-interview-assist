@@ -1,13 +1,68 @@
 use anyhow::Result;
+use reqwest::Client;
 use scraper::{Html, Selector};
 use std::collections::{HashSet, VecDeque};
+use tokio::task::JoinSet;
 use url::Url;
+
+const CRAWL_CONCURRENCY: usize = 8;
+const SKIP_EXTENSIONS: &[&str] = &[".pdf", ".jpg", ".jpeg", ".png", ".gif", ".zip", ".css", ".js", ".woff", ".woff2", ".svg", ".ico"];
+
+async fn fetch_page(client: Client, url: String, base_host: String) -> (String, Vec<String>) {
+    if SKIP_EXTENSIONS.iter().any(|ext| url.to_lowercase().ends_with(ext)) {
+        return (String::new(), vec![]);
+    }
+    let resp = match client.get(&url).send().await {
+        Ok(r) if r.status().is_success() => r,
+        _ => return (String::new(), vec![]),
+    };
+    let is_html = resp.headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .map(|ct| ct.contains("text/html"))
+        .unwrap_or(false);
+    if !is_html { return (String::new(), vec![]); }
+
+    let html = match resp.text().await {
+        Ok(t) => t,
+        Err(_) => return (String::new(), vec![]),
+    };
+    let doc = Html::parse_document(&html);
+    let base = match Url::parse(&url) {
+        Ok(u) => u,
+        Err(_) => return (String::new(), vec![]),
+    };
+
+    let text_sel = Selector::parse("p, h1, h2, h3, h4, h5, li, article, section").unwrap();
+    let page_text: Vec<String> = doc.select(&text_sel)
+        .map(|e| e.text().collect::<String>().trim().to_string())
+        .filter(|t| !t.is_empty() && t.len() > 20)
+        .collect();
+
+    let content = if page_text.is_empty() {
+        String::new()
+    } else {
+        format!("\n\n--- Page: {} ---\n{}", url, page_text.join("\n"))
+    };
+
+    let link_sel = Selector::parse("a[href]").unwrap();
+    let links: Vec<String> = doc.select(&link_sel)
+        .filter_map(|el| {
+            let href = el.value().attr("href")?;
+            let linked = Url::parse(href).ok().or_else(|| base.join(href).ok())?;
+            if linked.host_str().unwrap_or("") != base_host { return None; }
+            Some(linked.to_string())
+        })
+        .collect();
+
+    (content, links)
+}
 
 pub async fn crawl_website(start_url: &str, max_pages: usize) -> Result<String> {
     let base_url = Url::parse(start_url)?;
     let base_host = base_url.host_str().unwrap_or("").to_string();
 
-    let client = reqwest::Client::builder()
+    let client = Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .user_agent("Mozilla/5.0 (compatible; InterviewAssist/1.0)")
         .build()?;
@@ -16,123 +71,51 @@ pub async fn crawl_website(start_url: &str, max_pages: usize) -> Result<String> 
     let mut queue: VecDeque<String> = VecDeque::new();
     let mut collected_text = String::new();
 
-    // Seed with the start URL first, then prioritise high-value paths
     queue.push_back(start_url.to_string());
+    // Prioritise high-value paths — trimmed to the most commonly useful ones
     let priority_paths = [
-        "/about", "/about-us", "/company", "/who-we-are",
+        "/about", "/about-us", "/company",
         "/mission", "/values", "/culture",
-        "/products", "/services", "/solutions", "/how-it-works",
-        "/team", "/leadership", "/people", "/our-team",
-        "/careers", "/jobs", "/work-with-us",
-        "/blog", "/news", "/newsroom", "/press",
-        "/case-studies", "/customers", "/clients",
-        "/engineering", "/tech",
-        "/investors", "/investor-relations",
-        "/partners",
+        "/products", "/services", "/solutions",
+        "/team", "/leadership",
+        "/careers", "/jobs",
+        "/blog", "/news",
+        "/case-studies", "/customers",
     ];
     for path in &priority_paths {
         if let Ok(u) = base_url.join(path) {
             let s = u.to_string();
-            if !queue.contains(&s) {
-                queue.push_front(s);
+            if !queue.contains(&s) { queue.push_front(s); }
+        }
+    }
+
+    let mut in_flight: JoinSet<(String, Vec<String>)> = JoinSet::new();
+
+    loop {
+        // Dispatch up to CRAWL_CONCURRENCY concurrent fetches
+        while in_flight.len() < CRAWL_CONCURRENCY && !queue.is_empty() && visited.len() < max_pages {
+            let url = queue.pop_front().unwrap();
+            if visited.contains(&url) { continue; }
+            visited.insert(url.clone());
+            tracing::debug!("Crawling: {}", url);
+            let c = client.clone();
+            let h = base_host.clone();
+            in_flight.spawn(async move { fetch_page(c, url, h).await });
+        }
+
+        if in_flight.is_empty() { break; }
+
+        if let Some(Ok((content, links))) = in_flight.join_next().await {
+            if !content.is_empty() { collected_text.push_str(&content); }
+            for link in links {
+                if !visited.contains(&link) { queue.push_back(link); }
             }
         }
     }
 
-    let skip_extensions = [".pdf", ".jpg", ".jpeg", ".png", ".gif", ".zip", ".css", ".js"];
-
-    while let Some(url) = queue.pop_front() {
-        if visited.len() >= max_pages {
-            break;
-        }
-        if visited.contains(&url) {
-            continue;
-        }
-
-        // Skip binary/asset files
-        if skip_extensions.iter().any(|ext| url.to_lowercase().ends_with(ext)) {
-            continue;
-        }
-
-        visited.insert(url.clone());
-        tracing::debug!("Crawling: {}", url);
-
-        let resp = match client.get(&url).send().await {
-            Ok(r) => r,
-            Err(e) => {
-                tracing::warn!("Failed to fetch {}: {}", url, e);
-                continue;
-            }
-        };
-
-        if !resp.status().is_success() {
-            continue;
-        }
-
-        let content_type = resp
-            .headers()
-            .get("content-type")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("")
-            .to_string();
-
-        if !content_type.contains("text/html") {
-            continue;
-        }
-
-        let html = match resp.text().await {
-            Ok(t) => t,
-            Err(_) => continue,
-        };
-
-        let doc = Html::parse_document(&html);
-
-        // Extract text
-        let text_selector = Selector::parse("p, h1, h2, h3, h4, h5, li, article, section").unwrap();
-        let page_text: Vec<String> = doc
-            .select(&text_selector)
-            .map(|e| e.text().collect::<String>().trim().to_string())
-            .filter(|t| !t.is_empty() && t.len() > 20)
-            .collect();
-
-        if !page_text.is_empty() {
-            collected_text.push_str(&format!("\n\n--- Page: {} ---\n", url));
-            collected_text.push_str(&page_text.join("\n"));
-        }
-
-        // Find links
-        let link_selector = Selector::parse("a[href]").unwrap();
-        for element in doc.select(&link_selector) {
-            if let Some(href) = element.value().attr("href") {
-                let linked = match Url::parse(href) {
-                    Ok(u) => u,
-                    Err(_) => match base_url.join(href) {
-                        Ok(u) => u,
-                        Err(_) => continue,
-                    },
-                };
-
-                // Same-origin only
-                if linked.host_str().unwrap_or("") != base_host {
-                    continue;
-                }
-
-                let link_str = linked.as_str().to_string();
-                if !visited.contains(&link_str) {
-                    queue.push_back(link_str);
-                }
-            }
-        }
-    }
-
-    // Truncate to reasonable size (100KB) — use char boundary to avoid UTF-8 panic
     if collected_text.len() > 100_000 {
-        let safe_end = collected_text
-            .char_indices()
-            .map(|(i, _)| i)
-            .take_while(|&i| i <= 100_000)
-            .last()
-            .unwrap_or(0);
+        let safe_end = collected_text.char_indices().map(|(i, _)| i)
+            .take_while(|&i| i <= 100_000).last().unwrap_or(0);
         collected_text.truncate(safe_end);
         collected_text.push_str("\n\n[Content truncated]");
     }

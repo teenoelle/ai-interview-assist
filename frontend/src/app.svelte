@@ -905,24 +905,32 @@ Ask: team | How long have you been with the team?`;
     } catch { /* keep static fallback */ }
   }
 
-  async function fetchPredictedQuestions() {
-    try {
-      const res = await fetch('/api/predict-questions', { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.questions?.length) predictedQuestions = data.questions;
-      }
-    } catch { /* non-critical */ }
+  async function fetchBackgroundSetup() {
+    const [briefRes, summariesRes, questionsRes] = await Promise.allSettled([
+      fetch('/api/company-brief', { method: 'POST' }),
+      fetch('/api/interviewer-summaries', { method: 'POST' }),
+      fetch('/api/predict-questions', { method: 'POST' }),
+    ]);
+    if (briefRes.status === 'fulfilled' && briefRes.value.ok) {
+      const d = await briefRes.value.json();
+      if (d) companyBrief = d;
+    }
+    if (summariesRes.status === 'fulfilled' && summariesRes.value.ok) {
+      const d = await summariesRes.value.json();
+      if (d?.length) interviewerSummaries = d;
+    }
+    if (questionsRes.status === 'fulfilled' && questionsRes.value.ok) {
+      const d = await questionsRes.value.json();
+      if (d.questions?.length) predictedQuestions = d.questions;
+    }
   }
 
-  function handleSetupComplete(data?: { companyBrief?: any; interviewerSummaries?: any[]; jdKeywords?: string[]; }) {
-    if (data?.companyBrief) companyBrief = data.companyBrief;
-    if (data?.interviewerSummaries) interviewerSummaries = data.interviewerSummaries;
+  function handleSetupComplete(data?: { jdKeywords?: string[]; }) {
     if (data?.jdKeywords) { jdKeywords = data.jdKeywords; mentionedKeywords = new Set(); interviewerRaisedKeywords = new Set(); }
     phase = 'interview';
     connectWs();
     void fetchOpeningSuggestion();
-    void fetchPredictedQuestions();
+    void fetchBackgroundSetup();
   }
 
   function connectWs() {

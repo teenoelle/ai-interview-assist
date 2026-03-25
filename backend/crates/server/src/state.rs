@@ -10,6 +10,8 @@ use crate::review::ReviewProgress;
 pub struct AppState {
     pub system_prompt: Arc<RwLock<String>>,
     pub prediction_context: Arc<RwLock<String>>,
+    pub company_info: Arc<RwLock<String>>,
+    pub linkedin_text: Arc<RwLock<String>>,
     pub transcript: Arc<RwLock<Vec<TranscriptSegment>>>,
     pub jd_keywords: Arc<RwLock<Vec<String>>>,
     pub audio_tx: mpsc::Sender<Vec<u8>>,

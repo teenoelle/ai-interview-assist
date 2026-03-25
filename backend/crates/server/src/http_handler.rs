@@ -88,7 +88,7 @@ pub async fn handle_setup_finalize(
     let (company_info, portfolio_text) = tokio::join!(
         async {
             if !payload.company_url.is_empty() {
-                crawl_website(&payload.company_url, 50).await.unwrap_or_default()
+                crawl_website(&payload.company_url, 20).await.unwrap_or_default()
             } else { String::new() }
         },
         async {
@@ -111,10 +111,18 @@ pub async fn handle_setup_finalize(
     // Build system prompt
     let system_prompt = build_system_prompt(&payload, &company_info, &interviewer_profiles);
 
-    // Store system prompt
+    // Store system prompt and raw context for deferred background calls
     {
         let mut sp = state.system_prompt.write().await;
         *sp = system_prompt.clone();
+    }
+    {
+        let mut ci = state.company_info.write().await;
+        *ci = company_info.clone();
+    }
+    {
+        let mut lt = state.linkedin_text.write().await;
+        *lt = payload.linkedin_text.clone();
     }
 
     let preview = if system_prompt.len() > 500 {
@@ -170,11 +178,8 @@ pub async fn handle_setup_finalize(
         usage: Some(state.call_counts.clone()),
     };
 
-    let (company_brief, interviewer_summaries, jd_keywords) = tokio::join!(
-        generate_company_brief(&company_info, &cfg),
-        generate_interviewer_summary(&payload.linkedin_text, &cfg),
-        extract_jd_keywords(&payload.job_description, &cfg),
-    );
+    // Only extract keywords here — company brief + interviewer summaries are deferred to background
+    let jd_keywords = extract_jd_keywords(&payload.job_description, &cfg).await;
 
     // Store keywords so the review pipeline can use them
     {
@@ -182,15 +187,13 @@ pub async fn handle_setup_finalize(
         *kw = jd_keywords.clone();
     }
 
-    let company_brief_opt = if company_brief.name.is_empty() { None } else { Some(company_brief) };
-
     Ok(Json(SetupResponse {
         success: true,
         system_prompt_preview: preview,
         message: "Setup complete".to_string(),
         predicted_questions: vec![],
-        company_brief: company_brief_opt,
-        interviewer_summaries,
+        company_brief: None,
+        interviewer_summaries: vec![],
         jd_keywords,
     }))
 }
@@ -630,4 +633,37 @@ pub async fn handle_predict_questions(
     };
     let questions = predict_questions(&ctx, &cfg).await;
     Json(PredictQuestionsResponse { questions })
+}
+
+pub async fn handle_company_brief(
+    State(state): State<AppState>,
+) -> Json<Option<context::ai_helper::CompanyBrief>> {
+    let company_info = state.company_info.read().await.clone();
+    let cfg = AiConfig {
+        gemini_key: &state.gemini_key,
+        anthropic_key: state.anthropic_key.as_deref(),
+        groq_key: state.groq_key.as_deref(),
+        groq_key_2: state.groq_key_2.as_deref(),
+        ollama_url: &state.ollama_url,
+        ollama_model: &state.ollama_model,
+        usage: Some(state.call_counts.clone()),
+    };
+    let brief = generate_company_brief(&company_info, &cfg).await;
+    Json(if brief.name.is_empty() { None } else { Some(brief) })
+}
+
+pub async fn handle_interviewer_summaries(
+    State(state): State<AppState>,
+) -> Json<Vec<context::ai_helper::InterviewerSummary>> {
+    let linkedin_text = state.linkedin_text.read().await.clone();
+    let cfg = AiConfig {
+        gemini_key: &state.gemini_key,
+        anthropic_key: state.anthropic_key.as_deref(),
+        groq_key: state.groq_key.as_deref(),
+        groq_key_2: state.groq_key_2.as_deref(),
+        ollama_url: &state.ollama_url,
+        ollama_model: &state.ollama_model,
+        usage: Some(state.call_counts.clone()),
+    };
+    Json(generate_interviewer_summary(&linkedin_text, &cfg).await)
 }

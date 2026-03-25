@@ -59,6 +59,34 @@ pub struct SpeakerSummary {
     pub turn_count: usize,
 }
 
+/// Lightweight report metadata for the list endpoint — no transcript or Q&A bodies.
+#[derive(Serialize, Clone)]
+pub struct ReviewSummary {
+    pub id: String,
+    pub created_at: u64,
+    pub duration_secs: f64,
+    pub source_filename: String,
+    pub source_type: String,
+    pub qa_count: usize,
+    pub avg_wpm: u32,
+    pub you_pct: f32,
+}
+
+impl From<&ReviewReport> for ReviewSummary {
+    fn from(r: &ReviewReport) -> Self {
+        ReviewSummary {
+            id: r.id.clone(),
+            created_at: r.created_at,
+            duration_secs: r.duration_secs,
+            source_filename: r.source_filename.clone(),
+            source_type: r.source_type.clone(),
+            qa_count: r.qa_pairs.len(),
+            avg_wpm: r.vocal_summary.avg_wpm,
+            you_pct: r.speaker_summary.you_pct,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct ReviewProgress {
     pub pct: u8,
@@ -161,6 +189,10 @@ pub async fn list_reports(reviews_dir: &Path) -> Vec<ReviewReport> {
     }
     reports.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     reports
+}
+
+pub async fn list_summaries(reviews_dir: &Path) -> Vec<ReviewSummary> {
+    list_reports(reviews_dir).await.iter().map(ReviewSummary::from).collect()
 }
 
 pub async fn delete_review(reviews_dir: &Path, id: &str) -> Result<()> {
@@ -478,25 +510,27 @@ fn segs_to_review(segs: &[TranscriptSegment]) -> Vec<ReviewSegment> {
 
 // ── Score Q&A pairs ───────────────────────────────────────────────────────────
 
+async fn score_one(r: &RawQaPair, ai_cfg: &AiConfig<'_>) -> QaPair {
+    let duration_secs = ((r.end_ms.saturating_sub(r.start_ms)) as f32 / 1000.0).max(1.0);
+    let wpm = (r.word_count as f32 / duration_secs * 60.0).round() as u32;
+    let feedback = generate_answer_feedback(&r.question, &r.answer, "", ai_cfg)
+        .await
+        .unwrap_or_else(|_| AnswerFeedbackResult { coaching: String::new(), missed_followup: false, missed_metric: false });
+    QaPair {
+        question: r.question.clone(),
+        answer_text: r.answer.clone(),
+        coaching: feedback.coaching,
+        missed_followup: feedback.missed_followup,
+        missed_metric: feedback.missed_metric,
+        wpm,
+        duration_secs,
+        start_ms: r.question_ms,
+    }
+}
+
 async fn score_pairs(raw: &[RawQaPair], ai_cfg: &AiConfig<'_>) -> Vec<QaPair> {
     let mut pairs = Vec::new();
-    for r in raw {
-        let duration_secs = ((r.end_ms.saturating_sub(r.start_ms)) as f32 / 1000.0).max(1.0);
-        let wpm = (r.word_count as f32 / duration_secs * 60.0).round() as u32;
-        let feedback = generate_answer_feedback(&r.question, &r.answer, "", ai_cfg)
-            .await
-            .unwrap_or_else(|_| AnswerFeedbackResult { coaching: String::new(), missed_followup: false, missed_metric: false });
-        pairs.push(QaPair {
-            question: r.question.clone(),
-            answer_text: r.answer.clone(),
-            coaching: feedback.coaching,
-            missed_followup: feedback.missed_followup,
-            missed_metric: feedback.missed_metric,
-            wpm,
-            duration_secs,
-            start_ms: r.question_ms,
-        });
-    }
+    for r in raw { pairs.push(score_one(r, ai_cfg).await); }
     pairs
 }
 
@@ -573,21 +607,7 @@ pub async fn process_review(
     for (i, r) in raw_pairs.iter().enumerate() {
         let pct = 84 + (i * 12 / total_pairs.max(1)) as u8;
         send_progress(&progress_tx, pct, &format!("Scoring answer {} of {}…", i + 1, total_pairs));
-        let duration_secs = ((r.end_ms.saturating_sub(r.start_ms)) as f32 / 1000.0).max(1.0);
-        let wpm = (r.word_count as f32 / duration_secs * 60.0).round() as u32;
-        let feedback = generate_answer_feedback(&r.question, &r.answer, "", &ai_cfg)
-            .await
-            .unwrap_or_else(|_| AnswerFeedbackResult { coaching: String::new(), missed_followup: false, missed_metric: false });
-        qa_pairs.push(QaPair {
-            question: r.question.clone(),
-            answer_text: r.answer.clone(),
-            coaching: feedback.coaching,
-            missed_followup: feedback.missed_followup,
-            missed_metric: feedback.missed_metric,
-            wpm,
-            duration_secs,
-            start_ms: r.question_ms,
-        });
+        qa_pairs.push(score_one(r, &ai_cfg).await);
     }
 
     // 4. Compile report

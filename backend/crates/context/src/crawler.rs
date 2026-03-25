@@ -5,6 +5,69 @@ use std::collections::{HashSet, VecDeque};
 use tokio::task::JoinSet;
 use url::Url;
 
+/// If `url` is a GitHub user profile (e.g. github.com/alice), return "alice". Repo links return None.
+pub fn extract_github_username(url: &str) -> Option<String> {
+    let url = url.trim().trim_end_matches('/');
+    let stripped = url.strip_prefix("https://").or_else(|| url.strip_prefix("http://")).unwrap_or(url);
+    let stripped = stripped.strip_prefix("www.").unwrap_or(stripped);
+    let path = stripped.strip_prefix("github.com/")?;
+    // Exactly one non-empty segment → user profile; two segments → org/repo → skip
+    if path.is_empty() || path.contains('/') { return None; }
+    Some(path.to_string())
+}
+
+/// Fetch a GitHub user's public repos and build a plain-text portfolio summary.
+pub async fn fetch_github_portfolio(username: &str) -> String {
+    let client = match Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent("InterviewAssist/1.0")
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return String::new(),
+    };
+    let url = format!("https://api.github.com/users/{}/repos?sort=updated&per_page=30", username);
+    let resp = match client.get(&url).header("Accept", "application/vnd.github.v3+json").send().await {
+        Ok(r) if r.status().is_success() => r,
+        _ => return String::new(),
+    };
+    let json: serde_json::Value = match resp.json().await {
+        Ok(v) => v,
+        Err(_) => return String::new(),
+    };
+    let repos = match json.as_array() {
+        Some(a) => a,
+        None => return String::new(),
+    };
+
+    let mut languages: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut lines: Vec<String> = Vec::new();
+    for repo in repos.iter().take(15) {
+        let fork = repo["fork"].as_bool().unwrap_or(false);
+        if fork { continue; }
+        let name = repo["name"].as_str().unwrap_or("");
+        let desc = repo["description"].as_str().unwrap_or("").trim();
+        let lang = repo["language"].as_str().unwrap_or("");
+        let stars = repo["stargazers_count"].as_u64().unwrap_or(0);
+        if !lang.is_empty() { languages.insert(lang.to_string()); }
+        let star_str = if stars > 0 { format!(" ★{}", stars) } else { String::new() };
+        let lang_str = if !lang.is_empty() { format!(" ({})", lang) } else { String::new() };
+        let desc_str = if !desc.is_empty() { format!(": {}", desc) } else { String::new() };
+        lines.push(format!("- {}{}{}{}", name, lang_str, desc_str, star_str));
+    }
+    if lines.is_empty() { return String::new(); }
+
+    let mut out = format!("GitHub Portfolio: github.com/{}\n", username);
+    if !languages.is_empty() {
+        let mut lang_list: Vec<String> = languages.into_iter().collect();
+        lang_list.sort();
+        out.push_str(&format!("Active languages: {}\n", lang_list.join(", ")));
+    }
+    out.push_str("Public repositories:\n");
+    out.push_str(&lines.join("\n"));
+    out
+}
+
 const CRAWL_CONCURRENCY: usize = 8;
 const SKIP_EXTENSIONS: &[&str] = &[".pdf", ".jpg", ".jpeg", ".png", ".gif", ".zip", ".css", ".js", ".woff", ".woff2", ".svg", ".ico"];
 

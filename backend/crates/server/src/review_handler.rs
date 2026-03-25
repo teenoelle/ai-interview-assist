@@ -159,8 +159,8 @@ fn mime_for_ext(ext: &str) -> &'static str {
 // GET /api/reviews
 pub async fn handle_list_reports(
     State(state): State<AppState>,
-) -> Json<Vec<review::ReviewReport>> {
-    Json(review::list_reports(&state.reviews_dir).await)
+) -> Json<Vec<review::ReviewSummary>> {
+    Json(review::list_summaries(&state.reviews_dir).await)
 }
 
 // DELETE /api/review/:id

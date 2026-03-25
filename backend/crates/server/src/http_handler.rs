@@ -7,7 +7,7 @@ use sentiment::gemini_vision::analyze_presence;
 use common::messages::SetupPayload;
 use context::ai_helper::{generate_debrief, predict_questions, call_ai_simple, call_ai_fast, generate_company_brief, generate_interviewer_summary, extract_jd_keywords, assess_vocal_delivery, AiConfig};
 use context::builder::build_system_prompt;
-use context::crawler::crawl_website;
+use context::crawler::{crawl_website, extract_github_username, fetch_github_portfolio};
 use context::linkedin::parse_all_linkedin_profiles;
 use context::pdf::{describe_image_with_gemini, extract_docx_text, extract_pdf_text, extract_pptx_text, extract_xlsx_text};
 use crate::state::AppState;
@@ -15,12 +15,7 @@ use crate::state::AppState;
 #[derive(serde::Serialize)]
 pub struct SetupResponse {
     pub success: bool,
-    pub system_prompt_preview: String,
     pub message: String,
-    pub predicted_questions: Vec<String>,
-    pub company_brief: Option<context::ai_helper::CompanyBrief>,
-    pub interviewer_summaries: Vec<context::ai_helper::InterviewerSummary>,
-    pub jd_keywords: Vec<String>,
 }
 
 pub async fn handle_setup_finalize(
@@ -142,12 +137,7 @@ pub async fn handle_setup_finalize(
 
     Ok(Json(SetupResponse {
         success: true,
-        system_prompt_preview: String::new(),
         message: "Setup complete".to_string(),
-        predicted_questions: vec![],
-        company_brief: None,
-        interviewer_summaries: vec![],
-        jd_keywords: vec![],
     }))
 }
 
@@ -601,11 +591,14 @@ pub async fn handle_enrich(
     let portfolio_url = state.portfolio_url.read().await.clone();
     let jd_text = state.jd_text.read().await.clone();
 
+    const CRAWL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
     // Crawl company + portfolio in parallel
     let (company_info, portfolio_text) = tokio::join!(
         async {
-            if company_url.is_empty() { String::new() }
-            else { crawl_website(&company_url, 20).await.unwrap_or_default() }
+            if company_url.is_empty() { return String::new(); }
+            tokio::time::timeout(CRAWL_TIMEOUT, crawl_website(&company_url, 10))
+                .await.ok().and_then(|r| r.ok()).unwrap_or_default()
         },
         async {
             let urls: Vec<&str> = portfolio_url.lines()
@@ -613,7 +606,13 @@ pub async fn handle_enrich(
             if urls.is_empty() { return String::new(); }
             let mut parts = Vec::new();
             for url in urls {
-                if let Ok(t) = crawl_website(url, 10).await { if !t.is_empty() { parts.push(t); } }
+                let text = if let Some(username) = extract_github_username(url) {
+                    fetch_github_portfolio(&username).await
+                } else {
+                    tokio::time::timeout(CRAWL_TIMEOUT, crawl_website(url, 10))
+                        .await.ok().and_then(|r| r.ok()).unwrap_or_default()
+                };
+                if !text.is_empty() { parts.push(text); }
             }
             parts.join("\n\n---\n\n")
         },

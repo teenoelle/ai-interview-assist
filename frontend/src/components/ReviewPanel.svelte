@@ -1,4 +1,15 @@
 <script lang="ts">
+  export interface ReviewSummary {
+    id: string;
+    created_at: number;
+    duration_secs: number;
+    source_filename: string;
+    source_type: string;
+    qa_count: number;
+    avg_wpm: number;
+    you_pct: number;
+  }
+
   export interface ReviewReport {
     id: string;
     created_at: number;

@@ -11,7 +11,7 @@
   import DebriefModal from './components/DebriefModal.svelte';
   import ReviewUpload from './components/ReviewUpload.svelte';
   import ReviewPanel from './components/ReviewPanel.svelte';
-  import type { ReviewReport } from './components/ReviewPanel.svelte';
+  import type { ReviewReport, ReviewSummary } from './components/ReviewPanel.svelte';
   import PracticePanel from './components/PracticePanel.svelte';
   import InterviewHistoryPanel from './components/InterviewHistoryPanel.svelte';
   import WhisperOverlay from './components/WhisperOverlay.svelte';
@@ -86,7 +86,7 @@
   let showReviewPanel = $state(false);
   let reviewReport = $state<ReviewReport | null>(null);
   let savingLiveReport = $state(false);
-  let reviewList = $state<ReviewReport[]>([]);
+  let reviewList = $state<ReviewSummary[]>([]);
   let reviewSearch = $state('');
   let showReviewList = $state(false);
 
@@ -796,10 +796,9 @@
   let providerStatus = $state<Record<string, { name: string; local: boolean }>>({});
 
   $effect(() => {
-    const id = setInterval(async () => {
-      callCounts = await fetchUsage();
-    }, 5000);
-    fetchUsage().then(d => callCounts = d);
+    if (!capturing) return;
+    fetchUsage().then(d => { callCounts = d; });
+    const id = setInterval(async () => { callCounts = await fetchUsage(); }, 5000);
     return () => clearInterval(id);
   });
 
@@ -1363,9 +1362,9 @@ Ask: team | How long have you been with the team?`;
                     <span class="review-list-name">{r.source_filename ?? 'Untitled'}</span>
                     <span class="review-list-date">{r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}</span>
                   </div>
-                  <p class="review-list-summary">{r.qa_pairs.length} Q&A · {r.vocal_summary.avg_wpm} wpm · {Math.round(r.speaker_summary.you_pct)}% you</p>
+                  <p class="review-list-summary">{r.qa_count} Q&A · {r.avg_wpm} wpm · {Math.round(r.you_pct)}% you</p>
                   <div class="review-list-actions">
-                    <button class="review-list-open" onclick={() => { reviewReport = r; showReviewPanel = true; }}>Open</button>
+                    <button class="review-list-open" onclick={async () => { const resp = await authFetch(`/api/review/${r.id}`); if (resp.ok) { reviewReport = await resp.json(); showReviewPanel = true; } }}>Open</button>
                     <button class="review-list-delete" onclick={() => deleteReview(r.id)}>Delete</button>
                   </div>
                 </div>

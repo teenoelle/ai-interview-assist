@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { TranscriptEntry, SuggestionEntry } from '../lib/types';
-  import type { ReviewReport } from './ReviewPanel.svelte';
+  import type { ReviewReport, ReviewSummary } from './ReviewPanel.svelte';
 
   const { transcript, suggestions, onClose, onSave, onOpenReport, recordingUrl } = $props<{
     transcript: TranscriptEntry[];
@@ -30,7 +30,7 @@
   let emailSent = $state(false);
   let nextSteps = $state<string[]>([]);
   let loadingNextSteps = $state(false);
-  let reportList = $state<ReviewReport[]>([]);
+  let reportList = $state<ReviewSummary[]>([]);
   let reportsLoading = $state(false);
   let reportSearch = $state('');
   const filteredReports = $derived(
@@ -48,6 +48,13 @@
       } catch { /* ignore */ }
       reportsLoading = false;
     }
+  }
+
+  async function openReport(id: string) {
+    try {
+      const resp = await fetch(`/api/review/${id}`);
+      if (resp.ok) { onOpenReport?.(await resp.json()); onClose(); }
+    } catch { /* ignore */ }
   }
 
   async function deleteReport(id: string) {
@@ -274,9 +281,9 @@
                       <span class="report-name">{r.source_filename ?? 'Untitled'}</span>
                       <span class="report-date">{r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}</span>
                     </div>
-                    <p class="report-summary">{r.qa_pairs.length} Q&A · {r.vocal_summary.avg_wpm} wpm · {Math.round(r.speaker_summary.you_pct)}% you</p>
+                    <p class="report-summary">{r.qa_count} Q&A · {r.avg_wpm} wpm · {Math.round(r.you_pct)}% you</p>
                     <div class="report-actions">
-                      <button class="report-open" onclick={() => { onOpenReport?.(r); onClose(); }}>Open →</button>
+                      <button class="report-open" onclick={() => openReport(r.id)}>Open →</button>
                       <button class="report-delete" onclick={() => deleteReport(r.id)}>Delete</button>
                     </div>
                   </div>

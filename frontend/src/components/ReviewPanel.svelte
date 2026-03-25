@@ -27,6 +27,7 @@
     missed_metric: boolean;
     wpm: number;
     duration_secs: number;
+    start_ms: number;
   }
 
   const { report, onClose, onDelete } = $props<{
@@ -38,6 +39,8 @@
   let mediaEl = $state<HTMLVideoElement | HTMLAudioElement | null>(null);
   let currentMs = $state(0);
   let expandedQa = $state<number | null>(null);
+  let qaListEl = $state<HTMLDivElement | null>(null);
+  let prevVisibleCount = $state(0);
   let copyState = $state<'idle' | 'copied'>('idle');
   let emailTo = $state(localStorage.getItem('review-email') ?? '');
   let emailSent = $state(false);
@@ -74,6 +77,23 @@
     if (wpm > 180) return '#f87171';
     return '#4ade80';
   }
+
+  // Progressive Q&A reveal — cards appear as video reaches their timestamp
+  const visibleQa = $derived(
+    currentMs > 0
+      ? report.qa_pairs.filter(qa => currentMs >= qa.start_ms)
+      : report.qa_pairs
+  );
+
+  // Auto-scroll to newly revealed card
+  $effect(() => {
+    const count = visibleQa.length;
+    if (currentMs > 0 && count > prevVisibleCount && qaListEl) {
+      const cards = qaListEl.querySelectorAll('.qa-item');
+      cards[count - 1]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    prevVisibleCount = count;
+  });
 
   // Highlight transcript segment that matches current playback position
   const activeSegIdx = $derived(() => {
@@ -216,8 +236,11 @@
       <!-- Q&A -->
       {#if report.qa_pairs.length > 0}
         <div class="section-label">Q&amp;A COACHING</div>
-        <div class="qa-list">
-          {#each report.qa_pairs as qa, i}
+        {#if currentMs === 0 && report.qa_pairs.length > 0}
+          <div class="qa-replay-hint">▶ Play recording to reveal coaching cards in real time</div>
+        {/if}
+        <div class="qa-list" bind:this={qaListEl}>
+          {#each visibleQa as qa, i}
             {@const open = expandedQa === i}
             <div class="qa-item">
               <button class="qa-header" onclick={() => { expandedQa = open ? null : i; }}>
@@ -230,6 +253,7 @@
                     <span class="badge miss">no metric</span>
                   {/if}
                   <span class="badge wpm" style="color:{wpmColor(qa.wpm)}">{qa.wpm} wpm · {fmtWpm(qa.wpm)}</span>
+                  <button class="seek-btn" title="Jump to question" onclick={(e) => { e.stopPropagation(); seekTo(qa.start_ms); }}>⏩ {fmtDuration(qa.start_ms / 1000)}</button>
                   <span class="chevron">{open ? '▾' : '▸'}</span>
                 </div>
               </button>
@@ -360,7 +384,19 @@
   .seg-text { color: #94a3b8; line-height: 1.4; flex: 1; }
 
   /* Q&A */
+  .qa-replay-hint {
+    font-size: 0.78rem; color: #475569; text-align: center;
+    padding: 0.6rem; background: #060e1a; border: 1px dashed #1e293b;
+    border-radius: 0.5rem;
+  }
   .qa-list { display: flex; flex-direction: column; gap: 0.5rem; }
+  .seek-btn {
+    background: transparent; border: 1px solid #1e3a5f; border-radius: 0.25rem;
+    color: #60a5fa; font-size: 0.68rem; padding: 0.1rem 0.4rem;
+    cursor: pointer; flex-shrink: 0; white-space: nowrap;
+    transition: background 0.15s;
+  }
+  .seek-btn:hover { background: rgba(59,130,246,0.12); }
   .qa-item { border: 1px solid #1e293b; border-radius: 0.5rem; overflow: hidden; }
   .qa-header {
     width: 100%; display: flex; align-items: flex-start; justify-content: space-between;

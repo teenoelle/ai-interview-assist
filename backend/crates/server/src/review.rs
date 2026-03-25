@@ -41,6 +41,7 @@ pub struct QaPair {
     pub missed_metric: bool,
     pub wpm: u32,
     pub duration_secs: f32,
+    pub start_ms: u64,   // when the interviewer's question began
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -416,13 +417,14 @@ async fn process_chunks(
 
 // ── Q&A pair detection ────────────────────────────────────────────────────────
 
-struct RawQaPair { question: String, answer: String, start_ms: u64, end_ms: u64, word_count: u32 }
+struct RawQaPair { question: String, answer: String, question_ms: u64, start_ms: u64, end_ms: u64, word_count: u32 }
 
 fn detect_qa_pairs(segs: &[TranscriptSegment]) -> Vec<RawQaPair> {
     let mut pairs = Vec::new();
     let mut i = 0;
     while i < segs.len() {
         if segs[i].speaker == "Interviewer" {
+            let question_ms = segs[i].timestamp_ms;
             let mut q_parts = vec![segs[i].text.clone()];
             let mut j = i + 1;
             while j < segs.len() && segs[j].speaker == "Interviewer" { q_parts.push(segs[j].text.clone()); j += 1; }
@@ -438,7 +440,7 @@ fn detect_qa_pairs(segs: &[TranscriptSegment]) -> Vec<RawQaPair> {
             if !a_parts.is_empty() {
                 let answer = a_parts.join(" ");
                 let word_count = answer.split_whitespace().count() as u32;
-                pairs.push(RawQaPair { question, answer, start_ms, end_ms, word_count });
+                pairs.push(RawQaPair { question, answer, question_ms, start_ms, end_ms, word_count });
             }
             i = j;
         } else {
@@ -492,6 +494,7 @@ async fn score_pairs(raw: &[RawQaPair], ai_cfg: &AiConfig<'_>) -> Vec<QaPair> {
             missed_metric: feedback.missed_metric,
             wpm,
             duration_secs,
+            start_ms: r.question_ms,
         });
     }
     pairs
@@ -583,6 +586,7 @@ pub async fn process_review(
             missed_metric: feedback.missed_metric,
             wpm,
             duration_secs,
+            start_ms: r.question_ms,
         });
     }
 

@@ -116,6 +116,9 @@ async fn main() -> anyhow::Result<()> {
         prediction_context: Arc::new(RwLock::new(String::new())),
         company_info: Arc::new(RwLock::new(String::new())),
         linkedin_text: Arc::new(RwLock::new(String::new())),
+        company_url: Arc::new(RwLock::new(String::new())),
+        portfolio_url: Arc::new(RwLock::new(String::new())),
+        jd_text: Arc::new(RwLock::new(String::new())),
         transcript: Arc::new(RwLock::new(Vec::new())),
         jd_keywords: Arc::new(RwLock::new(Vec::new())),
         audio_tx,
@@ -228,7 +231,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/presence-check", post(http_handler::handle_presence_check))
         .route("/api/simulate-question", post(http_handler::handle_simulate_question))
         .route("/api/predict-questions", post(http_handler::handle_predict_questions))
-        .route("/api/company-brief", post(http_handler::handle_company_brief))
+        .route("/api/enrich", post(http_handler::handle_enrich))
         .route("/api/interviewer-summaries", post(http_handler::handle_interviewer_summaries))
         .route("/api/usage", get(http_handler::handle_usage))
         .route("/api/tts/voices", get(tts_handler::handle_tts_voices))

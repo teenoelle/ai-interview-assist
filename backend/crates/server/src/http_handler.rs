@@ -66,77 +66,51 @@ pub async fn handle_setup_finalize(
         }
     }
 
-    // Extract CV text
-    if let Some(bytes) = cv_bytes {
-        let name_lower = cv_filename.to_lowercase();
-        payload.cv_text = extract_file_text(&bytes, &name_lower, &state.gemini_key).await;
-    }
-
-    // Extract extra experience file and append to text
-    if let Some(bytes) = extra_file_bytes {
-        let name_lower = extra_filename.to_lowercase();
-        let file_text = extract_file_text(&bytes, &name_lower, &state.gemini_key).await;
-        if !file_text.is_empty() {
-            if !payload.extra_experience.is_empty() {
-                payload.extra_experience.push_str("\n\n");
-            }
-            payload.extra_experience.push_str(&file_text);
-        }
-    }
-
-    // Crawl company website and portfolio
-    let (company_info, portfolio_text) = tokio::join!(
+    // Extract CV and extra file in parallel (images hit Gemini API, which is slow)
+    let gemini_key = state.gemini_key.clone();
+    let (cv_text, extra_text) = tokio::join!(
         async {
-            if !payload.company_url.is_empty() {
-                crawl_website(&payload.company_url, 20).await.unwrap_or_default()
+            if let Some(bytes) = cv_bytes {
+                extract_file_text(&bytes, &cv_filename.to_lowercase(), &gemini_key).await
             } else { String::new() }
         },
         async {
-            let urls: Vec<&str> = payload.portfolio_url.lines()
-                .map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
-            if urls.is_empty() { return String::new(); }
-            let mut parts = Vec::new();
-            for url in urls {
-                let text = crawl_website(url, 10).await.unwrap_or_default();
-                if !text.is_empty() { parts.push(text); }
-            }
-            parts.join("\n\n---\n\n")
-        }
+            if let Some(bytes) = extra_file_bytes {
+                extract_file_text(&bytes, &extra_filename.to_lowercase(), &gemini_key).await
+            } else { String::new() }
+        },
     );
-    payload.portfolio_text = portfolio_text;
+    payload.cv_text = cv_text;
+    if !extra_text.is_empty() {
+        if !payload.extra_experience.is_empty() { payload.extra_experience.push_str("\n\n"); }
+        payload.extra_experience.push_str(&extra_text);
+    }
 
-    // Parse LinkedIn (supports multiple profiles separated by ---INTERVIEWER---)
+    // Parse LinkedIn
     let interviewer_profiles = parse_all_linkedin_profiles(&payload.linkedin_text);
 
-    // Build system prompt
-    let system_prompt = build_system_prompt(&payload, &company_info, &interviewer_profiles);
+    // Build system prompt immediately from JD + CV + LinkedIn (no crawl — fast path)
+    // Company info and portfolio will be appended by /api/enrich in the background
+    let system_prompt = build_system_prompt(&payload, "", &interviewer_profiles);
 
-    // Store system prompt and raw context for deferred background calls
+    // Store everything needed for background enrichment endpoints
     {
-        let mut sp = state.system_prompt.write().await;
-        *sp = system_prompt.clone();
+        let mut sp = state.system_prompt.write().await; *sp = system_prompt.clone();
     }
     {
-        let mut ci = state.company_info.write().await;
-        *ci = company_info.clone();
+        let mut lt = state.linkedin_text.write().await; *lt = payload.linkedin_text.clone();
     }
     {
-        let mut lt = state.linkedin_text.write().await;
-        *lt = payload.linkedin_text.clone();
+        let mut cu = state.company_url.write().await; *cu = payload.company_url.clone();
+    }
+    {
+        let mut pu = state.portfolio_url.write().await; *pu = payload.portfolio_url.clone();
+    }
+    {
+        let mut jd = state.jd_text.write().await; *jd = payload.job_description.clone();
     }
 
-    let preview = if system_prompt.len() > 500 {
-        let end = system_prompt.char_indices().map(|(i, _)| i).nth(500).unwrap_or(system_prompt.len());
-        format!("{}...", &system_prompt[..end])
-    } else {
-        system_prompt.clone()
-    };
-
-    let _ = state.event_tx.send(common::messages::WsEvent::Status {
-        message: "Setup complete. Ready for interview.".to_string(),
-    });
-
-    // Build a focused context for question prediction and store for deferred use
+    // Build prediction context (used by /api/predict-questions)
     let mut prediction_ctx = String::new();
     if !payload.job_description.is_empty() {
         prediction_ctx.push_str("JOB DESCRIPTION:\n");
@@ -153,48 +127,27 @@ pub async fn handle_setup_finalize(
         prediction_ctx.push_str(&payload.interviewee_linkedin);
         prediction_ctx.push_str("\n\n");
     }
-    if !payload.portfolio_text.is_empty() {
-        prediction_ctx.push_str("PORTFOLIO / WEBSITE:\n");
-        prediction_ctx.push_str(&payload.portfolio_text);
-        prediction_ctx.push_str("\n\n");
-    }
     if !payload.extra_experience.is_empty() {
         prediction_ctx.push_str("ADDITIONAL EXPERIENCE:\n");
         prediction_ctx.push_str(&payload.extra_experience);
         prediction_ctx.push_str("\n\n");
     }
     {
-        let mut pc = state.prediction_context.write().await;
-        *pc = prediction_ctx;
+        let mut pc = state.prediction_context.write().await; *pc = prediction_ctx;
     }
 
-    let cfg = AiConfig {
-        gemini_key: &state.gemini_key,
-        anthropic_key: state.anthropic_key.as_deref(),
-        groq_key: state.groq_key.as_deref(),
-        groq_key_2: state.groq_key_2.as_deref(),
-        ollama_url: &state.ollama_url,
-        ollama_model: &state.ollama_model,
-        usage: Some(state.call_counts.clone()),
-    };
-
-    // Only extract keywords here — company brief + interviewer summaries are deferred to background
-    let jd_keywords = extract_jd_keywords(&payload.job_description, &cfg).await;
-
-    // Store keywords so the review pipeline can use them
-    {
-        let mut kw = state.jd_keywords.write().await;
-        *kw = jd_keywords.clone();
-    }
+    let _ = state.event_tx.send(common::messages::WsEvent::Status {
+        message: "Setup complete. Ready for interview.".to_string(),
+    });
 
     Ok(Json(SetupResponse {
         success: true,
-        system_prompt_preview: preview,
+        system_prompt_preview: String::new(),
         message: "Setup complete".to_string(),
         predicted_questions: vec![],
         company_brief: None,
         interviewer_summaries: vec![],
-        jd_keywords,
+        jd_keywords: vec![],
     }))
 }
 
@@ -635,10 +588,52 @@ pub async fn handle_predict_questions(
     Json(PredictQuestionsResponse { questions })
 }
 
-pub async fn handle_company_brief(
+#[derive(serde::Serialize)]
+pub struct EnrichResponse {
+    pub company_brief: Option<context::ai_helper::CompanyBrief>,
+    pub jd_keywords: Vec<String>,
+}
+
+pub async fn handle_enrich(
     State(state): State<AppState>,
-) -> Json<Option<context::ai_helper::CompanyBrief>> {
-    let company_info = state.company_info.read().await.clone();
+) -> Json<EnrichResponse> {
+    let company_url = state.company_url.read().await.clone();
+    let portfolio_url = state.portfolio_url.read().await.clone();
+    let jd_text = state.jd_text.read().await.clone();
+
+    // Crawl company + portfolio in parallel
+    let (company_info, portfolio_text) = tokio::join!(
+        async {
+            if company_url.is_empty() { String::new() }
+            else { crawl_website(&company_url, 20).await.unwrap_or_default() }
+        },
+        async {
+            let urls: Vec<&str> = portfolio_url.lines()
+                .map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+            if urls.is_empty() { return String::new(); }
+            let mut parts = Vec::new();
+            for url in urls {
+                if let Ok(t) = crawl_website(url, 10).await { if !t.is_empty() { parts.push(t); } }
+            }
+            parts.join("\n\n---\n\n")
+        },
+    );
+
+    // Append crawled context to existing system prompt
+    if !company_info.is_empty() || !portfolio_text.is_empty() {
+        let mut sp = state.system_prompt.write().await;
+        if !company_info.is_empty() {
+            sp.push_str("\n\n## Company Website\n");
+            let trunc_len = company_info.char_indices().map(|(i,_)| i).take_while(|&i| i <= 4000).last().unwrap_or(0);
+            sp.push_str(&company_info[..trunc_len]);
+        }
+        if !portfolio_text.is_empty() {
+            sp.push_str("\n\n## Portfolio / Website\n");
+            let trunc_len = portfolio_text.char_indices().map(|(i,_)| i).take_while(|&i| i <= 2000).last().unwrap_or(0);
+            sp.push_str(&portfolio_text[..trunc_len]);
+        }
+    }
+
     let cfg = AiConfig {
         gemini_key: &state.gemini_key,
         anthropic_key: state.anthropic_key.as_deref(),
@@ -648,8 +643,23 @@ pub async fn handle_company_brief(
         ollama_model: &state.ollama_model,
         usage: Some(state.call_counts.clone()),
     };
-    let brief = generate_company_brief(&company_info, &cfg).await;
-    Json(if brief.name.is_empty() { None } else { Some(brief) })
+
+    // Run company brief + keyword extraction in parallel
+    let (brief, jd_keywords) = tokio::join!(
+        generate_company_brief(&company_info, &cfg),
+        extract_jd_keywords(&jd_text, &cfg),
+    );
+
+    // Store keywords for review pipeline
+    {
+        let mut kw = state.jd_keywords.write().await;
+        *kw = jd_keywords.clone();
+    }
+
+    Json(EnrichResponse {
+        company_brief: if brief.name.is_empty() { None } else { Some(brief) },
+        jd_keywords,
+    })
 }
 
 pub async fn handle_interviewer_summaries(

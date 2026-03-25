@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { submitSetup, type CompanyBrief, type InterviewerSummary } from '../lib/api';
-  import { saveKeywords } from '../lib/keywordTracker';
+  import { submitSetup } from '../lib/api';
   function load(key: string, fallback: string) { return localStorage.getItem(key) ?? fallback; }
   function loadArr(key: string, fallback: string[]): string[] {
     try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
@@ -56,11 +55,8 @@
   let error = $state('');
   let formEl: HTMLDivElement | undefined = $state();
 
-  let companyBrief = $state<CompanyBrief | null>(null);
-  let interviewerSummaries = $state<InterviewerSummary[]>([]);
-  let jdKeywords = $state<string[]>([]);
   const props = $props<{
-    onSetupComplete: (data?: { companyBrief?: any; interviewerSummaries?: any[]; jdKeywords?: string[]; }) => void;
+    onSetupComplete: () => void;
   }>();
 
   function currentData(): Preset['data'] {
@@ -145,11 +141,7 @@
 
       loadingStep = 'Generating your coaching profile…';
       const result = await submitSetup(formData);
-      companyBrief = result.company_brief ?? null;
-      interviewerSummaries = result.interviewer_summaries ?? [];
-      jdKeywords = result.jd_keywords ?? [];
-      if (jdKeywords.length > 0) saveKeywords(jdKeywords);
-      props.onSetupComplete({ companyBrief, interviewerSummaries, jdKeywords });
+      props.onSetupComplete();
     } catch (e) {
       error = String(e);
       formEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });

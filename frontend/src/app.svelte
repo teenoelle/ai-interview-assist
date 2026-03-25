@@ -906,14 +906,15 @@ Ask: team | How long have you been with the team?`;
   }
 
   async function fetchBackgroundSetup() {
-    const [briefRes, summariesRes, questionsRes] = await Promise.allSettled([
-      fetch('/api/company-brief', { method: 'POST' }),
+    const [enrichRes, summariesRes, questionsRes] = await Promise.allSettled([
+      fetch('/api/enrich', { method: 'POST' }),
       fetch('/api/interviewer-summaries', { method: 'POST' }),
       fetch('/api/predict-questions', { method: 'POST' }),
     ]);
-    if (briefRes.status === 'fulfilled' && briefRes.value.ok) {
-      const d = await briefRes.value.json();
-      if (d) companyBrief = d;
+    if (enrichRes.status === 'fulfilled' && enrichRes.value.ok) {
+      const d = await enrichRes.value.json();
+      if (d.company_brief) companyBrief = d.company_brief;
+      if (d.jd_keywords?.length) { jdKeywords = d.jd_keywords; mentionedKeywords = new Set(); interviewerRaisedKeywords = new Set(); }
     }
     if (summariesRes.status === 'fulfilled' && summariesRes.value.ok) {
       const d = await summariesRes.value.json();
@@ -925,8 +926,7 @@ Ask: team | How long have you been with the team?`;
     }
   }
 
-  function handleSetupComplete(data?: { jdKeywords?: string[]; }) {
-    if (data?.jdKeywords) { jdKeywords = data.jdKeywords; mentionedKeywords = new Set(); interviewerRaisedKeywords = new Set(); }
+  function handleSetupComplete() {
     phase = 'interview';
     connectWs();
     void fetchOpeningSuggestion();

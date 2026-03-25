@@ -17,6 +17,10 @@
       intervieweeLinkedin: string;
       portfolioUrls: string[];
       extraExperience: string;
+      cvText?: string;
+      cvFilename?: string;
+      extraFileText?: string;
+      extraFilename?: string;
     };
   }
 
@@ -37,6 +41,13 @@
   let extraExperience = $state(load('setup-extra-experience', ''));
   let cvFile: File | null = $state(null);
   let extraFile: File | null = $state(null);
+  // Extracted text cached after file select (persisted in presets)
+  let cvText = $state('');
+  let cvFilename = $state('');
+  let extraFileText = $state('');
+  let extraFilename = $state('');
+  let extractingCv = $state(false);
+  let extractingExtra = $state(false);
   let presets = $state<Preset[]>(loadPresets());
   let selectedPresetId = $state('');
   let savedFlash = $state(false);
@@ -60,7 +71,13 @@
   }>();
 
   function currentData(): Preset['data'] {
-    return { companyName, roleName, jobDescription, companyUrl, interviewers: [...interviewers], intervieweeLinkedin, portfolioUrls: [...portfolioUrls], extraExperience };
+    return {
+      companyName, roleName, jobDescription, companyUrl,
+      interviewers: [...interviewers], intervieweeLinkedin,
+      portfolioUrls: [...portfolioUrls], extraExperience,
+      cvText: cvText || undefined, cvFilename: cvFilename || undefined,
+      extraFileText: extraFileText || undefined, extraFilename: extraFilename || undefined,
+    };
   }
 
   function applyPreset(p: Preset) {
@@ -72,6 +89,13 @@
     intervieweeLinkedin = p.data.intervieweeLinkedin;
     portfolioUrls = p.data.portfolioUrls.length ? [...p.data.portfolioUrls] : [''];
     extraExperience = p.data.extraExperience;
+    cvText = p.data.cvText ?? '';
+    cvFilename = p.data.cvFilename ?? '';
+    extraFileText = p.data.extraFileText ?? '';
+    extraFilename = p.data.extraFilename ?? '';
+    // Clear any pending file inputs — preset text will be used instead
+    cvFile = null;
+    extraFile = null;
     selectedPresetId = p.id;
   }
 
@@ -135,8 +159,20 @@
       const portfolioText = portfolioUrls.filter(u => u.trim()).join('\n');
       if (portfolioText) formData.append('portfolio_url', portfolioText);
 
-      formData.append('extra_experience', extraExperience);
-      if (cvFile) formData.append('cv_file', cvFile);
+      // Append cached extracted text as plain-text files when no new file is selected
+      const cvTextToUse = cvFile ? '' : cvText;
+      const extraTextToUse = extraFile ? '' : extraFileText;
+      if (!extraFile && extraTextToUse) {
+        formData.append('extra_experience',
+          extraExperience ? `${extraExperience}\n\n${extraTextToUse}` : extraTextToUse);
+      } else {
+        formData.append('extra_experience', extraExperience);
+      }
+      if (cvFile) {
+        formData.append('cv_file', cvFile);
+      } else if (cvTextToUse) {
+        formData.append('cv_file', new Blob([cvTextToUse], { type: 'text/plain' }), `${cvFilename || 'cv'}.txt`);
+      }
       if (extraFile) formData.append('extra_file', extraFile);
 
       loadingStep = 'Generating your coaching profile…';
@@ -151,15 +187,42 @@
     }
   }
 
-  function handleFileChange(e: Event) {
-    const target = e.target as HTMLInputElement;
-    cvFile = target.files?.[0] ?? null;
+  async function extractFile(file: File): Promise<{ text: string; filename: string }> {
+    const fd = new FormData();
+    fd.append('file', file);
+    const resp = await fetch('/api/extract-file', { method: 'POST', body: fd });
+    if (resp.ok) return resp.json();
+    return { text: '', filename: file.name };
   }
 
-  function handleExtraFileChange(e: Event) {
-    const target = e.target as HTMLInputElement;
-    extraFile = target.files?.[0] ?? null;
+  async function handleFileChange(e: Event) {
+    const file = (e.target as HTMLInputElement).files?.[0] ?? null;
+    cvFile = file;
+    if (!file) return;
+    extractingCv = true;
+    try {
+      const result = await extractFile(file);
+      cvText = result.text;
+      cvFilename = result.filename;
+    } catch { /* silent — file will be re-uploaded on submit */ }
+    extractingCv = false;
   }
+
+  async function handleExtraFileChange(e: Event) {
+    const file = (e.target as HTMLInputElement).files?.[0] ?? null;
+    extraFile = file;
+    if (!file) return;
+    extractingExtra = true;
+    try {
+      const result = await extractFile(file);
+      extraFileText = result.text;
+      extraFilename = result.filename;
+    } catch { /* silent */ }
+    extractingExtra = false;
+  }
+
+  function clearCv() { cvFile = null; cvText = ''; cvFilename = ''; }
+  function clearExtraFile() { extraFile = null; extraFileText = ''; extraFilename = ''; }
 </script>
 
 <div class="setup-form" bind:this={formEl}>
@@ -253,7 +316,23 @@
 
     <div class="field">
       <label for="cv-file">Upload CV / Resume</label>
-      <input id="cv-file" type="file" accept=".pdf,.docx,.txt,.md,.pptx,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.webp" onchange={handleFileChange} />
+      {#if cvFilename && !cvFile}
+        <div class="saved-file">
+          <span class="saved-file-name">📄 {cvFilename}</span>
+          <span class="saved-file-badge">saved</span>
+          <label class="replace-btn" for="cv-file">Replace</label>
+          <button type="button" class="clear-btn" onclick={clearCv}>✕</button>
+        </div>
+      {/if}
+      <input
+        id="cv-file" type="file"
+        accept=".pdf,.docx,.txt,.md,.pptx,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.webp"
+        onchange={handleFileChange}
+        class:hidden-input={cvFilename && !cvFile}
+      />
+      {#if cvFile}
+        <span class="file-chosen">{extractingCv ? '⏳ Extracting…' : `✓ ${cvFile.name}`}</span>
+      {/if}
       <small>Supported: PDF, Word, PowerPoint, Excel, CSV, plain text, images</small>
     </div>
 
@@ -300,8 +379,19 @@
       ></textarea>
       <div class="file-row">
         <label class="file-label" for="extra-file">Or upload a file</label>
-        <input id="extra-file" type="file" accept=".pdf,.docx,.txt,.md,.pptx,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.webp" onchange={handleExtraFileChange} />
-        {#if extraFile}<span class="file-chosen">{extraFile.name}</span>{/if}
+        {#if extraFilename && !extraFile}
+          <span class="saved-file-name">📄 {extraFilename}</span>
+          <span class="saved-file-badge">saved</span>
+          <label class="replace-btn" for="extra-file">Replace</label>
+          <button type="button" class="clear-btn" onclick={clearExtraFile}>✕</button>
+        {/if}
+        <input
+          id="extra-file" type="file"
+          accept=".pdf,.docx,.txt,.md,.pptx,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.webp"
+          onchange={handleExtraFileChange}
+          class:hidden-input={extraFilename && !extraFile}
+        />
+        {#if extraFile}<span class="file-chosen">{extractingExtra ? '⏳ Extracting…' : `✓ ${extraFile.name}`}</span>{/if}
       </div>
       <small>Supported: PDF, Word, PowerPoint (.pptx), Excel (.xlsx), CSV, images — text is extracted automatically</small>
     </div>
@@ -379,6 +469,22 @@
   .file-row { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem; flex-wrap: wrap; }
   .file-label { font-size: var(--fs-base); color: #64748b; white-space: nowrap; }
   .file-chosen { font-size: var(--fs-base); color: #60a5fa; }
+  .saved-file { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; flex-wrap: wrap; }
+  .saved-file-name { font-size: var(--fs-base); color: #94a3b8; }
+  .saved-file-badge {
+    font-size: 0.7rem; padding: 0.1rem 0.45rem; border-radius: 1rem;
+    background: rgba(74,222,128,0.1); border: 1px solid rgba(74,222,128,0.3); color: #4ade80;
+  }
+  .replace-btn {
+    font-size: var(--fs-base); color: #60a5fa; cursor: pointer;
+    text-decoration: underline; padding: 0; background: none; border: none;
+  }
+  .clear-btn {
+    background: none; border: none; color: #475569; font-size: var(--fs-base);
+    cursor: pointer; padding: 0 0.2rem; transition: color 0.15s;
+  }
+  .clear-btn:hover { color: #ef4444; }
+  .hidden-input { display: none; }
   small { display: block; margin-top: 0.25rem; color: #64748b; font-size: var(--fs-base); }
   .portfolio-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem; }
   .portfolio-input { flex: 1; padding: 0.5rem 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; color: #e2e8f0; font-size: var(--fs-base); }

@@ -264,7 +264,7 @@
                     <span class="badge miss">no metric</span>
                   {/if}
                   <span class="badge wpm" style="color:{wpmColor(qa.wpm)}">{qa.wpm} wpm · {fmtWpm(qa.wpm)}</span>
-                  <button class="seek-btn" title="Jump to question" onclick={(e) => { e.stopPropagation(); seekTo(qa.start_ms); }}>⏩ {fmtDuration(qa.start_ms / 1000)}</button>
+                  <span role="button" tabindex="0" class="seek-btn" title="Jump to question" onclick={(e) => { e.stopPropagation(); seekTo(qa.start_ms); }} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); seekTo(qa.start_ms); } }}>⏩ {fmtDuration(qa.start_ms / 1000)}</span>
                   <span class="chevron">{open ? '▾' : '▸'}</span>
                 </div>
               </button>

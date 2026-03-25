@@ -179,6 +179,32 @@ async fn extract_file_text(bytes: &[u8], name_lower: &str, gemini_key: &str) -> 
     }
 }
 
+/// POST /api/extract-file — extract text from a single uploaded file (for preview/preset saving)
+#[derive(serde::Serialize)]
+pub struct ExtractFileResponse {
+    pub text: String,
+    pub filename: String,
+}
+
+pub async fn handle_extract_file(
+    State(state): State<AppState>,
+    mut multipart: Multipart,
+) -> Result<Json<ExtractFileResponse>, (StatusCode, String)> {
+    let mut filename = String::new();
+    let mut bytes: Vec<u8> = Vec::new();
+    while let Ok(Some(field)) = multipart.next_field().await {
+        if field.name() == Some("file") {
+            filename = field.file_name().unwrap_or("").to_string();
+            bytes = field.bytes().await.unwrap_or_default().to_vec();
+        }
+    }
+    if bytes.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "No file provided".to_string()));
+    }
+    let text = extract_file_text(&bytes, &filename.to_lowercase(), &state.gemini_key).await;
+    Ok(Json(ExtractFileResponse { text, filename }))
+}
+
 #[derive(serde::Deserialize)]
 pub struct DebriefRequest {
     pub transcript: Vec<TranscriptEntry>,

@@ -8,7 +8,7 @@ export interface ParsedSuggestion {
   tell: string;    // main spoken line
   body: string;    // raw body text (cue lines after Answer)
   cues: string[];  // unused — kept for compat
-  asks: { topic: string; question: string; followUp: string }[];
+  asks: { topic: string; question: string; followUp?: string }[];
   strategies: { keyword: string; text: string }[];
   // Introduction (Career Story framework)
   present: string;   // Summary: aggregate career statement
@@ -36,7 +36,7 @@ export function parseSuggestion(text: string): ParsedSuggestion {
   let company = '', role = '', self = '';
   let direction = '', alignment = '', contribution = '';
   let transition1 = '', transition2 = '', transition3 = '';
-  const asks: { topic: string; question: string }[] = [];
+  const asks: { topic: string; question: string; followUp?: string }[] = [];
   const bodyLines: string[] = [];
   let pendingAskTopic = '';
   let pendingTell = false; // true when Answer: was seen but had no inline text

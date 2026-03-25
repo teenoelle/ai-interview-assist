@@ -218,6 +218,7 @@ async fn main() -> anyhow::Result<()> {
 
     let api_routes = Router::new()
         .route("/api/setup/finalize", post(http_handler::handle_setup_finalize))
+        .route("/api/extract-file", post(http_handler::handle_extract_file))
         .route("/api/debrief", post(http_handler::handle_debrief))
         .route("/api/practice-question", post(http_handler::handle_practice_question))
         .route("/api/answer-feedback", post(http_handler::handle_answer_feedback))

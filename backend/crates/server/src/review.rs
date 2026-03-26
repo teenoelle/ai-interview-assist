@@ -7,6 +7,7 @@ use tokio::process::Command;
 use tokio::sync::watch;
 use common::messages::TranscriptSegment;
 use context::ai_helper::{AiConfig, generate_answer_feedback, AnswerFeedbackResult};
+use sentiment::gemini_vision::analyze_sentiment;
 
 // ── Data types ────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,8 @@ pub struct ReviewReport {
     pub vocal_summary: VocalSummary,
     pub speaker_summary: SpeakerSummary,
     pub keywords_mentioned: Vec<String>,
+    #[serde(default)]
+    pub sentiment_events: Vec<SentimentEvent>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -30,6 +33,16 @@ pub struct ReviewSegment {
     pub text: String,
     pub start_ms: u64,
     pub end_ms: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct SentimentEvent {
+    pub timestamp_ms: u64,
+    pub emotion: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coaching: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -534,6 +547,71 @@ async fn score_pairs(raw: &[RawQaPair], ai_cfg: &AiConfig<'_>) -> Vec<QaPair> {
     pairs
 }
 
+// ── Sentiment frame sampling ──────────────────────────────────────────────────
+
+fn is_video_file(filename: &str) -> bool {
+    let lower = filename.to_lowercase();
+    ["mp4", "webm", "mov", "mkv", "avi"].iter().any(|ext| lower.ends_with(ext))
+}
+
+/// Extract a single JPEG frame at `secs` from the source file via ffmpeg stdout.
+async fn extract_frame_jpeg(path: &Path, secs: f64, bin: Option<&str>) -> Option<Vec<u8>> {
+    let ts = format!("{:.3}", secs);
+    let out = ffmpeg_cmd(bin)
+        .args(["-ss", &ts, "-i"])
+        .arg(path)
+        .args(["-frames:v", "1", "-vf", "scale=320:180",
+               "-f", "image2pipe", "-vcodec", "mjpeg", "-"])
+        .output().await.ok()?;
+    if out.status.success() && !out.stdout.is_empty() {
+        Some(out.stdout)
+    } else {
+        None
+    }
+}
+
+/// Sample sentiment at up to MAX_FRAMES moments where the interviewer starts speaking.
+/// These timestamps capture the interviewer's reaction right after your answer ended.
+async fn extract_sentiment_events(
+    source_path: &Path,
+    source_filename: &str,
+    segs: &[TranscriptSegment],
+    cfg: &ReviewConfig,
+    progress_tx: &watch::Sender<ReviewProgress>,
+) -> Vec<SentimentEvent> {
+    if !is_video_file(source_filename) { return Vec::new(); }
+    let bin = cfg.ffmpeg_bin.as_deref();
+
+    // Collect You→Interviewer transition timestamps (interviewer reacts after your answer)
+    const MAX_FRAMES: usize = 20;
+    let mut timestamps: Vec<u64> = Vec::new();
+    for i in 1..segs.len() {
+        if segs[i - 1].speaker == "You" && segs[i].speaker == "Interviewer" {
+            timestamps.push(segs[i].timestamp_ms);
+        }
+        if timestamps.len() >= MAX_FRAMES { break; }
+    }
+    if timestamps.is_empty() { return Vec::new(); }
+
+    send_progress(progress_tx, 95, &format!("Analyzing interviewer sentiment ({} frames)…", timestamps.len()));
+
+    let mut events = Vec::new();
+    for ts_ms in timestamps {
+        let secs = ts_ms as f64 / 1000.0;
+        if let Some(jpeg) = extract_frame_jpeg(source_path, secs, bin).await {
+            if let Ok(result) = analyze_sentiment(&cfg.gemini_key, &jpeg).await {
+                events.push(SentimentEvent {
+                    timestamp_ms: ts_ms,
+                    emotion: result.emotion,
+                    reason: result.reason,
+                    coaching: result.coaching,
+                });
+            }
+        }
+    }
+    events
+}
+
 // ── Main upload processing pipeline ──────────────────────────────────────────
 
 pub async fn process_review(
@@ -588,8 +666,13 @@ pub async fn process_review(
         }
     };
 
-    // 3. Q&A detection + scoring
-    send_progress(&progress_tx, 82, "Detecting questions and answers…");
+    // 3. Sentiment at speaker-turn boundaries (video files only)
+    let sentiment_events = extract_sentiment_events(
+        &source_path, &source_filename, &segments, &cfg, &progress_tx,
+    ).await;
+
+    // 4. Q&A detection + scoring
+    send_progress(&progress_tx, 96, "Detecting questions and answers…");
     let raw_pairs = detect_qa_pairs(&segments);
 
     let ai_cfg = AiConfig {
@@ -605,7 +688,7 @@ pub async fn process_review(
     let total_pairs = raw_pairs.len();
     let mut qa_pairs = Vec::new();
     for (i, r) in raw_pairs.iter().enumerate() {
-        let pct = 84 + (i * 12 / total_pairs.max(1)) as u8;
+        let pct = 97 + (i * 2 / total_pairs.max(1)) as u8;
         send_progress(&progress_tx, pct, &format!("Scoring answer {} of {}…", i + 1, total_pairs));
         qa_pairs.push(score_one(r, &ai_cfg).await);
     }
@@ -634,6 +717,7 @@ pub async fn process_review(
             turn_count: turns,
         },
         keywords_mentioned: detect_keywords(&segments, &cfg.keywords),
+        sentiment_events,
     };
 
     save_report(&cfg.reviews_dir, &report).await?;
@@ -681,6 +765,7 @@ pub async fn generate_live_report(
         source_type: "live".to_string(),
         transcript: segs_to_review(&transcript),
         keywords_mentioned: detect_keywords(&transcript, &keywords),
+        sentiment_events: vec![],
         qa_pairs: qa_pairs.clone(),
         vocal_summary: VocalSummary { avg_wpm, total_answers: qa_pairs.len() },
         speaker_summary: SpeakerSummary {

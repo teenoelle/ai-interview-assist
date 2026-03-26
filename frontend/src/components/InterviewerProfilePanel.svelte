@@ -1,6 +1,9 @@
 <script lang="ts">
-  const { interviewers } = $props<{
+  const { interviewers, onLoad, onReload, loading = false } = $props<{
     interviewers: Array<{ name: string; role: string; background: string; tenure: string; rapport_tips: string[] }>;
+    onLoad?: () => void;
+    onReload?: () => void;
+    loading?: boolean;
   }>();
 
   let expanded = $state(false);
@@ -21,17 +24,35 @@
   }
 </script>
 
-{#if interviewers.length > 0}
-  <div class="profiles-panel">
+<div class="profiles-panel">
     <button class="profiles-toggle" onclick={() => expanded = !expanded}>
       <div class="profiles-toggle-inner">
         <span class="profiles-label-header">Interviewers</span>
         {#if !expanded}<span class="profiles-names-preview">{interviewers.map(iv => firstName(iv.name)).join(' · ')}</span>{/if}
       </div>
-      <span class="profiles-chevron">{expanded ? '▴' : '▾'}</span>
+      <div class="profiles-toggle-right">
+        {#if onReload && interviewers.length > 0 && !loading}
+          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+          <span class="profiles-reload-btn" role="button" tabindex="0"
+            onclick={(e) => { e.stopPropagation(); onReload?.(); }}
+            onkeydown={(e) => e.key === 'Enter' && (e.stopPropagation(), onReload?.())}
+            title="Re-run setup to update interviewers, then reload">⟳</span>
+        {/if}
+        <span class="profiles-chevron">{expanded ? '▴' : '▾'}</span>
+      </div>
     </button>
     {#if expanded}
   <div class="profiles">
+    {#if interviewers.length === 0}
+      <div class="profiles-empty">
+        {#if onLoad}
+          <button class="profiles-load-btn" onclick={onLoad} disabled={loading}>
+            {loading ? 'Loading…' : '⟳ Load interviewer profiles'}
+          </button>
+        {/if}
+        {#if !loading}<p class="rapport-empty">No profiles loaded yet.</p>{/if}
+      </div>
+    {/if}
     {#each interviewers as iv, i}
       {@const cardCollapsed = !expandedCards.has(i)}
       <div class="profile-card">
@@ -59,9 +80,9 @@
               <span class="profile-field-value">{iv.tenure}</span>
             </div>
           {/if}
-          {#if iv.rapport_tips?.length > 0}
-            <div class="rapport-section">
-              <span class="rapport-label">Rapport Tips</span>
+          <div class="rapport-section">
+            <span class="rapport-label">Rapport Tips</span>
+            {#if iv.rapport_tips?.length > 0}
               <div class="rapport-tips-list">
                 {#each iv.rapport_tips as tip}
                   {@const p = parseTip(tip)}
@@ -71,15 +92,16 @@
                   </div>
                 {/each}
               </div>
-            </div>
-          {/if}
+            {:else}
+              <span class="rapport-empty">No tips generated — re-run Setup to refresh.</span>
+            {/if}
+          </div>
         {/if}
       </div>
     {/each}
   </div>
     {/if}
   </div>
-{/if}
 
 <style>
   .profiles-panel { background: #060e1a; border: 1px solid #1a2d4a; border-radius: 0.5rem; overflow: hidden; }
@@ -88,7 +110,10 @@
   .profiles-toggle-inner { display: flex; flex-direction: column; gap: 0.1rem; text-align: left; }
   .profiles-label-header { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #334155; }
   .profiles-names-preview { font-size: var(--fs-sm); color: #60a5fa; font-weight: 600; }
+  .profiles-toggle-right { display: flex; align-items: center; gap: 0.4rem; }
   .profiles-chevron { font-size: var(--fs-xs); color: #334155; }
+  .profiles-reload-btn { font-size: var(--fs-xs); color: #334155; cursor: pointer; padding: 0.1rem 0.2rem; border-radius: 0.2rem; transition: color 0.12s; }
+  .profiles-reload-btn:hover { color: #60a5fa; }
   .profiles { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.5rem 0.75rem 0.75rem; border-top: 1px solid #0f1e33; }
   .profile-card { background: #060e1a; border: 1px solid #1a2d4a; border-radius: 0.4rem; padding: 0.6rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }
   .profile-header { display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer; user-select: none; min-width: 0; }
@@ -109,4 +134,13 @@
   .rapport-tip { display: flex; flex-direction: column; gap: 0.05rem; }
   .rapport-kw { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #93c5fd; }
   .rapport-text { font-size: var(--fs-sm); color: #94a3b8; line-height: 1.4; }
+  .rapport-empty { font-size: var(--fs-xs); color: #334155; font-style: italic; }
+  .profiles-empty { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.1rem 0; }
+  .profiles-load-btn {
+    background: #081428; border: 1px solid #1e3a5f; color: #7dd3fc;
+    font-size: var(--fs-xs); padding: 0.2rem 0.5rem; border-radius: 0.25rem;
+    cursor: pointer; transition: all 0.12s; align-self: flex-start;
+  }
+  .profiles-load-btn:hover:not(:disabled) { border-color: #38bdf8; color: #e0f2fe; background: #0c2240; }
+  .profiles-load-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

@@ -630,7 +630,7 @@ pub async fn generate_interviewer_summary(linkedin_text: &str, cfg: &AiConfig<'_
     let profiles: Vec<&str> = linkedin_text.split("---INTERVIEWER---")
         .map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
     let mut results = Vec::new();
-    for profile in profiles.iter().take(3) {
+    for profile in profiles.iter() {
         // Heuristic name fallback: first non-empty line
         let heuristic_name: String = profile.lines()
             .map(|l| l.trim())

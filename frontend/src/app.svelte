@@ -9,11 +9,10 @@
   import PracticeQuestionsBar from './components/PracticeQuestionsBar.svelte';
   import RateLimitPanel from './components/RateLimitPanel.svelte';
   import DebriefModal from './components/DebriefModal.svelte';
-  import ReviewUpload from './components/ReviewUpload.svelte';
   import ReviewPanel from './components/ReviewPanel.svelte';
-  import type { ReviewReport, ReviewSummary } from './components/ReviewPanel.svelte';
+  import type { ReviewReport } from './components/ReviewPanel.svelte';
   import PracticePanel from './components/PracticePanel.svelte';
-  import InterviewHistoryPanel from './components/InterviewHistoryPanel.svelte';
+  import PastInterviewsPanel from './components/PastInterviewsPanel.svelte';
   import WhisperOverlay from './components/WhisperOverlay.svelte';
   import QuestionsHistoryPanel from './components/QuestionsHistoryPanel.svelte';
   import CompanyBriefPanel from './components/CompanyBriefPanel.svelte';
@@ -81,40 +80,16 @@
   let showDebrief = $state(false);
   let recordingUrl = $state<string | undefined>(undefined);
   let focusMode = $state(false);
-  let showHistory = $state(false);
-  let showReviewUpload = $state(false);
+  let showPastInterviews = $state(false);
   let showReviewPanel = $state(false);
   let reviewReport = $state<ReviewReport | null>(null);
   let savingLiveReport = $state(false);
-  let reviewList = $state<ReviewSummary[]>([]);
-  let reviewSearch = $state('');
-  let showReviewList = $state(false);
-
-  async function loadReviewList() {
-    try {
-      const resp = await authFetch('/api/reviews');
-      if (resp.ok) reviewList = await resp.json();
-    } catch { /* ignore */ }
-  }
-
-  async function deleteReview(id: string) {
-    try {
-      await authFetch(`/api/review/${id}`, { method: 'DELETE' });
-      reviewList = reviewList.filter(r => r.id !== id);
-    } catch { /* ignore */ }
-  }
-
-  const filteredReviews = $derived(
-    reviewSearch.trim()
-      ? reviewList.filter(r =>
-          (r.source_filename ?? '').toLowerCase().includes(reviewSearch.toLowerCase())
-        )
-      : reviewList
-  );
   let showWhisper = $state(false);
   let emotionHistory = $state<string[]>([]);
   let vocalWhyExpanded = $state(false);
   let answerWhyExpanded = $state(false);
+  let pendingVocalData = $state<Record<number, { question: string; transcript: string; duration_seconds: number; word_count: number; filler_count: number; filler_detail: string }>>({});
+  let vocalLoading = $state<Set<number>>(new Set());
   let expandedCoachingEntries = $state(new Set<number>());
   $effect(() => {
     if (expandedCoachingEntries.size === 0 && pendingCoachingEntry) {
@@ -143,8 +118,6 @@
   let loadingSalary = $state(false);
 
   // Next question predictor
-  let nextQuestions = $state<string[]>([]);
-  let loadingNextQ = $state(false);
 
   // Pace / energy coach
   let recentYouTexts = $state<{ text: string; time: number }[]>([]);
@@ -398,8 +371,25 @@
   let unseenCount = $state(0);
   let scrollToLatestKey = $state(0);
   let prevSuggestionsLen = $state(0);
-  // Tracks which question index is currently viewed in SuggestionPanel (-1 = latest)
   let histViewIdx = $state(-1);
+  let histTestQuestion = $state('');
+  let histTestSending = $state(false);
+
+  async function sendTestQuestion() {
+    const q = histTestQuestion.trim();
+    if (!q || histTestSending) return;
+    histTestSending = true;
+    try {
+      await authFetch('/api/simulate-question', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q }),
+      });
+      histTestQuestion = '';
+    } finally {
+      histTestSending = false;
+    }
+  }
 
   $effect(() => {
     if (suggestions.length > prevSuggestionsLen && prevSuggestionsLen > 0) {
@@ -514,7 +504,7 @@
 
   // Section drag-to-reorder (within and between right sub-panels)
   type SectionId = 'screen-preview' | 'personality' | 'sentiment-bar' | 'body-language' |
-    'energy-coach' | 'fillers' | 'salary-coach' | 'next-question' | 'keywords' |
+    'energy-coach' | 'fillers' | 'salary-coach' | 'keywords' |
     'company-brief' | 'interviewer-profiles' | 'stats' | 'rate-limits' | 'answer-score';
   interface SectionSlot { panel: string; id: SectionId; }
   const DEFAULT_SECTION_LAYOUT: SectionSlot[] = [
@@ -524,7 +514,6 @@
     { panel: 'sentiment', id: 'stats' },
     { panel: 'sentiment', id: 'answer-score' },
     { panel: 'coaching', id: 'salary-coach' },
-    { panel: 'coaching', id: 'next-question' },
     { panel: 'coaching', id: 'company-brief' },
     { panel: 'coaching', id: 'interviewer-profiles' },
     { panel: 'coaching', id: 'rate-limits' },
@@ -532,14 +521,14 @@
   const SECTION_LABELS: Record<string, string> = {
     'screen-preview': 'Interviewer Video', 'personality': 'Interviewer Personality', 'sentiment-bar': 'Interviewer Mood',
     'body-language': 'Your Body Language', 'energy-coach': 'Pace', 'fillers': 'Fillers',
-    'salary-coach': 'Salary', 'next-question': 'Next Q', 'keywords': 'Keywords',
+    'salary-coach': 'Salary', 'keywords': 'Keywords',
     'company-brief': 'Company', 'interviewer-profiles': 'Interviewers',
     'stats': 'Your Stats', 'rate-limits': 'Model Usage', 'answer-score': 'Your Answer Score',
   };
   const SECTION_ROLE: Record<string, 'interviewer' | 'you' | 'coaching'> = {
     'screen-preview': 'interviewer', 'personality': 'interviewer', 'sentiment-bar': 'interviewer',
     'body-language': 'you', 'stats': 'you', 'answer-score': 'you', 'energy-coach': 'you', 'fillers': 'you',
-    'salary-coach': 'coaching', 'next-question': 'coaching', 'keywords': 'coaching',
+    'salary-coach': 'coaching', 'keywords': 'coaching',
     'company-brief': 'coaching', 'interviewer-profiles': 'coaching', 'rate-limits': 'coaching',
   };
   let sectionLayout = $state<SectionSlot[]>(loadSectionLayout(DEFAULT_SECTION_LAYOUT));
@@ -705,7 +694,7 @@
   $effect(() => {
     if (!capturing || !webcamStream) return;
     const timeout = setTimeout(checkPresence, 8000);
-    const interval = setInterval(checkPresence, 30000);
+    const interval = setInterval(checkPresence, 60000);
     return () => { clearTimeout(timeout); clearInterval(interval); };
   });
 
@@ -819,7 +808,7 @@
 
   // Transcript auto-save
   const sessionKey = `transcript-${new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-')}`;
-  let showTranscripts = $state(false);
+  let showEndMenu = $state(false);
 
   let eventWs: EventWebSocket | null = null;
 
@@ -837,24 +826,27 @@
     loadingSalary = false;
   }
 
-  async function predictNextQuestions() {
-    if (loadingNextQ) return;
-    loadingNextQ = true;
-    try {
-      const resp = await authFetch('/api/next-question', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: transcript.map(e => ({ speaker: e.speaker, text: e.text })) }),
-      });
-      if (resp.ok) { const d = await resp.json(); nextQuestions = d.questions ?? []; }
-    } catch { /* ignore */ }
-    loadingNextQ = false;
-  }
 
-  // Auto-predict whenever a new question comes in
-  $effect(() => {
-    const count = suggestions.length;
-    if (count > 0) predictNextQuestions();
-  });
+  async function fetchVocalFeedback(qIdx: number) {
+    const data = pendingVocalData[qIdx];
+    if (!data || vocalLoading.has(qIdx)) return;
+    vocalLoading = new Set([...vocalLoading, qIdx]);
+    try {
+      const resp = await authFetch('/api/vocal-sentiment', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (resp.ok) {
+        const vf = await resp.json();
+        suggestions = suggestions.map((s, i) => i === qIdx ? { ...s, vocalFeedback: vf } : s);
+        vocalWhyExpanded = false;
+        const { [qIdx]: _, ...rest } = pendingVocalData;
+        pendingVocalData = rest;
+      }
+    } catch { /* ignore */ }
+    const next = new Set(vocalLoading); next.delete(qIdx);
+    vocalLoading = next;
+  }
 
   async function fetchNextSteps() {
     if (loadingNextSteps || nextSteps.length > 0) return;
@@ -869,66 +861,48 @@
     loadingNextSteps = false;
   }
 
-  const OPENING_SUGGESTION_STATIC =
-`Acknowledge: Hi! Really great to meet you — thanks so much for having me today.
-Answer: I'm doing well, thank you! Really looking forward to our conversation.
----
-General: [their day] Ask how their day is going — keeps the tone warm and shows you're interested in them as a person
-General: [the commute / setup] A quick comment about working from home or their office is a natural low-stakes opener
-General: [something you noticed] If you spot something in their background or office, a brief friendly comment shows genuine curiosity
-Ask: day | How's your day going so far?
-Ask: week | Has it been a busy week for you?
-Ask: team | How long have you been with the team?`;
 
-  async function fetchOpeningSuggestion() {
-    const names = interviewerSummaries.map(i => i.name).filter(Boolean).join(', ');
-    const tips = interviewerSummaries.flatMap(i => i.rapport_tips ?? []).filter(Boolean).join('; ');
-    const context = [names && `Interviewer(s): ${names}`, tips && `Rapport tips: ${tips}`].filter(Boolean).join('. ');
-    const question = `Meeting opening greeting and small talk${context ? ` — ${context}` : ''} — give me warm, natural opening lines and 2-3 casual conversation topics to exchange greetings and build rapport at the very start of the meeting, before any interview questions begin. Keep it generic and friendly, not job-focused.`;
-
-    currentQuestionIdx = 0;
-    // Show static fallback immediately so there's always something visible
-    suggestions = [{ question: '🤝 Opening', suggestion: OPENING_SUGGESTION_STATIC, streaming: false }];
-
-    try {
-      const resp = await authFetch('/api/practice-question', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question }),
-      });
-      const data = resp.ok ? await resp.json() : null;
-      if (data?.suggestion) {
-        // Add personalized version as a second entry so both are in question history
-        suggestions = [...suggestions, { question: '🤝 Opening (personalized)', suggestion: data.suggestion, streaming: false }];
-        currentQuestionIdx = 1;
-      }
-    } catch { /* keep static fallback */ }
-  }
+  let loadingSummaries = $state(false);
+  let loadingPredict = $state(false);
 
   async function fetchBackgroundSetup() {
-    const [enrichRes, summariesRes, questionsRes] = await Promise.allSettled([
-      fetch('/api/enrich', { method: 'POST' }),
-      fetch('/api/interviewer-summaries', { method: 'POST' }),
-      fetch('/api/predict-questions', { method: 'POST' }),
-    ]);
-    if (enrichRes.status === 'fulfilled' && enrichRes.value.ok) {
-      const d = await enrichRes.value.json();
-      if (d.company_brief) companyBrief = d.company_brief;
-      if (d.jd_keywords?.length) { jdKeywords = d.jd_keywords; mentionedKeywords = new Set(); interviewerRaisedKeywords = new Set(); }
-    }
-    if (summariesRes.status === 'fulfilled' && summariesRes.value.ok) {
-      const d = await summariesRes.value.json();
-      if (d?.length) interviewerSummaries = d;
-    }
-    if (questionsRes.status === 'fulfilled' && questionsRes.value.ok) {
-      const d = await questionsRes.value.json();
-      if (d.questions?.length) predictedQuestions = d.questions;
-    }
+    // Only enrich is auto — provides JD keywords used for live transcript highlighting
+    try {
+      const resp = await fetch('/api/enrich', { method: 'POST' });
+      if (resp.ok) {
+        const d = await resp.json();
+        if (d.company_brief) companyBrief = d.company_brief;
+        if (d.jd_keywords?.length) { jdKeywords = d.jd_keywords; mentionedKeywords = new Set(); interviewerRaisedKeywords = new Set(); }
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function fetchInterviewerSummaries() {
+    if (loadingSummaries || interviewerSummaries.length > 0) return;
+    loadingSummaries = true;
+    try {
+      const resp = await authFetch('/api/interviewer-summaries', { method: 'POST' });
+      if (resp.ok) { const d = await resp.json(); if (d?.length) interviewerSummaries = d; }
+    } catch { /* ignore */ }
+    loadingSummaries = false;
+  }
+
+  async function fetchPredictedQuestions() {
+    if (loadingPredict || predictedQuestions.length > 0) return;
+    loadingPredict = true;
+    try {
+      const resp = await authFetch('/api/predict-questions', { method: 'POST' });
+      if (resp.ok) { const d = await resp.json(); if (d.questions?.length) predictedQuestions = d.questions; }
+    } catch { /* ignore */ }
+    loadingPredict = false;
   }
 
   function handleSetupComplete() {
     phase = 'interview';
+    // Clear on-demand caches so re-running setup picks up new interviewers/data
+    interviewerSummaries = [];
+    predictedQuestions = [];
     connectWs();
-    void fetchOpeningSuggestion();
     void fetchBackgroundSetup();
   }
 
@@ -984,23 +958,24 @@ Ask: team | How long have you been with the team?`;
               const conf = computeConfidence(capturedAnswer, capturedSuggestion);
               suggestions = suggestions.map((s, i) => i === capturedQIdx ? { ...s, confidenceScore: conf.score, matchedKeywords: conf.matched, missedKeywords: conf.missed } : s);
             }
-            authFetch('/api/vocal-sentiment', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                question: capturedQuestion,
-                transcript: capturedAnswer,
-                duration_seconds: capturedMs / 1000,
-                word_count: wordCount,
-                filler_count: capturedFillerCount,
-                filler_detail: capturedFillerDetail,
-              }),
-            })
-              .then(r => r.ok ? r.json() : null)
-              .then(vf => {
-                if (vf) { suggestions = suggestions.map((s, i) => i === capturedQIdx ? { ...s, vocalFeedback: vf } : s); vocalWhyExpanded = false; }
-              })
-              .catch(() => {});
+            // Local answer length feedback — no API needed
+            {
+              const hasMetric = /\d+\s*(%|percent|x|times|k\b|million|billion|users|customers|days|weeks|months|years|points|seconds)|\$\d|\d+\s*(ms|fps|rpm|req)/i.test(capturedAnswer);
+              let coaching: string;
+              if (wordCount < 30) coaching = 'Short answer — aim for 2–3 minutes with a specific example.';
+              else if (wordCount > 200) coaching = 'Running long — wrap up and invite follow-up questions.';
+              else coaching = 'Good length.';
+              suggestions = suggestions.map((s, i) => i === capturedQIdx ? { ...s, answerFeedback: { coaching, missed_metric: !hasMetric, missed_followup: false } } : s);
+            }
+            // Store vocal data for on-demand analysis (user clicks "Analyze Voice")
+            pendingVocalData = { ...pendingVocalData, [capturedQIdx]: {
+              question: capturedQuestion,
+              transcript: capturedAnswer,
+              duration_seconds: capturedMs / 1000,
+              word_count: wordCount,
+              filler_count: capturedFillerCount,
+              filler_detail: capturedFillerDetail,
+            }};
           }
           resetAnswerTimer();
           // Surface keywords the interviewer raises (not marked done, just highlighted)
@@ -1088,33 +1063,7 @@ Ask: team | How long have you been with the team?`;
           suggestions = suggestions.map((s, i) =>
             i === currentQuestionIdx ? { ...s, answered: wasAnswered } : s
           );
-          // Run answer feedback for previous question if it was answered
-          if (wasAnswered) {
-            const prevSuggestion = suggestions[currentQuestionIdx];
-            if (prevSuggestion && prevSuggestion.suggestion) {
-              const prevIdx = currentQuestionIdx;
-              const answerText = youSegmentsSinceQuestion.join(' ');
-              authFetch('/api/answer-feedback', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  question: prevSuggestion.question,
-                  answer: answerText,
-                  suggestion: prevSuggestion.suggestion,
-                }),
-              })
-                .then(r => r.ok ? r.json() : null)
-                .then(fb => {
-                  if (fb) {
-                    suggestions = suggestions.map((s, i) =>
-                      i === prevIdx ? { ...s, answerFeedback: fb } : s
-                    );
-                    answerWhyExpanded = false;
-                  }
-                })
-                .catch(() => {});
-            }
-          }
+          // Answer feedback is on-demand only — user clicks the feedback button in SuggestionPanel
         }
 
         const subQuestions = splitMultiQuestions(event.question);
@@ -1340,8 +1289,8 @@ Ask: team | How long have you been with the team?`;
       </header>
       <SetupForm onSetupComplete={handleSetupComplete} />
       <div class="setup-review-row">
-        <button class="setup-review-btn" onclick={() => showReviewUpload = true}>
-          ⬆ Review a Recording
+        <button class="setup-review-btn" onclick={() => showPastInterviews = true}>
+          Past Interviews
         </button>
         {#if reviewReport}
           <button class="setup-review-view-btn" onclick={() => { showReviewPanel = true; }}>
@@ -1349,30 +1298,6 @@ Ask: team | How long have you been with the team?`;
           </button>
         {/if}
       </div>
-      {#if showReviewList}
-        <div class="review-list-panel">
-          <input class="review-search" type="text" placeholder="Search reports…" bind:value={reviewSearch} />
-          {#if filteredReviews.length === 0}
-            <p class="review-list-empty">{reviewSearch ? 'No matching reports.' : 'No reports yet. Upload a recording to get started.'}</p>
-          {:else}
-            <div class="review-list">
-              {#each filteredReviews as r}
-                <div class="review-list-item">
-                  <div class="review-list-meta">
-                    <span class="review-list-name">{r.source_filename ?? 'Untitled'}</span>
-                    <span class="review-list-date">{r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}</span>
-                  </div>
-                  <p class="review-list-summary">{r.qa_count} Q&A · {r.avg_wpm} wpm · {Math.round(r.you_pct)}% you</p>
-                  <div class="review-list-actions">
-                    <button class="review-list-open" onclick={async () => { const resp = await authFetch(`/api/review/${r.id}`); if (resp.ok) { reviewReport = await resp.json(); showReviewPanel = true; } }}>Open</button>
-                    <button class="review-list-delete" onclick={() => deleteReview(r.id)}>Delete</button>
-                  </div>
-                </div>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      {/if}
       {#if Object.keys(callCounts).length > 0 || Object.keys(rateLimits).length > 0}
         <div class="setup-usage">
           <RateLimitPanel {rateLimits} {callCounts} />
@@ -1454,52 +1379,55 @@ Ask: team | How long have you been with the team?`;
             {/if}
           </div>
 
-          <button class="history-btn" onclick={() => showHistory = true}>History</button>
           <button class="history-btn" title="Reset all panel positions and zoom" onclick={() => {
             Object.values(SK).forEach(k => localStorage.removeItem(k));
             location.reload();
           }}>Reset Layout</button>
-          <div class="transcripts-wrapper">
-            <button class="header-btn" onclick={() => showTranscripts = !showTranscripts} title="View saved transcripts">📄 Transcripts</button>
-            {#if showTranscripts}
-              <div class="transcripts-dropdown">
-                {#each Object.keys(localStorage).filter(k => k.startsWith('transcript_')) as key}
-                  <button class="transcript-item" onclick={() => {
-                    const data = localStorage.getItem(key);
-                    if (data) {
-                      const entries = JSON.parse(data);
-                      const lines = entries.map((e: any) => `[${new Date(e.timestamp_ms).toLocaleTimeString()}] ${e.speaker}: ${e.text}`);
-                      const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = key + '.txt';
-                      a.click();
-                      URL.revokeObjectURL(url);
-                    }
-                    showTranscripts = false;
-                  }}>{key.replace('transcript_', '')}</button>
+          <div class="end-split-wrapper">
+            <button class="end-main-btn" onclick={() => { showDebrief = true; showEndMenu = false; }}>End Interview</button>
+            <button class="end-arrow-btn" onclick={(e) => { e.stopPropagation(); showEndMenu = !showEndMenu; }}>▾</button>
+            {#if showEndMenu}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div class="end-menu-backdrop" onclick={() => showEndMenu = false}></div>
+              <div class="end-dropdown">
+                <button class="end-menu-item"
+                  class:end-menu-loading={savingLiveReport}
+                  disabled={savingLiveReport}
+                  onclick={async () => {
+                    showEndMenu = false;
+                    savingLiveReport = true;
+                    try {
+                      const resp = await authFetch('/api/review/from-live', { method: 'POST' });
+                      if (resp.ok) { reviewReport = await resp.json(); showReviewPanel = true; }
+                    } finally { savingLiveReport = false; }
+                  }}
+                >{savingLiveReport ? 'Saving…' : 'Save Report'}</button>
+                <div class="end-menu-divider"></div>
+                {@const transcriptKeys = Object.keys(localStorage).filter(k => k.startsWith('transcript_'))}
+                {#if transcriptKeys.length === 0}
+                  <div class="end-menu-empty">No saved transcripts</div>
                 {:else}
-                  <div class="transcript-empty">No saved transcripts</div>
-                {/each}
+                  <div class="end-menu-section">Download Transcript</div>
+                  {#each transcriptKeys as key}
+                    <button class="end-menu-item end-menu-transcript" onclick={() => {
+                      const data = localStorage.getItem(key);
+                      if (data) {
+                        const entries = JSON.parse(data);
+                        const lines = entries.map((e: any) => `[${new Date(e.timestamp_ms).toLocaleTimeString()}] ${e.speaker}: ${e.text}`);
+                        const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a'); a.href = url; a.download = key + '.txt'; a.click();
+                        URL.revokeObjectURL(url);
+                      }
+                      showEndMenu = false;
+                    }}>📄 {key.replace('transcript_', '')}</button>
+                  {/each}
+                {/if}
+                <div class="end-menu-divider"></div>
+                <button class="end-menu-item" onclick={() => { showPastInterviews = true; showEndMenu = false; }}>Past Interviews</button>
               </div>
             {/if}
           </div>
-          <button class="debrief-btn save-report-btn"
-            class:saving={savingLiveReport}
-            disabled={savingLiveReport}
-            onclick={async () => {
-              savingLiveReport = true;
-              try {
-                const resp = await authFetch('/api/review/from-live', { method: 'POST' });
-                if (resp.ok) {
-                  reviewReport = await resp.json();
-                  showReviewPanel = true;
-                }
-              } finally { savingLiveReport = false; }
-            }}
-          >{savingLiveReport ? 'Saving…' : 'Save Report'}</button>
-          <button class="debrief-btn" onclick={() => showDebrief = true}>End Interview</button>
           <CaptureButton
             onCapture={(v) => { capturing = v; if (v) ttsEnabled = true; if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); } }}
             onStreams={(screen, webcam) => { screenStream = screen; webcamStream = webcam; }}
@@ -1558,7 +1486,7 @@ Ask: team | How long have you been with the team?`;
               {#if !collapsedCols.has('left')}
                 <div class="col-body">
                   <div class="col-body-scroll" style="zoom: {leftZoom/100}">
-                    <TranscriptPanel entries={transcript} onFlipSpeaker={flipSpeaker} />
+                    <TranscriptPanel entries={transcript} onFlipSpeaker={flipSpeaker} {jdKeywords} />
                   </div>
                 </div>
               {/if}
@@ -1582,16 +1510,29 @@ Ask: team | How long have you been with the team?`;
                 {/if}
               </div>
               {#if !collapsedCols.has('hist')}
-                <div class="col-body" bind:this={histColBodyEl}>
-                  <div class="col-body-scroll" style="zoom: {histZoom/100}; padding: 0.3rem 0.4rem 0.4rem; display: flex; flex-direction: column; gap: 0.4rem;">
+                <div class="col-body hist-col-body" bind:this={histColBodyEl}>
+                  <div class="col-body-scroll" style="zoom: {histZoom/100}; padding: 0.3rem 0.4rem 0; display: flex; flex-direction: column; gap: 0.4rem;">
                     <TestQuestionBar {capturing} />
-                    <PracticeQuestionsBar questions={predictedQuestions} {capturing} />
+                    <PracticeQuestionsBar questions={predictedQuestions} {capturing} onPredict={fetchPredictedQuestions} loadingPredict={loadingPredict} />
                     <QuestionsHistoryPanel
                       {suggestions}
                       currentIndex={histViewIdx === -1 ? currentQuestionIdx : histViewIdx}
                       onJump={(i) => { histViewIdx = i; jumpSignal = { idx: i, key: Date.now() }; }}
                       {scrollToLatestKey}
                     />
+                  </div>
+                  <div class="hist-input-row">
+                    <input
+                      class="hist-q-input"
+                      type="text"
+                      placeholder="Type a test question…"
+                      bind:value={histTestQuestion}
+                      onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTestQuestion(); } }}
+                      disabled={histTestSending}
+                    />
+                    <button class="hist-q-send" onclick={sendTestQuestion} disabled={histTestSending || !histTestQuestion.trim()}>
+                      {histTestSending ? '…' : 'Send'}
+                    </button>
                   </div>
                 </div>
               {/if}
@@ -1703,6 +1644,16 @@ Ask: team | How long have you been with the team?`;
                       ></video>
                     </div>
                     <div class="selfview-label">You</div>
+                    {#if capturing && paceReading.status !== 'idle'}
+                      {@const paceColor = paceReading.status === 'good' ? '#4ade80' : paceReading.status === 'fast' ? '#f87171' : '#f59e0b'}
+                      {@const pacePct = Math.min(100, (paceReading.wordsPerMinute / 220) * 100)}
+                      <div class="selfview-pace-bar" title={paceReading.tip ?? ''}>
+                        <div class="selfview-pace-track">
+                          <div class="selfview-pace-fill" style="width:{pacePct}%; background:{paceColor};"></div>
+                        </div>
+                        <span class="selfview-pace-wpm" style="color:{paceColor}">{paceReading.wordsPerMinute} wpm</span>
+                      </div>
+                    {/if}
                     <!-- svelte-ignore a11y_no_static_element_interactions -->
                     <div class="vid-resize-handle selfview-resize-handle"
                       onpointerdown={selfviewResizeDown}
@@ -1918,8 +1869,6 @@ Ask: team | How long have you been with the team?`;
                   {#if salaryTactics}
                     <SalaryCoachPanel tactics={salaryTactics} onClose={() => salaryTactics = null} />
                   {/if}
-                {:else if sid === 'next-question'}
-                  <!-- prediction runs in background; panel hidden from display -->
                 {:else if sid === 'keywords'}
                   {#if jdKeywords.length > 0}
                     <div class="side-section">
@@ -1932,9 +1881,7 @@ Ask: team | How long have you been with the team?`;
                     <CompanyBriefPanel brief={companyBrief} />
                   {/if}
                 {:else if sid === 'interviewer-profiles'}
-                  {#if interviewerSummaries.length > 0}
-                    <InterviewerProfilePanel interviewers={interviewerSummaries} />
-                  {/if}
+                  <InterviewerProfilePanel interviewers={interviewerSummaries} onLoad={fetchInterviewerSummaries} onReload={() => { interviewerSummaries = []; void fetchInterviewerSummaries(); }} loading={loadingSummaries} />
                 {:else if sid === 'stats'}
                   <div class="side-stats">
                     <div class="side-stat" title="Time since you started answering. Green = under 30s (concise), amber = 30–60s (detailed), red = over 60s (wrap up). Aim for 30–90 seconds per answer.">
@@ -1966,7 +1913,7 @@ Ask: team | How long have you been with the team?`;
                       </div>
                     {/if}
                   </div>
-                  {#if energySignal || youLog.length > 0 || suggestions.some(s => s.answerFeedback || s.vocalFeedback)}
+                  {#if energySignal || youLog.length > 0 || suggestions.some(s => s.answerFeedback || s.vocalFeedback) || Object.keys(pendingVocalData).length > 0}
                     {@const latestFeedback = suggestions.slice().reverse().find(s => s.answerFeedback || s.vocalFeedback)}
                     <div class="you-log">
                       <button class="you-log-header-btn" onclick={() => youDeliveryExpanded = !youDeliveryExpanded} title="Click to show/hide Your Delivery tips">
@@ -2005,6 +1952,17 @@ Ask: team | How long have you been with the team?`;
                               {#if answerWhyExpanded && af.coaching}
                                 <p class="ascore-coaching you-log-coaching">{af.coaching}</p>
                               {/if}
+                            </div>
+                          {/if}
+                        {/if}
+                        {#if Object.keys(pendingVocalData).length > 0}
+                          {@const pendingIdx = Number(Object.keys(pendingVocalData).at(-1))}
+                          {#if !suggestions[pendingIdx]?.vocalFeedback}
+                            <div class="you-delivery-row">
+                              <button class="side-stat ascore-stat-btn" onclick={() => fetchVocalFeedback(pendingIdx)} disabled={vocalLoading.has(pendingIdx)}>
+                                <span class="side-label">Voice Read</span>
+                                <span class="ascore-vocal-tone">{vocalLoading.has(pendingIdx) ? 'analyzing…' : 'Analyze ›'}</span>
+                              </button>
                             </div>
                           {/if}
                         {/if}
@@ -2198,7 +2156,6 @@ Ask: team | How long have you been with the team?`;
         {suggestions}
         {recordingUrl}
         onClose={() => showDebrief = false}
-        onOpenReport={(r) => { reviewReport = r; showReviewPanel = true; }}
         onSave={(r) => saveInterview({
           summary: r.summary,
           strong_points: r.strong_points,
@@ -2211,16 +2168,11 @@ Ask: team | How long have you been with the team?`;
       <WhisperOverlay tell={whisperTell} onClose={() => showWhisper = false} />
     {/if}
   {/if}
-{#if showHistory}
-  <InterviewHistoryPanel
-    onClose={() => showHistory = false}
-    onRehearsal={(questions) => { predictedQuestions = questions; showHistory = false; }}
-  />
-{/if}
-{#if showReviewUpload}
-  <ReviewUpload
-    onReport={(r) => { reviewReport = r; showReviewUpload = false; showReviewPanel = true; }}
-    onCancel={() => showReviewUpload = false}
+{#if showPastInterviews}
+  <PastInterviewsPanel
+    onClose={() => showPastInterviews = false}
+    onReport={(r) => { reviewReport = r; showPastInterviews = false; showReviewPanel = true; }}
+    onRehearsal={(questions) => { predictedQuestions = questions; showPastInterviews = false; }}
   />
 {/if}
 {#if showReviewPanel && reviewReport}
@@ -2228,6 +2180,7 @@ Ask: team | How long have you been with the team?`;
     report={reviewReport}
     onClose={() => showReviewPanel = false}
     onDelete={(id) => { if (reviewReport?.id === id) reviewReport = null; showReviewPanel = false; }}
+    onPractice={(q) => { predictedQuestions = [...predictedQuestions, q]; showReviewPanel = false; }}
   />
 {/if}
 </main>
@@ -2366,8 +2319,7 @@ Ask: team | How long have you been with the team?`;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .setup-review-view-btn:hover { border-color: #60a5fa; }
-  .save-report-btn { opacity: 0.85; }
-  .save-report-btn.saving { opacity: 0.5; cursor: default; }
+
   .setup-header { text-align: center; padding: 3rem 2rem 1rem; }
   .setup-font-row { display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-top: 1rem; }
   .setup-font-label { font-size: var(--fs-sm); color: #64748b; }
@@ -2399,19 +2351,56 @@ Ask: team | How long have you been with the team?`;
   }
   .header-right { display: flex; align-items: center; gap: 0.75rem; }
   .shortcuts-hint { font-size: var(--fs-sm); color: #334155; white-space: nowrap; }
-  .debrief-btn {
-    padding: 0.3rem 0.8rem; background: transparent;
-    border: 1px solid #334155; border-radius: 0.375rem;
-    color: #64748b; font-size: var(--fs-base); cursor: pointer; white-space: nowrap;
-  }
-  .debrief-btn:hover { border-color: #a78bfa; color: #a78bfa; }
-
   .history-btn {
     padding: 0.3rem 0.8rem; background: transparent;
     border: 1px solid #334155; border-radius: 0.375rem;
     color: #64748b; font-size: var(--fs-base); cursor: pointer; white-space: nowrap;
   }
   .history-btn:hover { border-color: #60a5fa; color: #60a5fa; }
+
+  /* End Interview split button */
+  .end-split-wrapper { position: relative; display: flex; }
+  .end-main-btn {
+    padding: 0.3rem 0.8rem; background: transparent;
+    border: 1px solid #334155; border-right: none;
+    border-radius: 0.375rem 0 0 0.375rem;
+    color: #64748b; font-size: var(--fs-base); cursor: pointer; white-space: nowrap;
+    transition: border-color 0.12s, color 0.12s;
+  }
+  .end-main-btn:hover { border-color: #a78bfa; color: #a78bfa; }
+  .end-arrow-btn {
+    padding: 0.3rem 0.5rem; background: transparent;
+    border: 1px solid #334155;
+    border-radius: 0 0.375rem 0.375rem 0;
+    color: #475569; font-size: var(--fs-xs); cursor: pointer;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+  }
+  .end-arrow-btn:hover { border-color: #a78bfa; color: #a78bfa; background: #1a0d2e; }
+  .end-menu-backdrop { position: fixed; inset: 0; z-index: 299; }
+  .end-dropdown {
+    position: absolute; top: calc(100% + 4px); right: 0; z-index: 300;
+    background: #0f172a; border: 1px solid #1e293b; border-radius: 0.4rem;
+    display: flex; flex-direction: column; min-width: 200px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.55);
+    overflow: hidden;
+  }
+  .end-menu-item {
+    padding: 0.45rem 0.85rem; background: none; border: none;
+    color: #94a3b8; font-size: var(--fs-sm); cursor: pointer; text-align: left;
+    transition: background 0.1s, color 0.1s;
+  }
+  .end-menu-item:hover:not(:disabled) { background: #1e293b; color: #e2e8f0; }
+  .end-menu-item:disabled { opacity: 0.5; cursor: default; }
+  .end-menu-loading { opacity: 0.6; }
+  .end-menu-transcript { padding-left: 1rem; font-size: var(--fs-xs); color: #64748b; }
+  .end-menu-transcript:hover { color: #94a3b8; }
+  .end-menu-section {
+    padding: 0.25rem 0.85rem 0.1rem;
+    font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #334155;
+  }
+  .end-menu-empty { padding: 0.35rem 0.85rem; font-size: var(--fs-xs); color: #334155; font-style: italic; }
+  .end-menu-divider { height: 1px; background: #1e293b; margin: 0.2rem 0; }
 
   .personality-strip {
     flex-shrink: 0;
@@ -2830,6 +2819,44 @@ Ask: team | How long have you been with the team?`;
   }
   .col-body-scroll { flex: 1; overflow-y: auto; min-height: 0; }
 
+  .hist-col-body { padding-bottom: 0 !important; }
+  .hist-input-row {
+    display: flex;
+    gap: 0.35rem;
+    padding: 0.35rem 0.4rem 0.4rem;
+    flex-shrink: 0;
+    border-top: 1px solid #0f172a;
+  }
+  .hist-q-input {
+    flex: 1;
+    background: #040d1a;
+    border: 1px solid #1e3a5f;
+    color: #e2e8f0;
+    font-size: var(--fs-sm);
+    padding: 0.3rem 0.5rem;
+    border-radius: 0.3rem;
+    outline: none;
+    transition: border-color 0.12s;
+    min-width: 0;
+  }
+  .hist-q-input:focus { border-color: #3b82f6; }
+  .hist-q-input::placeholder { color: #334155; }
+  .hist-q-input:disabled { opacity: 0.5; }
+  .hist-q-send {
+    background: #1e3a5f;
+    border: 1px solid #3b82f6;
+    color: #93c5fd;
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    padding: 0.3rem 0.65rem;
+    border-radius: 0.3rem;
+    cursor: pointer;
+    transition: all 0.12s;
+    flex-shrink: 0;
+  }
+  .hist-q-send:hover:not(:disabled) { background: #2d4f7c; }
+  .hist-q-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
   /* Collapsed columns */
   .col-left, .col-hist, .col-center { transition: width 0.15s; overflow: hidden; }
   .col-right { transition: none; }
@@ -3023,6 +3050,10 @@ Ask: team | How long have you been with the team?`;
   }
   .sv-zoom-btn { display: none; }
   .selfview-label { font-size: var(--fs-xs); color: #334155; text-transform: uppercase; letter-spacing: 0.08em; padding: 0.15rem 0.75rem; }
+  .selfview-pace-bar { display: flex; align-items: center; gap: 0.4rem; padding: 0.1rem 0.6rem 0.2rem; }
+  .selfview-pace-track { flex: 1; height: 3px; background: #0f1e33; border-radius: 2px; overflow: hidden; }
+  .selfview-pace-fill { height: 100%; border-radius: 2px; transition: width 0.6s, background 0.3s; }
+  .selfview-pace-wpm { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.04em; white-space: nowrap; flex-shrink: 0; }
   .selfview-resize-handle { touch-action: none; }
 
   /* Interviewer screen preview */
@@ -3291,26 +3322,6 @@ Ask: team | How long have you been with the team?`;
   .focus-empty { color: #334155; font-style: italic; font-size: 1rem; text-align: center; padding: 3rem 0; }
   .focus-hint { margin-top: 0.75rem; font-size: var(--fs-sm); color: #1e293b; }
 
-  /* Transcripts dropdown */
-  .transcripts-wrapper { position: relative; }
-  .header-btn {
-    padding: 0.3rem 0.8rem; background: transparent;
-    border: 1px solid #334155; border-radius: 0.375rem;
-    color: #64748b; font-size: var(--fs-base); cursor: pointer; white-space: nowrap;
-  }
-  .header-btn:hover { border-color: #60a5fa; color: #60a5fa; }
-  .transcripts-dropdown {
-    position: absolute; top: 100%; right: 0; z-index: 200;
-    background: #0f172a; border: 1px solid #1e293b; border-radius: 0.4rem;
-    display: flex; flex-direction: column; min-width: 260px;
-    max-height: 300px; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-  }
-  .transcript-item {
-    padding: 0.4rem 0.75rem; background: none; border: none; border-bottom: 1px solid #0f1e33;
-    color: #94a3b8; font-size: var(--fs-sm); cursor: pointer; text-align: left;
-  }
-  .transcript-item:hover { background: #1e293b; color: #e2e8f0; }
-  .transcript-empty { padding: 0.5rem 0.75rem; color: #334155; font-size: var(--fs-sm); font-style: italic; }
 
   /* Answer scoring in sentiment panel */
   .answer-score-panel {

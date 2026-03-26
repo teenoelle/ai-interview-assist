@@ -15,7 +15,7 @@ use common::messages::{TranscriptSegment, WsEvent, SuggestionMode};
 use common::rate_limiter::RateLimiter;
 use common::providers::{is_quota_exhausted, is_rate_limit};
 
-type CallCounts = Arc<std::sync::Mutex<std::collections::HashMap<String, u64>>>;
+pub type CallCounts = Arc<std::sync::Mutex<std::collections::HashMap<String, u64>>>;
 
 fn inc(counts: &Option<CallCounts>, name: &str) {
     if let Some(map) = counts {
@@ -213,21 +213,9 @@ pub async fn run_agent(
                 tokio::spawn(async move {
                     let run = async {
                         if let Some(sec_type) = secondary_type {
-                            // Compound first
+                            // Compound only — primary/secondary generated on demand when user clicks tab
                             let compound_prompt = prompt::build_compound_user_prompt(&question, &tr, primary_type, sec_type);
                             run_suggest!(SuggestionMode::Compound, &compound_prompt,
-                                gkey, akey, grkey, grkey2, orkey, mkey, ckey, qkey,
-                                ourl, omodels, sp, rl, etx, cc).await?;
-
-                            // Primary second
-                            let primary_prompt = prompt::build_user_prompt_for_type(&question, &tr, primary_type);
-                            run_suggest!(SuggestionMode::Primary, &primary_prompt,
-                                gkey, akey, grkey, grkey2, orkey, mkey, ckey, qkey,
-                                ourl, omodels, sp, rl, etx, cc).await?;
-
-                            // Secondary last
-                            let secondary_prompt = prompt::build_user_prompt_for_type(&question, &tr, sec_type);
-                            run_suggest!(SuggestionMode::Secondary, &secondary_prompt,
                                 gkey, akey, grkey, grkey2, orkey, mkey, ckey, qkey,
                                 ourl, omodels, sp, rl, etx, cc).await?;
                         } else {
@@ -250,4 +238,50 @@ pub async fn run_agent(
             None => break,
         }
     }
+}
+
+/// Generate a single suggestion mode on demand (called from HTTP handler for opt-in primary/secondary).
+pub async fn run_single(
+    question: &str,
+    mode: SuggestionMode,
+    system_prompt: &str,
+    transcript: &[common::messages::TranscriptSegment],
+    gemini_key: &str,
+    anthropic_key: Option<&str>,
+    groq_key: Option<&str>,
+    groq_key_2: Option<&str>,
+    openrouter_key: Option<&str>,
+    mistral_key: Option<&str>,
+    cerebras_key: Option<&str>,
+    qwen_key: Option<&str>,
+    ollama_url: &str,
+    ollama_models: &[String],
+    rate_limiter: &RateLimiter,
+    event_tx: broadcast::Sender<WsEvent>,
+    call_counts: &Option<CallCounts>,
+) -> anyhow::Result<()> {
+    let (primary_type, secondary_type) = prompt::classify_question(question);
+    let user_prompt = match mode {
+        SuggestionMode::Secondary => {
+            if let Some(sec_type) = secondary_type {
+                prompt::build_user_prompt_for_type(question, transcript, sec_type)
+            } else {
+                prompt::build_user_prompt(question, transcript)
+            }
+        }
+        SuggestionMode::Compound => {
+            if let Some(sec_type) = secondary_type {
+                prompt::build_compound_user_prompt(question, transcript, primary_type, sec_type)
+            } else {
+                prompt::build_user_prompt(question, transcript)
+            }
+        }
+        SuggestionMode::Primary => prompt::build_user_prompt_for_type(question, transcript, primary_type),
+    };
+    suggest_with_fallback(
+        gemini_key, anthropic_key, groq_key, groq_key_2,
+        openrouter_key, mistral_key, cerebras_key, qwen_key,
+        ollama_url, ollama_models, system_prompt, &user_prompt, mode,
+        rate_limiter, event_tx, call_counts,
+    ).await
 }

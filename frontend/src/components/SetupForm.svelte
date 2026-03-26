@@ -159,21 +159,23 @@
       const portfolioText = portfolioUrls.filter(u => u.trim()).join('\n');
       if (portfolioText) formData.append('portfolio_url', portfolioText);
 
-      // Append cached extracted text as plain-text files when no new file is selected
-      const cvTextToUse = cvFile ? '' : cvText;
-      const extraTextToUse = extraFile ? '' : extraFileText;
-      if (!extraFile && extraTextToUse) {
+      // Prefer pre-extracted text over re-uploading the raw file (avoids slow Gemini re-extraction)
+      if (extraFileText) {
         formData.append('extra_experience',
-          extraExperience ? `${extraExperience}\n\n${extraTextToUse}` : extraTextToUse);
+          extraExperience ? `${extraExperience}\n\n${extraFileText}` : extraFileText);
+      } else if (extraFile) {
+        formData.append('extra_file', extraFile);
+        formData.append('extra_experience', extraExperience);
       } else {
         formData.append('extra_experience', extraExperience);
       }
-      if (cvFile) {
+      if (cvText) {
+        // Use pre-extracted text — fast, no Gemini call needed on backend
+        formData.append('cv_file', new Blob([cvText], { type: 'text/plain' }), `${cvFilename || 'cv'}.txt`);
+      } else if (cvFile) {
+        // No extraction yet — upload raw file (backend will extract)
         formData.append('cv_file', cvFile);
-      } else if (cvTextToUse) {
-        formData.append('cv_file', new Blob([cvTextToUse], { type: 'text/plain' }), `${cvFilename || 'cv'}.txt`);
       }
-      if (extraFile) formData.append('extra_file', extraFile);
 
       loadingStep = 'Generating your coaching profile…';
       const result = await submitSetup(formData);
@@ -334,6 +336,12 @@
         <span class="file-chosen">{extractingCv ? '⏳ Extracting…' : `✓ ${cvFile.name}`}</span>
       {/if}
       <small>Supported: PDF, Word, PowerPoint, Excel, CSV, plain text, images</small>
+      {#if cvText}
+        <details class="extracted-preview">
+          <summary>Extracted text ({cvText.length.toLocaleString()} chars) — click to view/edit</summary>
+          <textarea class="extracted-text" bind:value={cvText} rows={8}></textarea>
+        </details>
+      {/if}
     </div>
 
     <div class="field">
@@ -394,6 +402,12 @@
         {#if extraFile}<span class="file-chosen">{extractingExtra ? '⏳ Extracting…' : `✓ ${extraFile.name}`}</span>{/if}
       </div>
       <small>Supported: PDF, Word, PowerPoint (.pptx), Excel (.xlsx), CSV, images — text is extracted automatically</small>
+      {#if extraFileText}
+        <details class="extracted-preview">
+          <summary>Extracted text ({extraFileText.length.toLocaleString()} chars) — click to view/edit</summary>
+          <textarea class="extracted-text" bind:value={extraFileText} rows={6}></textarea>
+        </details>
+      {/if}
     </div>
 
     <button onclick={handleSubmit} disabled={loading} class="btn-primary">
@@ -516,6 +530,19 @@
     margin-top: 0.5rem; padding: 1rem; background: #1e293b;
     border-radius: 0.5rem; white-space: pre-wrap; font-size: var(--fs-sm);
     color: #94a3b8; max-height: 50vh; overflow: auto; resize: vertical;
+  }
+  .extracted-preview { margin-top: 0.5rem; }
+  .extracted-preview summary {
+    cursor: pointer; font-size: var(--fs-sm); color: #60a5fa;
+    user-select: none; list-style: none;
+  }
+  .extracted-preview summary::before { content: '▶ '; font-size: 0.6rem; }
+  .extracted-preview[open] summary::before { content: '▼ '; }
+  .extracted-text {
+    margin-top: 0.4rem; width: 100%; padding: 0.65rem 0.75rem;
+    background: #0f172a; border: 1px solid #1e293b; border-radius: 0.5rem;
+    color: #94a3b8; font-size: var(--fs-sm); font-family: monospace;
+    resize: vertical; min-height: 8rem;
   }
   .btn-primary {
     padding: 0.75rem 2rem; background: #3b82f6; color: white;

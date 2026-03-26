@@ -4,6 +4,7 @@
   import { parseSuggestion, parseCues, getAnswerType } from '../lib/parseSuggestion';
   import PanelHeader from './PanelHeader.svelte';
   import { PracticeRecorder } from '../lib/practiceRecorder';
+  import { authFetch } from '../lib/api';
 
   // Expand-cue state: cue text → { sentence, loading }
   let expandedCues = $state<Record<string, { sentence: string; loading: boolean }>>({});
@@ -19,7 +20,7 @@
     if (expandedCues[cue]?.loading) return;  // fetch already in flight
     expandedCues = { ...expandedCues, [cue]: { sentence: '', loading: true } };
     try {
-      const r = await fetch('/api/expand-cue', {
+      const r = await authFetch('/api/expand-cue', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question, cue }),
       });
@@ -184,12 +185,25 @@
 
   function setActiveMode(i: number, mode: 'compound' | 'primary' | 'secondary') {
     activeModes = { ...activeModes, [i]: mode };
+    // Fetch on demand if not yet generated
+    const entry = suggestions[i];
+    if (!entry) return;
+    const isEmpty = mode === 'primary' ? !entry.suggestion && !entry.streaming
+                  : mode === 'secondary' ? !entry.secondarySuggestion && !entry.secondaryStreaming
+                  : false;
+    if (isEmpty && (mode === 'primary' || mode === 'secondary')) {
+      authFetch('/api/suggest-mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: entry.question, mode }),
+      }).catch(() => {});
+    }
   }
 
   function getModeContent(mode: 'compound' | 'primary' | 'secondary', entry: import('../lib/types').SuggestionEntry): string {
     if (mode === 'compound') return entry.compoundSuggestion ?? '';
     if (mode === 'secondary') return entry.secondarySuggestion ?? '';
-    return entry.suggestion;
+    return entry.suggestion ?? '';
   }
 
   function getModeStreaming(mode: 'compound' | 'primary' | 'secondary', entry: import('../lib/types').SuggestionEntry): boolean {
@@ -273,12 +287,15 @@
         <span class="tp-active-q-text">"{current.question}"</span>
       </div>
 
-      {@const parsed = parseSuggestion(tpSuggestion)}
+      {@const tpMode = current.secondaryTag ? getActiveMode(currentIndex, current) : 'primary'}
+      {@const tpSuggestion = getModeContent(tpMode, current)}
+      {@const tpStreaming = getModeStreaming(tpMode, current)}
+      {@const parsedText = typeof tpSuggestion === 'string' ? tpSuggestion : ''}
+      {@const parsed = parseSuggestion(parsedText)}
       {@const bodyCues = parsed.body ? parseCues(parsed.body) : []}
       {@const ansType = getAnswerType(parsed, tpMode === 'compound' ? undefined : current.tag)}
       {#if ansType.framework && !tpStreaming}
         <div class="tp-breadcrumb">
-          {#if current.tag}{@const tc = TAG_CONFIG[current.tag]}<span class="tp-bc-q" style="color:{tc.color}">{tc.label}</span><span class="tp-bc-sep">·</span>{/if}
           <span class="tp-bc-a">{ansType.label}</span>
         </div>
       {/if}
@@ -314,10 +331,6 @@
         </div>
       {/if}
 
-      {@const tpMode = current.secondaryTag ? getActiveMode(currentIndex, current) : 'primary'}
-      {@const tpSuggestion = getModeContent(tpMode, current)}
-      {@const tpStreaming = getModeStreaming(tpMode, current)}
-
       <div class="tp-card">
         {#if current.redFlag}
           <div class="tp-redflag">
@@ -326,7 +339,9 @@
           </div>
         {/if}
 
-        {#if tpStreaming && !tpSuggestion}
+        {#if !tpSuggestion && !tpStreaming && (tpMode === 'primary' || tpMode === 'secondary') && current.secondaryTag}
+          <span class="tp-loading tp-loading-pending">Click to generate {tpMode} coaching…</span>
+        {:else if tpStreaming && !tpSuggestion}
           <span class="tp-loading">Generating<span class="dots">...</span></span>
         {:else}
           {@const isIntro    = !!(parsed.present || parsed.thread || parsed.past || parsed.future)}
@@ -573,6 +588,15 @@
           {/if}<!-- end behavioral/competency else -->
 
         {/if}<!-- end streaming check -->
+
+        <!-- Raw-text fallback: if no parsed sections rendered but text exists -->
+        {#if tpSuggestion && !tpStreaming && !parsed.acknowledge && !parsed.tell && !parsed.present && !parsed.company && !parsed.direction && parsed.asks.length === 0}
+          <div class="tp-raw-fallback">
+            {#each tpSuggestion.split('\n').filter(l => l.trim()) as line}
+              <p class="tp-raw-line">{line}</p>
+            {/each}
+          </div>
+        {/if}
 
         <!-- Peek sections: other modes available inline -->
         {#if current.secondaryTag}
@@ -1166,6 +1190,11 @@
   }
   .tp-loading {
     color: #4d94d4; font-style: italic; font-size: var(--fs-base);
+  }
+  .tp-raw-fallback { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.25rem 0; }
+  .tp-raw-line { font-size: var(--fs-sm); color: #94a3b8; line-height: 1.5; margin: 0; }
+  .tp-loading-pending {
+    color: #334155;
   }
   .tp-empty {
     flex: 1; display: flex; align-items: center; justify-content: center;

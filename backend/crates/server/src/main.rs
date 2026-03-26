@@ -231,6 +231,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/next-steps", post(http_handler::handle_next_steps))
         .route("/api/presence-check", post(http_handler::handle_presence_check))
         .route("/api/simulate-question", post(http_handler::handle_simulate_question))
+        .route("/api/suggest-mode", post(http_handler::handle_suggest_mode))
         .route("/api/predict-questions", post(http_handler::handle_predict_questions))
         .route("/api/enrich", post(http_handler::handle_enrich))
         .route("/api/interviewer-summaries", post(http_handler::handle_interviewer_summaries))

@@ -29,7 +29,8 @@ export interface ParsedSuggestion {
   transition3: string;
 }
 
-export function parseSuggestion(text: string): ParsedSuggestion {
+export function parseSuggestion(text: string | null | undefined): ParsedSuggestion {
+  if (typeof text !== 'string') { text = String(text ?? ''); }
   const lines = text.split('\n');
   let acknowledge = '', solve = '', bridge = '', close = '', affirm = '', tell = '', cue = 'Answer';
   let present = '', thread = '', past = '', future = '';
@@ -264,7 +265,8 @@ function extractTypeTag(text: string): string {
   return m ? m[1] : '';
 }
 
-export function parseCues(body: string): { label: string; text: string; typeTag: string; title: string }[] {
+export function parseCues(body: string | null | undefined): { label: string; text: string; typeTag: string; title: string }[] {
+  if (!body) return [];
   return body.split('\n')
     .map(l => l.trim())
     .filter(l => l.match(/^(Principle|Context|Action|Result|Point|Metric|General|Example|Story|Pivot):\s*.+/i))

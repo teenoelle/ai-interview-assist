@@ -1,17 +1,15 @@
 <script lang="ts">
   import type { TranscriptEntry, SuggestionEntry } from '../lib/types';
-  import type { ReviewReport, ReviewSummary } from './ReviewPanel.svelte';
 
-  const { transcript, suggestions, onClose, onSave, onOpenReport, recordingUrl } = $props<{
+  const { transcript, suggestions, onClose, onSave, recordingUrl } = $props<{
     transcript: TranscriptEntry[];
     suggestions: SuggestionEntry[];
     onClose: () => void;
     onSave?: (result: DebriefResult) => void;
-    onOpenReport?: (report: ReviewReport) => void;
     recordingUrl?: string;
   }>();
 
-  type Tab = 'review' | 'recording' | 'reports';
+  type Tab = 'review' | 'qa' | 'recording';
   let activeTab = $state<Tab>('review');
 
   interface DebriefResult {
@@ -26,41 +24,13 @@
   let result = $state<DebriefResult | null>(null);
   let error = $state('');
   let copied = $state(false);
+  let saved = $state(false);
   let emailTo = $state(localStorage.getItem('debrief-email') ?? '');
   let emailSent = $state(false);
   let nextSteps = $state<string[]>([]);
   let loadingNextSteps = $state(false);
-  let reportList = $state<ReviewSummary[]>([]);
-  let reportsLoading = $state(false);
-  let reportSearch = $state('');
-  const filteredReports = $derived(
-    reportSearch.trim()
-      ? reportList.filter(r => (r.source_filename ?? '').toLowerCase().includes(reportSearch.toLowerCase()))
-      : reportList
-  );
 
-  async function toggleReports() {
-    if (reportList.length === 0) {
-      reportsLoading = true;
-      try {
-        const resp = await fetch('/api/reviews');
-        if (resp.ok) reportList = await resp.json();
-      } catch { /* ignore */ }
-      reportsLoading = false;
-    }
-  }
-
-  async function openReport(id: string) {
-    try {
-      const resp = await fetch(`/api/review/${id}`);
-      if (resp.ok) { onOpenReport?.(await resp.json()); onClose(); }
-    } catch { /* ignore */ }
-  }
-
-  async function deleteReport(id: string) {
-    await fetch(`/api/review/${id}`, { method: 'DELETE' });
-    reportList = reportList.filter(r => r.id !== id);
-  }
+  const qaEntries = $derived(suggestions.filter(s => s.question && s.suggestion));
 
   async function fetchNextSteps() {
     if (transcript.length === 0) return;
@@ -158,11 +128,11 @@
       <button class="tab" class:active={activeTab === 'review'} onclick={() => activeTab = 'review'}>
         AI Review
       </button>
-      <button class="tab" class:active={activeTab === 'recording'} onclick={() => { activeTab = 'recording'; }}>
-        Recording
+      <button class="tab" class:active={activeTab === 'qa'} onclick={() => activeTab = 'qa'}>
+        Q&amp;A {qaEntries.length > 0 ? `(${qaEntries.length})` : ''}
       </button>
-      <button class="tab" class:active={activeTab === 'reports'} onclick={() => { activeTab = 'reports'; if (reportList.length === 0) toggleReports(); }}>
-        Past Reports {reportList.length > 0 ? `(${reportList.length})` : ''}
+      <button class="tab" class:active={activeTab === 'recording'} onclick={() => activeTab = 'recording'}>
+        Recording
       </button>
     </div>
 
@@ -262,57 +232,63 @@
         {/if}
       {/if}
 
-      <!-- Past Reports tab -->
-      {#if activeTab === 'reports'}
-        <section class="reports-section">
-          {#if reportsLoading}
-            <p class="steps-loading">Loading reports…</p>
-          {:else if reportList.length === 0}
-            <p class="steps-empty">No reports yet. Upload a recording from the home screen to get started.</p>
+      <!-- Q&A tab -->
+      {#if activeTab === 'qa'}
+        <section class="qa-section">
+          {#if qaEntries.length === 0}
+            <p class="steps-empty">No questions detected this session.</p>
           {:else}
-            <input class="report-search" type="text" placeholder="Search reports…" bind:value={reportSearch} />
-            {#if filteredReports.length === 0}
-              <p class="steps-empty">No matching reports.</p>
-            {:else}
-              <div class="report-list">
-                {#each filteredReports as r}
-                  <div class="report-item">
-                    <div class="report-meta">
-                      <span class="report-name">{r.source_filename ?? 'Untitled'}</span>
-                      <span class="report-date">{r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}</span>
-                    </div>
-                    <p class="report-summary">{r.qa_count} Q&A · {r.avg_wpm} wpm · {Math.round(r.you_pct)}% you</p>
-                    <div class="report-actions">
-                      <button class="report-open" onclick={() => openReport(r.id)}>Open →</button>
-                      <button class="report-delete" onclick={() => deleteReport(r.id)}>Delete</button>
-                    </div>
-                  </div>
-                {/each}
+            {#each qaEntries as entry, i}
+              <div class="qa-item">
+                <div class="qa-q"><span class="qa-num">{i + 1}</span>{entry.question}</div>
+                <div class="qa-coaching">{entry.suggestion}</div>
               </div>
-            {/if}
+            {/each}
           {/if}
         </section>
       {/if}
 
     </div>
 
-    <!-- Email footer — only on AI Review tab when result is ready -->
-    {#if result && activeTab === 'review'}
-      <div class="email-footer">
-        <span class="email-footer-label">Email debrief to myself</span>
-        <input
-          class="email-input"
-          type="email"
-          placeholder="you@email.com"
-          bind:value={emailTo}
-          onkeydown={(e) => { if (e.key === 'Enter') sendDebriefEmail(); }}
-        />
-        <button
-          class="send-btn"
-          class:sent={emailSent}
-          onclick={sendDebriefEmail}
-          disabled={!emailTo.trim() || !result}
-        >{emailSent ? '✓ Opening…' : 'Send'}</button>
+    <!-- Footer -->
+    {#if result}
+      <div class="modal-footer">
+        <div class="footer-left">
+          <button
+            class="save-btn"
+            class:saved
+            onclick={() => {
+              const text = composeDebriefText();
+              const blob = new Blob([text], { type: 'text/plain' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `debrief-${new Date().toISOString().slice(0,10)}.txt`;
+              a.click();
+              URL.revokeObjectURL(url);
+              saved = true;
+              setTimeout(() => { saved = false; }, 2500);
+            }}
+          >{saved ? '✓ Saved!' : 'Save Report'}</button>
+        </div>
+        {#if activeTab === 'review'}
+          <div class="footer-email">
+            <span class="email-footer-label">Email to myself</span>
+            <input
+              class="email-input"
+              type="email"
+              placeholder="you@email.com"
+              bind:value={emailTo}
+              onkeydown={(e) => { if (e.key === 'Enter') sendDebriefEmail(); }}
+            />
+            <button
+              class="send-btn"
+              class:sent={emailSent}
+              onclick={sendDebriefEmail}
+              disabled={!emailTo.trim()}
+            >{emailSent ? '✓ Opening…' : 'Send'}</button>
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -398,7 +374,7 @@
   .loading { color: #60a5fa; font-style: italic; text-align: center; padding: 2rem; }
   .error { color: #fca5a5; padding: 1rem; background: #450a0a; border-radius: 0.5rem; }
 
-  .email-footer {
+  .modal-footer {
     display: flex;
     align-items: center;
     gap: 0.6rem;
@@ -408,6 +384,22 @@
     background: #080f1c;
     border-radius: 0 0 0.75rem 0.75rem;
   }
+  .footer-left { display: flex; align-items: center; flex-shrink: 0; }
+  .footer-email { display: flex; align-items: center; gap: 0.6rem; flex: 1; justify-content: flex-end; }
+  .save-btn {
+    padding: 0.3rem 1rem;
+    background: #1d4ed8;
+    border: none;
+    border-radius: 0.3rem;
+    color: white;
+    font-size: var(--fs-base);
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .save-btn:hover { background: #2563eb; }
+  .save-btn.saved { background: #166534; }
   .email-footer-label {
     font-size: var(--fs-sm);
     color: #475569;
@@ -450,33 +442,22 @@
   }
   .recording-download:hover { border-color: #60a5fa; background: #1e3a5f; }
   .recording-empty { display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem 0; }
-  .reports-section { display: flex; flex-direction: column; gap: 0.5rem; }
-.report-search {
-    width: 100%; padding: 0.35rem 0.6rem; background: #0f172a;
-    border: 1px solid #1e293b; border-radius: 0.3rem; color: #e2e8f0;
-    font-size: var(--fs-sm); outline: none;
+  .qa-section { display: flex; flex-direction: column; gap: 0.75rem; }
+  .qa-item {
+    background: #060e1a; border: 1px solid #1a2d4a; border-radius: 0.4rem;
+    padding: 0.65rem 0.8rem; display: flex; flex-direction: column; gap: 0.4rem;
   }
-  .report-search:focus { border-color: #3b82f6; }
-  .report-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: 240px; overflow-y: auto; }
-  .report-item {
-    background: #060e1a; border: 1px solid #1e293b; border-radius: 0.35rem;
-    padding: 0.5rem 0.65rem; display: flex; flex-direction: column; gap: 0.2rem;
+  .qa-q {
+    font-size: var(--fs-sm); font-weight: 700; color: #93c5fd;
+    display: flex; gap: 0.5rem; align-items: baseline; line-height: 1.4;
   }
-  .report-meta { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
-  .report-name { font-size: var(--fs-sm); font-weight: 600; color: #cbd5e1; }
-  .report-date { font-size: var(--fs-xs); color: #475569; }
-  .report-summary { font-size: var(--fs-xs); color: #64748b; margin: 0; }
-  .report-actions { display: flex; gap: 0.4rem; }
-  .report-open {
-    background: #1e3a5f; border: 1px solid #3b82f6; color: #93c5fd;
-    font-size: var(--fs-xs); font-weight: 700; padding: 0.15rem 0.5rem;
-    border-radius: 0.25rem; cursor: pointer; transition: all 0.12s;
+  .qa-num {
+    font-size: var(--fs-xs); color: #334155; font-weight: 700;
+    background: #0d1f35; border: 1px solid #1e3a5f; border-radius: 0.25rem;
+    padding: 0 0.3em; line-height: 1.6; flex-shrink: 0;
   }
-  .report-open:hover { background: #2d4f7c; }
-  .report-delete {
-    background: none; border: 1px solid #4b1a1a; color: #ef4444;
-    font-size: var(--fs-xs); padding: 0.15rem 0.5rem;
-    border-radius: 0.25rem; cursor: pointer; transition: all 0.12s;
+  .qa-coaching {
+    font-size: var(--fs-sm); color: #94a3b8; line-height: 1.55;
+    white-space: pre-wrap;
   }
-  .report-delete:hover { background: #2d0a0a; }
 </style>

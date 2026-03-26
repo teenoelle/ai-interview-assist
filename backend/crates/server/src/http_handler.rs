@@ -582,6 +582,50 @@ pub async fn handle_simulate_question(
     Ok(StatusCode::OK)
 }
 
+#[derive(serde::Deserialize)]
+pub struct SuggestModeRequest {
+    pub question: String,
+    pub mode: String, // "primary" | "secondary"
+}
+
+pub async fn handle_suggest_mode(
+    State(state): State<AppState>,
+    Json(req): Json<SuggestModeRequest>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let q = req.question.trim().to_string();
+    if q.is_empty() { return Err((StatusCode::BAD_REQUEST, "Question is empty".to_string())); }
+    let mode = match req.mode.as_str() {
+        "secondary" => common::messages::SuggestionMode::Secondary,
+        _ => common::messages::SuggestionMode::Primary,
+    };
+    let sp = state.system_prompt.read().await.clone();
+    let tr = state.transcript.read().await.clone();
+    let etx = state.event_tx.clone();
+    let gkey = state.gemini_key.clone();
+    let akey = state.anthropic_key.clone();
+    let grkey = state.groq_key.clone();
+    let grkey2 = state.groq_key_2.clone();
+    let orkey = state.openrouter_key.clone();
+    let mkey = state.mistral_key.clone();
+    let ckey = state.cerebras_key.clone();
+    let qkey = state.qwen_key.clone();
+    let ourl = state.ollama_url.clone();
+    let omodels = state.ollama_models.clone();
+    let rl = state.rate_limiter.clone();
+    let cc = Some(state.call_counts.clone());
+    tokio::spawn(async move {
+        if let Err(e) = suggestion::run_single(
+            &q, mode, &sp, &tr,
+            &gkey, akey.as_deref(), grkey.as_deref(), grkey2.as_deref(),
+            orkey.as_deref(), mkey.as_deref(), ckey.as_deref(), qkey.as_deref(),
+            &ourl, &omodels, &rl, etx, &cc,
+        ).await {
+            tracing::error!("suggest-mode error: {}", e);
+        }
+    });
+    Ok(StatusCode::OK)
+}
+
 #[derive(serde::Serialize)]
 pub struct PredictQuestionsResponse {
     pub questions: Vec<String>,

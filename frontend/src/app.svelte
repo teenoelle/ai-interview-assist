@@ -1290,7 +1290,7 @@
       <SetupForm onSetupComplete={handleSetupComplete} />
       <div class="setup-review-row">
         <button class="setup-review-btn" onclick={() => showPastInterviews = true}>
-          Past Interviews
+          Reports
         </button>
         {#if reviewReport}
           <button class="setup-review-view-btn" onclick={() => { showReviewPanel = true; }}>
@@ -1425,7 +1425,7 @@
                   {/if}
                 {/each}
                 <div class="end-menu-divider"></div>
-                <button class="end-menu-item" onclick={() => { showPastInterviews = true; showEndMenu = false; }}>Past Interviews</button>
+                <button class="end-menu-item" onclick={() => { showPastInterviews = true; showEndMenu = false; }}>Reports</button>
               </div>
             {/if}
           </div>

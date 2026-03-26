@@ -255,7 +255,7 @@
   <div class="panel" onclick={(e) => e.stopPropagation()} role="dialog">
 
     <div class="panel-header">
-      <h2>Past Interviews</h2>
+      <h2>Reports</h2>
       <button class="close-btn" onclick={onClose}>✕</button>
     </div>
 

@@ -11,6 +11,9 @@ frontend/dist/
 .env.txt
 *.env
 
+# Large model files (too big for GitHub)
+piper/voices/
+
 # Editor / OS
 .claude/
 *.DS_Store

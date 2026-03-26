@@ -3,7 +3,7 @@ WORKSPACE
 
 powershell:
 cd "D:\tee\work\code\ai interview assist"
-claude
+claude --dangerously-skip-permissions
 
 cd "D:\tee\work\code\ai interview assist\backend"
   Start-Process .\target\release\server.exe -WorkingDirectory (Get-Location)

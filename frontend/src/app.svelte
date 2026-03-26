@@ -1403,26 +1403,27 @@
                   }}
                 >{savingLiveReport ? 'Saving…' : 'Save Report'}</button>
                 <div class="end-menu-divider"></div>
-                {@const transcriptKeys = Object.keys(localStorage).filter(k => k.startsWith('transcript_'))}
-                {#if transcriptKeys.length === 0}
-                  <div class="end-menu-empty">No saved transcripts</div>
-                {:else}
-                  <div class="end-menu-section">Download Transcript</div>
-                  {#each transcriptKeys as key}
-                    <button class="end-menu-item end-menu-transcript" onclick={() => {
-                      const data = localStorage.getItem(key);
-                      if (data) {
-                        const entries = JSON.parse(data);
-                        const lines = entries.map((e: any) => `[${new Date(e.timestamp_ms).toLocaleTimeString()}] ${e.speaker}: ${e.text}`);
-                        const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a'); a.href = url; a.download = key + '.txt'; a.click();
-                        URL.revokeObjectURL(url);
-                      }
-                      showEndMenu = false;
-                    }}>📄 {key.replace('transcript_', '')}</button>
-                  {/each}
-                {/if}
+                {#each [Object.keys(localStorage).filter(k => k.startsWith('transcript_'))] as transcriptKeys}
+                  {#if transcriptKeys.length === 0}
+                    <div class="end-menu-empty">No saved transcripts</div>
+                  {:else}
+                    <div class="end-menu-section">Download Transcript</div>
+                    {#each transcriptKeys as key}
+                      <button class="end-menu-item end-menu-transcript" onclick={() => {
+                        const data = localStorage.getItem(key);
+                        if (data) {
+                          const entries = JSON.parse(data);
+                          const lines = entries.map((e: any) => `[${new Date(e.timestamp_ms).toLocaleTimeString()}] ${e.speaker}: ${e.text}`);
+                          const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a'); a.href = url; a.download = key + '.txt'; a.click();
+                          URL.revokeObjectURL(url);
+                        }
+                        showEndMenu = false;
+                      }}>📄 {key.replace('transcript_', '')}</button>
+                    {/each}
+                  {/if}
+                {/each}
                 <div class="end-menu-divider"></div>
                 <button class="end-menu-item" onclick={() => { showPastInterviews = true; showEndMenu = false; }}>Past Interviews</button>
               </div>

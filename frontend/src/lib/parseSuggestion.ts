@@ -29,7 +29,7 @@ export interface ParsedSuggestion {
   transition3: string;
 }
 
-export function parseSuggestion(text: string | null | undefined): ParsedSuggestion {
+export function parseSuggestion(text: string | null | undefined, streaming = false): ParsedSuggestion {
   if (typeof text !== 'string') { text = String(text ?? ''); }
   const lines = text.split('\n');
   let acknowledge = '', solve = '', bridge = '', close = '', affirm = '', tell = '', cue = 'Answer';
@@ -227,9 +227,53 @@ export function parseSuggestion(text: string | null | undefined): ParsedSuggesti
     }
   }
 
-  return { acknowledge, solve, bridge, close, affirm, cue, tell, body, cues: [], asks, strategies,
-    present, thread, past, future, company, role, self, direction, alignment, contribution,
-    transition1, transition2, transition3 };
+  const sc = streaming ? (s: string) => s : stripClicheWords;
+  return {
+    acknowledge: sc(acknowledge), solve: sc(solve), bridge: sc(bridge), close: sc(close),
+    affirm: sc(affirm), cue, tell: sc(tell), body, cues: [], asks, strategies,
+    present: sc(present), thread: sc(thread), past: sc(past), future: sc(future),
+    company: sc(company), role: sc(role), self: sc(self),
+    direction: sc(direction), alignment: sc(alignment), contribution: sc(contribution),
+    transition1: sc(transition1), transition2: sc(transition2), transition3: sc(transition3),
+  };
+}
+
+// ── Cliché adjective/adverb blocklist ─────────────────────────────────────────
+// Fallback for words that slip through despite prompt instructions.
+// Phrase replacements run first to preserve grammar, then standalone word removal.
+
+const CLICHE_REPLACEMENTS: [RegExp, string][] = [
+  // "passionate about/for/in" → "focused on"
+  [/\bpassionate(?:\s+(?:about|for|in))?\b/gi, 'focused on'],
+  // "I am/I'm excited about/to" → keep verb, drop adjective
+  [/\b(I(?:'m| am))\s+excited\s+(?:about|to)\b/gi, '$1 focused on'],
+  [/\bexcited\s+(?:about|to|by)\b/gi, 'focused on'],
+  // "committed/dedicated to" as standalone predicate
+  [/\b(I(?:'m| am))\s+(?:committed|dedicated)\s+to\b/gi, 'I'],
+  // common filler predicates
+  [/\b(I(?:'m| am))\s+(?:thrilled|honored|humbled|grateful)\s+to\b/gi, 'I'],
+];
+
+// Precompiled word regexes — built once at module load, not on every call
+const CLICHE_WORD_PATTERNS: RegExp[] = [
+  'highly', 'incredibly', 'extremely', 'truly', 'deeply', 'strongly',
+  'effectively', 'efficiently', 'seamlessly', 'proactively', 'consistently',
+  'rapidly', 'clearly', 'obviously', 'certainly', 'definitely', 'naturally',
+  'genuinely', 'actively', 'essentially', 'fundamentally',
+  'exceptional', 'innovative', 'dynamic', 'robust', 'powerful', 'impactful',
+  'meaningful', 'comprehensive', 'outstanding', 'remarkable',
+].map(w => new RegExp(`\\b${w}\\s+(?=\\S)`, 'gi'));
+
+function stripClicheWords(text: string): string {
+  if (!text) return text;
+  for (const [pattern, replacement] of CLICHE_REPLACEMENTS) {
+    text = text.replace(pattern, replacement);
+  }
+  for (const pattern of CLICHE_WORD_PATTERNS) {
+    pattern.lastIndex = 0; // reset stateful global regex before each use
+    text = text.replace(pattern, '');
+  }
+  return text.replace(/\s{2,}/g, ' ').replace(/\s([.,;?!])/g, '$1').trim();
 }
 
 export function getAnswerType(
@@ -237,20 +281,20 @@ export function getAnswerType(
   tag?: string,
 ): { framework: string; label: string } {
   // Tag-specific overrides for types that share STAR fields but have distinct coaching frames
-  if (tag === 'weaknesses')  return { framework: 'Weakness',    label: 'Real → Growth → Evidence → Redirect' };
-  if (tag === 'situational') return { framework: 'Situational', label: 'Stakes → Approach → Reasoning → Close' };
-  if (tag === 'strengths')   return { framework: 'Strengths',   label: 'Acknowledge → Strengths → Close' };
+  if (tag === 'weaknesses')  return { framework: 'A: Weakness',    label: 'Real → Growth → Evidence → Redirect' };
+  if (tag === 'situational') return { framework: 'A: Situational', label: 'Stakes → Approach → Reasoning → Close' };
+  if (tag === 'strengths')   return { framework: 'A: Strengths',   label: 'Acknowledge → Strengths → Close' };
 
   if (parsed.present || parsed.thread || parsed.past || parsed.future)
-    return { framework: 'Intro', label: 'Summary → Story → Next' };
+    return { framework: 'A: Intro', label: 'Summary → Story → Next' };
   if (parsed.company || parsed.role || parsed.self)
-    return { framework: 'Motivation', label: 'Company → Role → Self' };
+    return { framework: 'A: Motivation', label: 'Company → Role → Self' };
   if (parsed.direction || parsed.alignment || parsed.contribution)
-    return { framework: 'Future', label: 'Direction → Alignment → Contribution' };
+    return { framework: 'A: Future', label: 'Direction → Alignment → Contribution' };
   if (parsed.asks.length >= 3 && !parsed.acknowledge && !parsed.tell)
-    return { framework: 'Closing', label: 'Questions to Ask' };
+    return { framework: 'A: Closing', label: 'Questions to Ask' };
   if (parsed.tell || parsed.acknowledge)
-    return { framework: 'STAR', label: 'Acknowledge → Answer → Close' };
+    return { framework: 'A: STAR', label: 'Acknowledge → Answer → Close' };
   return { framework: '', label: '' };
 }
 
@@ -265,10 +309,16 @@ function extractTypeTag(text: string): string {
   return m ? m[1] : '';
 }
 
+export function getSectionLabels(tag?: string): { ack: string; solve: string; bridge: string; answer: string } {
+  if (tag === 'weaknesses')  return { ack: 'Real',    solve: 'Growth',   bridge: 'Evidence',  answer: 'Redirect' };
+  if (tag === 'situational') return { ack: 'Stakes',  solve: 'Approach', bridge: 'Reasoning', answer: 'Answer'   };
+  return { ack: 'Acknowledge', solve: 'Solve', bridge: 'Bridge', answer: 'Answer' };
+}
+
 export function parseCues(body: string | null | undefined): { label: string; text: string; typeTag: string; title: string }[] {
   if (!body) return [];
   return body.split('\n')
-    .map(l => l.trim())
+    .map(l => l.trim().replace(/^\*+([^*]+)\*+\s*/, '$1 ').trim())
     .filter(l => l.match(/^(Principle|Context|Action|Result|Point|Metric|General|Example|Story|Pivot):\s*.+/i))
     .map(l => {
       const m = l.match(/^(\w+):\s*(.+)/i)!;

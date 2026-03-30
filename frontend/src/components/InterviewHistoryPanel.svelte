@@ -9,21 +9,6 @@
   let records = $state<InterviewRecord[]>(loadHistory());
   let expandedId = $state<string | null>(null);
 
-  const weakSpots = $derived((() => {
-    const freq: Record<string, number> = {};
-    for (const r of records) {
-      for (const area of r.improvement_areas) {
-        const key = area.toLowerCase().split(/\s+/).slice(0, 6).join(' ');
-        freq[key] = (freq[key] ?? 0) + 1;
-      }
-    }
-    return Object.entries(freq)
-      .filter(([, n]) => n >= 2)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4)
-      .map(([key, count]) => ({ key, count }));
-  })());
-
   function remove(id: string) {
     deleteRecord(id);
     records = loadHistory();
@@ -49,18 +34,6 @@
       {#if records.length === 0}
         <p class="empty">No interviews saved yet. Complete an interview and close the debrief to save.</p>
       {:else}
-        {#if weakSpots.length > 0}
-          <div class="weak-section">
-            <div class="weak-title">Recurring Weak Spots</div>
-            {#each weakSpots as ws}
-              <div class="weak-item">
-                <span class="weak-text">{ws.key}</span>
-                <span class="weak-count">×{ws.count}</span>
-              </div>
-            {/each}
-          </div>
-        {/if}
-
         {#each records as r (r.id)}
           <div class="record" class:expanded={expandedId === r.id}>
             <button class="record-header" onclick={() => expandedId = expandedId === r.id ? null : r.id}>
@@ -104,42 +77,6 @@
   .close-btn { background: none; border: none; color: #64748b; font-size: 1rem; cursor: pointer; }
   .body { overflow-y: auto; padding: 0.75rem; display: flex; flex-direction: column; gap: 0.4rem; }
   .empty { color: #475569; font-style: italic; font-size: var(--fs-base); text-align: center; padding: 2rem; }
-
-  .weak-section {
-    padding: 0.6rem 0.75rem;
-    background: #0d0800;
-    border: 1px solid #78350f;
-    border-radius: 0.4rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    margin-bottom: 0.25rem;
-  }
-  .weak-title {
-    font-size: var(--fs-xs);
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    color: #f59e0b;
-    margin-bottom: 0.1rem;
-  }
-  .weak-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-  }
-  .weak-text {
-    font-size: 0.73rem;
-    color: #92400e;
-    line-height: 1.3;
-  }
-  .weak-count {
-    font-size: var(--fs-sm);
-    font-weight: 700;
-    color: #f59e0b;
-    flex-shrink: 0;
-    margin-left: 0.5rem;
-  }
 
   .record { background: #080d18; border: 1px solid #1e293b; border-radius: 0.4rem; overflow: hidden; }
   .record-header { width: 100%; display: flex; align-items: baseline; gap: 0.6rem; padding: 0.6rem 0.75rem; background: transparent; border: none; cursor: pointer; text-align: left; }

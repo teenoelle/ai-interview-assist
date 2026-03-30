@@ -70,6 +70,7 @@ async fn main() -> anyhow::Result<()> {
     let (event_tx, _event_rx) = broadcast::channel::<WsEvent>(512);
 
     let rate_limiter = RateLimiter::new();
+    let suggestion_rl = RateLimiter::new(); // separate bucket — prevents transcription from blocking suggestions
     let call_counts = Arc::new(std::sync::Mutex::new(std::collections::HashMap::<String, u64>::new()));
 
     let active = |k: &Option<String>| if k.is_some() { "yes" } else { "no" };
@@ -205,7 +206,7 @@ async fn main() -> anyhow::Result<()> {
         config.qwen_api_key.clone(),
         config.ollama_url.clone(),
         config.ollama_models.clone(),
-        rate_limiter.clone(),
+        suggestion_rl,
         Some(call_counts.clone()),
     ));
 
@@ -234,7 +235,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/suggest-mode", post(http_handler::handle_suggest_mode))
         .route("/api/predict-questions", post(http_handler::handle_predict_questions))
         .route("/api/enrich", post(http_handler::handle_enrich))
+        .route("/api/draft-followup", post(http_handler::handle_draft_followup))
         .route("/api/interviewer-summaries", post(http_handler::handle_interviewer_summaries))
+        .route("/api/interviewer-summary", post(http_handler::handle_interviewer_summary_single))
         .route("/api/usage", get(http_handler::handle_usage))
         .route("/api/tts/voices", get(tts_handler::handle_tts_voices))
         .route("/api/tts/speak", post(tts_handler::handle_speak))

@@ -1,27 +1,22 @@
 <script lang="ts">
-  import type { TranscriptEntry, SuggestionEntry } from '../lib/types';
+  import type { TranscriptEntry, SuggestionEntry, DebriefResult, PracticeAnswer } from '../lib/types';
+  import { TAG_CONFIG } from '../lib/questionTagger';
 
-  const { transcript, suggestions, onClose, onSave, recordingUrl } = $props<{
-    transcript: TranscriptEntry[];
-    suggestions: SuggestionEntry[];
+  const { transcript = [], suggestions = [], onClose, onSave, recordingUrl, prefilled, practiceAnswers = [] } = $props<{
+    transcript?: TranscriptEntry[];
+    suggestions?: SuggestionEntry[];
     onClose: () => void;
     onSave?: (result: DebriefResult) => void;
     recordingUrl?: string;
+    prefilled?: DebriefResult;
+    practiceAnswers?: PracticeAnswer[];
   }>();
 
-  type Tab = 'review' | 'qa' | 'recording';
+  type Tab = 'review' | 'timeline' | 'practice' | 'recording';
   let activeTab = $state<Tab>('review');
 
-  interface DebriefResult {
-    summary: string;
-    strong_points: string[];
-    improvement_areas: string[];
-    followup_email: string[];
-    followup_email_draft?: string;
-  }
-
-  let loading = $state(true);
-  let result = $state<DebriefResult | null>(null);
+  let loading = $state(!prefilled);
+  let result = $state<DebriefResult | null>(prefilled ?? null);
   let error = $state('');
   let copied = $state(false);
   let saved = $state(false);
@@ -30,7 +25,93 @@
   let nextSteps = $state<string[]>([]);
   let loadingNextSteps = $state(false);
 
-  const qaEntries = $derived(suggestions.filter(s => s.question && s.suggestion));
+  // ── Timeline Q&A ─────────────────────────────────────────────────────────────
+
+  interface DebriefQaEntry {
+    question: string;
+    tag?: string;
+    suggestion: string;
+    answerText: string;
+    coaching: string;
+    missedFollowup: boolean;
+    missedMetric: boolean;
+    wpm?: number;
+    confidenceScore?: number;
+    loadingCoaching: boolean;
+    suggestionOpen: boolean;
+  }
+
+  let debriefQa = $state<DebriefQaEntry[]>([]);
+
+  const simulatedSuggestions = $derived(
+    suggestions
+      .filter(s => s.question && s.suggestion && s.source === 'simulated')
+      .sort((a, b) => (a.detectedAt ?? 0) - (b.detectedAt ?? 0))
+  );
+
+  const totalPracticeCount = $derived(simulatedSuggestions.length + practiceAnswers.length);
+
+  function extractAnswer(detectedAt: number, nextDetectedAt: number): string {
+    return transcript
+      .filter(e =>
+        e.speaker === 'You' &&
+        e.timestamp_ms > detectedAt &&
+        (nextDetectedAt === 0 || e.timestamp_ms < nextDetectedAt)
+      )
+      .map(e => e.text)
+      .join(' ')
+      .trim();
+  }
+
+  function initDebriefQa() {
+    const sorted = [...suggestions]
+      .filter(s => s.question && s.suggestion && s.source !== 'simulated')
+      .sort((a, b) => (a.detectedAt ?? 0) - (b.detectedAt ?? 0));
+
+    debriefQa = sorted.map((s, i) => {
+      const nextAt = sorted[i + 1]?.detectedAt ?? 0;
+      const answerText = extractAnswer(s.detectedAt ?? 0, nextAt);
+      const hasCoaching = !!s.answerFeedback;
+      return {
+        question: s.question,
+        tag: s.tag,
+        suggestion: s.suggestion,
+        answerText,
+        coaching: s.answerFeedback?.coaching ?? '',
+        missedFollowup: s.answerFeedback?.missed_followup ?? false,
+        missedMetric: s.answerFeedback?.missed_metric ?? false,
+        wpm: s.vocalFeedback?.confidence_score ? undefined : undefined,
+        confidenceScore: s.vocalFeedback?.confidence_score,
+        loadingCoaching: !hasCoaching && !!answerText,
+        suggestionOpen: false,
+      };
+    });
+  }
+
+  async function fetchMissingCoaching() {
+    for (let i = 0; i < debriefQa.length; i++) {
+      const entry = debriefQa[i];
+      if (!entry.loadingCoaching) continue;
+      try {
+        const resp = await fetch('/api/answer-feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: entry.question, answer: entry.answerText, suggestion: entry.suggestion }),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          debriefQa[i] = { ...debriefQa[i], coaching: data.coaching, missedFollowup: data.missed_followup, missedMetric: data.missed_metric, loadingCoaching: false };
+        } else {
+          debriefQa[i] = { ...debriefQa[i], loadingCoaching: false };
+        }
+      } catch {
+        debriefQa[i] = { ...debriefQa[i], loadingCoaching: false };
+      }
+      debriefQa = [...debriefQa];
+    }
+  }
+
+  // ── Debrief fetch ─────────────────────────────────────────────────────────────
 
   async function fetchNextSteps() {
     if (transcript.length === 0) return;
@@ -67,7 +148,13 @@
     }
   }
 
-  fetchDebrief();
+  if (!prefilled) {
+    fetchDebrief();
+    initDebriefQa();
+    fetchMissingCoaching();
+  }
+
+  // ── Email / Save ──────────────────────────────────────────────────────────────
 
   async function copyEmail() {
     if (!result) return;
@@ -94,6 +181,39 @@
       result.improvement_areas.forEach(p => lines.push(`• ${p}`));
       lines.push('');
     }
+    if (debriefQa.length > 0) {
+      lines.push('Q&A COACHING');
+      lines.push('------------', '');
+      debriefQa.forEach((qa, i) => {
+        lines.push(`Q${i + 1}: ${qa.question}`);
+        if (qa.answerText) lines.push(`Your answer: ${qa.answerText}`);
+        if (qa.coaching) lines.push(`Coaching: ${qa.coaching}`);
+        const flags: string[] = [];
+        if (qa.missedFollowup) flags.push('Missing follow-up');
+        if (qa.missedMetric) flags.push('Missing metric');
+        if (flags.length) lines.push(`Watch: ${flags.join(' · ')}`);
+        if (qa.confidenceScore) lines.push(`Confidence: ${qa.confidenceScore}%`);
+        lines.push('');
+      });
+    }
+    if (simulatedSuggestions.length > 0 || practiceAnswers.length > 0) {
+      lines.push('PRACTICE ANSWERS');
+      lines.push('----------------', '');
+      simulatedSuggestions.forEach((s, i) => {
+        lines.push(`[Practice] Q${i + 1}: ${s.question}`);
+        if (s.suggestion) lines.push(`AI Suggestion: ${s.suggestion}`);
+        if (s.answerFeedback?.coaching) lines.push(`Coaching: ${s.answerFeedback.coaching}`);
+        lines.push('');
+      });
+      practiceAnswers.forEach((a, i) => {
+        lines.push(`[Recorded Practice] Q${simulatedSuggestions.length + i + 1}: ${a.question}`);
+        if (a.answerText) lines.push(`Your answer: ${a.answerText}`);
+        if (a.score !== undefined) lines.push(`Score: ${a.score}/100`);
+        if (a.coaching) lines.push(`Coaching: ${a.coaching}`);
+        if (a.vocalTone) lines.push(`Vocal tone: ${a.vocalTone}${a.vocalConfidence !== undefined ? ` (${a.vocalConfidence}%)` : ''}`);
+        lines.push('');
+      });
+    }
     if (result.followup_email_draft) {
       lines.push('---', 'FOLLOW-UP EMAIL DRAFT', '---', result.followup_email_draft);
     } else if (result.followup_email.length) {
@@ -108,7 +228,6 @@
     localStorage.setItem('debrief-email', emailTo.trim());
     const subject = encodeURIComponent('Interview Debrief');
     const body = encodeURIComponent(composeDebriefText());
-    // mailto: body has ~2000 char limit in some clients; truncate gracefully
     const href = `mailto:${encodeURIComponent(emailTo.trim())}?subject=${subject}&body=${body}`;
     window.open(href.slice(0, 2000), '_self');
     emailSent = true;
@@ -128,12 +247,17 @@
       <button class="tab" class:active={activeTab === 'review'} onclick={() => activeTab = 'review'}>
         AI Review
       </button>
-      <button class="tab" class:active={activeTab === 'qa'} onclick={() => activeTab = 'qa'}>
-        Q&amp;A {qaEntries.length > 0 ? `(${qaEntries.length})` : ''}
-      </button>
-      <button class="tab" class:active={activeTab === 'recording'} onclick={() => activeTab = 'recording'}>
-        Recording
-      </button>
+      {#if !prefilled}
+        <button class="tab" class:active={activeTab === 'timeline'} onclick={() => activeTab = 'timeline'}>
+          Timeline {debriefQa.length > 0 ? `(${debriefQa.length})` : ''}
+        </button>
+        <button class="tab" class:active={activeTab === 'practice'} onclick={() => activeTab = 'practice'}>
+          Practice {totalPracticeCount > 0 ? `(${totalPracticeCount})` : ''}
+        </button>
+        <button class="tab" class:active={activeTab === 'recording'} onclick={() => activeTab = 'recording'}>
+          Recording
+        </button>
+      {/if}
     </div>
 
     <div class="modal-body">
@@ -169,20 +293,22 @@
             </section>
           </div>
 
-          <section class="next-steps-section">
-            <h3 class="amber">Next Steps</h3>
-            {#if loadingNextSteps}
-              <p class="steps-loading">Extracting next steps...</p>
-            {:else if nextSteps.length > 0}
-              <ul>
-                {#each nextSteps as step}
-                  <li>{step}</li>
-                {/each}
-              </ul>
-            {:else}
-              <p class="steps-empty">No specific next steps mentioned in the interview.</p>
-            {/if}
-          </section>
+          {#if !prefilled}
+            <section class="next-steps-section">
+              <h3 class="amber">Next Steps</h3>
+              {#if loadingNextSteps}
+                <p class="steps-loading">Extracting next steps...</p>
+              {:else if nextSteps.length > 0}
+                <ul>
+                  {#each nextSteps as step}
+                    <li>{step}</li>
+                  {/each}
+                </ul>
+              {:else}
+                <p class="steps-empty">No specific next steps mentioned in the interview.</p>
+              {/if}
+            </section>
+          {/if}
 
           <section class="email-section">
             <div class="followup-header">
@@ -214,6 +340,145 @@
         {/if}
       {/if}
 
+      <!-- Timeline tab -->
+      {#if activeTab === 'timeline'}
+        <div class="timeline">
+          {#if debriefQa.length === 0}
+            <p class="steps-empty">No questions detected this session.</p>
+          {:else}
+            {#each debriefQa as qa, i}
+              <div class="tl-item">
+                <!-- Question -->
+                <div class="tl-q-row">
+                  {#if qa.tag}
+                    {@const tc = TAG_CONFIG[qa.tag]}
+                    <span class="tl-tag" style="color: {tc.color}; background: {tc.bg}">{tc.label}</span>
+                  {/if}
+                  <span class="tl-q-num">{i + 1}</span>
+                  <span class="tl-q-text">"{qa.question}"</span>
+                </div>
+
+                <!-- Candidate answer -->
+                {#if qa.answerText}
+                  <div class="tl-answer">
+                    <span class="tl-answer-label">You</span>
+                    <span class="tl-answer-text">{qa.answerText}</span>
+                  </div>
+                {/if}
+
+                <!-- Coaching card -->
+                <div class="tl-coaching">
+                  {#if qa.loadingCoaching}
+                    <span class="tl-coaching-loading">Analyzing answer…</span>
+                  {:else}
+                    {#if qa.coaching}
+                      <p class="tl-coaching-note">{qa.coaching}</p>
+                    {/if}
+                    {#if qa.missedFollowup || qa.missedMetric || qa.confidenceScore}
+                      <div class="tl-flags">
+                        {#if qa.missedMetric}
+                          <span class="tl-flag tl-flag-warn">Missing metric</span>
+                        {/if}
+                        {#if qa.missedFollowup}
+                          <span class="tl-flag tl-flag-warn">Missing follow-up</span>
+                        {/if}
+                        {#if qa.confidenceScore && qa.confidenceScore >= 70}
+                          <span class="tl-flag tl-flag-good">Strong answer</span>
+                        {/if}
+                      </div>
+                    {/if}
+                  {/if}
+
+                  <!-- AI suggestion toggle -->
+                  {#if qa.suggestion}
+                    <button
+                      class="tl-suggestion-toggle"
+                      onclick={() => {
+                        debriefQa[i] = { ...debriefQa[i], suggestionOpen: !debriefQa[i].suggestionOpen };
+                        debriefQa = [...debriefQa];
+                      }}
+                    >
+                      {debriefQa[i].suggestionOpen ? '▾' : '▸'} AI Suggestion
+                    </button>
+                    {#if debriefQa[i].suggestionOpen}
+                      <div class="tl-suggestion-text">{qa.suggestion}</div>
+                    {/if}
+                  {/if}
+                </div>
+              </div>
+            {/each}
+          {/if}
+        </div>
+      {/if}
+
+      <!-- Practice tab -->
+      {#if activeTab === 'practice'}
+        <div class="timeline">
+          {#if totalPracticeCount === 0}
+            <p class="steps-empty">No practice questions this session. Click questions in Example Questions or Practice Questions during the interview to practice here.</p>
+          {:else}
+            {#if simulatedSuggestions.length > 0}
+              <div class="practice-section-label">Example & Predicted Questions</div>
+              {#each simulatedSuggestions as s, i}
+                <div class="tl-item tl-item-practice">
+                  <div class="tl-q-row">
+                    {#if s.tag}
+                      {@const tc = TAG_CONFIG[s.tag]}
+                      <span class="tl-tag" style="color: {tc.color}; background: {tc.bg}">{tc.label}</span>
+                    {/if}
+                    <span class="tl-q-num">{i + 1}</span>
+                    <span class="tl-q-text">"{s.question}"</span>
+                    <span class="tl-practice-badge">Practice</span>
+                  </div>
+                  {#if s.suggestion}
+                    <div class="tl-coaching">
+                      <p class="tl-coaching-note tl-suggestion-text">{s.suggestion}</p>
+                      {#if s.answerFeedback?.coaching}
+                        <p class="tl-coaching-note" style="margin-top: 0.4rem">{s.answerFeedback.coaching}</p>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            {/if}
+            {#if practiceAnswers.length > 0}
+              <div class="practice-section-label" style="margin-top: {simulatedSuggestions.length > 0 ? '1rem' : '0'}">Recorded Practice Answers</div>
+              {#each practiceAnswers as pa, i}
+                <div class="tl-item tl-item-practice">
+                  <div class="tl-q-row">
+                    <span class="tl-q-num">{simulatedSuggestions.length + i + 1}</span>
+                    <span class="tl-q-text">"{pa.question}"</span>
+                    <span class="tl-practice-badge tl-practice-badge-recorded">Recorded</span>
+                  </div>
+                  {#if pa.answerText}
+                    <div class="tl-answer">
+                      <span class="tl-answer-label">You</span>
+                      <span class="tl-answer-text">{pa.answerText}</span>
+                    </div>
+                  {/if}
+                  <div class="tl-coaching">
+                    {#if pa.score !== undefined}
+                      <div class="tl-flags">
+                        <span class="tl-flag" style="color: {pa.score >= 70 ? '#22c55e' : pa.score >= 50 ? '#f59e0b' : '#ef4444'}; border-color: currentColor">Score: {pa.score}/100</span>
+                        {#if pa.vocalTone}
+                          <span class="tl-flag" style="color: #94a3b8; border-color: #334155">Tone: {pa.vocalTone}{pa.vocalConfidence !== undefined ? ` · ${pa.vocalConfidence}%` : ''}</span>
+                        {/if}
+                      </div>
+                    {/if}
+                    {#if pa.coaching}
+                      <p class="tl-coaching-note">{pa.coaching}</p>
+                    {/if}
+                    {#if pa.strong}
+                      <p class="tl-coaching-note" style="color: #4ade80">{pa.strong}</p>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+            {/if}
+          {/if}
+        </div>
+      {/if}
+
       <!-- Recording tab -->
       {#if activeTab === 'recording'}
         {#if recordingUrl}
@@ -230,22 +495,6 @@
             <p class="steps-empty">To record the app screen during a future interview, click <strong>Record App Screen</strong> when starting the meeting capture.</p>
           </div>
         {/if}
-      {/if}
-
-      <!-- Q&A tab -->
-      {#if activeTab === 'qa'}
-        <section class="qa-section">
-          {#if qaEntries.length === 0}
-            <p class="steps-empty">No questions detected this session.</p>
-          {:else}
-            {#each qaEntries as entry, i}
-              <div class="qa-item">
-                <div class="qa-q"><span class="qa-num">{i + 1}</span>{entry.question}</div>
-                <div class="qa-coaching">{entry.suggestion}</div>
-              </div>
-            {/each}
-          {/if}
-        </section>
       {/if}
 
     </div>
@@ -341,93 +590,129 @@
   .copy-btn {
     padding: 0.2rem 0.7rem; background: transparent;
     border: 1px solid #334155; border-radius: 0.25rem;
-    color: #64748b; font-size: var(--fs-sm); cursor: pointer;
-    transition: all 0.15s;
+    color: #64748b; font-size: var(--fs-sm); cursor: pointer; transition: all 0.15s;
   }
   .copy-btn:hover { border-color: #60a5fa; color: #60a5fa; }
   .copy-btn.copied { border-color: #4ade80; color: #4ade80; }
-
   .email-section { gap: 0.75rem; }
   .email-draft {
-    background: #060e1a;
-    border: 1px solid #1a2d4a;
-    border-radius: 0.5rem;
-    padding: 1rem 1.25rem;
-    font-family: 'Georgia', serif;
-    user-select: text;
-    cursor: text;
+    background: #060e1a; border: 1px solid #1a2d4a; border-radius: 0.5rem;
+    padding: 1rem 1.25rem; font-family: 'Georgia', serif; user-select: text; cursor: text;
   }
-  .email-subject {
-    font-size: var(--fs-base);
-    font-weight: 700;
-    color: #93c5fd;
-    margin-bottom: 0.5rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid #1a2d4a;
-  }
-  .email-line {
-    font-size: var(--fs-base);
-    color: #cbd5e1;
-    line-height: 1.7;
-  }
+  .email-subject { font-size: var(--fs-base); font-weight: 700; color: #93c5fd; margin-bottom: 0.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid #1a2d4a; }
+  .email-line { font-size: var(--fs-base); color: #cbd5e1; line-height: 1.7; }
   .email-blank { height: 0.7rem; }
   .loading { color: #60a5fa; font-style: italic; text-align: center; padding: 2rem; }
   .error { color: #fca5a5; padding: 1rem; background: #450a0a; border-radius: 0.5rem; }
 
+  /* ── Timeline ── */
+  .timeline { display: flex; flex-direction: column; gap: 1rem; }
+
+  .tl-item {
+    background: #060e1a; border: 1px solid #1a2d4a; border-radius: 0.5rem;
+    padding: 0.75rem 0.9rem; display: flex; flex-direction: column; gap: 0.5rem;
+  }
+
+  .tl-q-row {
+    display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap;
+  }
+  .tl-tag {
+    font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; padding: 0.05em 0.35em; border-radius: 0.2em; flex-shrink: 0;
+  }
+  .tl-q-num {
+    font-size: var(--fs-xs); font-weight: 700; color: #334155;
+    background: #0d1f35; border: 1px solid #1e3a5f; border-radius: 0.25rem;
+    padding: 0 0.3em; line-height: 1.6; flex-shrink: 0;
+  }
+  .tl-q-text {
+    font-size: var(--fs-sm); font-weight: 600; color: #93c5fd; line-height: 1.4;
+  }
+
+  .tl-answer {
+    display: flex; gap: 0.5rem; align-items: flex-start;
+    background: #0a111e; border-radius: 0.3rem; padding: 0.4rem 0.6rem;
+    border-left: 2px solid #1e3a5f;
+  }
+  .tl-answer-label {
+    font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; color: #334155; flex-shrink: 0; padding-top: 0.1rem;
+  }
+  .tl-answer-text {
+    font-size: var(--fs-sm); color: #64748b; line-height: 1.5;
+  }
+
+  .tl-coaching {
+    display: flex; flex-direction: column; gap: 0.35rem;
+    border-top: 1px solid #0f1e35; padding-top: 0.45rem;
+  }
+  .tl-coaching-loading {
+    font-size: var(--fs-xs); color: #334155; font-style: italic;
+  }
+  .tl-coaching-note {
+    font-size: var(--fs-sm); color: #94a3b8; line-height: 1.5; margin: 0;
+  }
+  .tl-flags {
+    display: flex; gap: 0.3rem; flex-wrap: wrap;
+  }
+  .tl-flag {
+    font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; padding: 0.05em 0.4em; border-radius: 0.2em;
+  }
+  .tl-flag-warn { background: #431407; color: #fb923c; }
+  .tl-flag-good { background: #071a0f; color: #4ade80; }
+
+  .tl-suggestion-toggle {
+    background: none; border: none; cursor: pointer; padding: 0;
+    font-size: var(--fs-xs); color: #334155; text-align: left;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .tl-suggestion-toggle:hover { color: #475569; }
+  .tl-suggestion-text {
+    font-size: var(--fs-sm); color: #475569; line-height: 1.5;
+    white-space: pre-wrap; font-style: italic;
+    border-left: 2px solid #1e293b; padding-left: 0.6rem;
+  }
+
+  /* ── Practice tab ── */
+  .tl-item-practice { border-left-color: #1e3a5f; }
+  .tl-practice-badge {
+    margin-left: auto; font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; color: #3b82f6; background: #0c1f3a; border: 1px solid #1e3a5f;
+    border-radius: 0.25em; padding: 0.05em 0.45em;
+  }
+  .tl-practice-badge-recorded {
+    color: #a78bfa; background: #130c2a; border-color: #3b1f7a;
+  }
+  .practice-section-label {
+    font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    color: #334155; padding: 0 0 0.25rem; border-bottom: 1px solid #0f172a; margin-bottom: 0.5rem;
+  }
+
+  /* ── Footer ── */
   .modal-footer {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    padding: 0.75rem 1.5rem;
-    border-top: 1px solid #1e293b;
-    flex-shrink: 0;
-    background: #080f1c;
-    border-radius: 0 0 0.75rem 0.75rem;
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.75rem 1.5rem; border-top: 1px solid #1e293b; flex-shrink: 0;
+    background: #080f1c; border-radius: 0 0 0.75rem 0.75rem;
   }
   .footer-left { display: flex; align-items: center; flex-shrink: 0; }
   .footer-email { display: flex; align-items: center; gap: 0.6rem; flex: 1; justify-content: flex-end; }
   .save-btn {
-    padding: 0.3rem 1rem;
-    background: #1d4ed8;
-    border: none;
-    border-radius: 0.3rem;
-    color: white;
-    font-size: var(--fs-base);
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.15s;
-    white-space: nowrap;
+    padding: 0.3rem 1rem; background: #1d4ed8; border: none; border-radius: 0.3rem;
+    color: white; font-size: var(--fs-base); font-weight: 700; cursor: pointer; transition: all 0.15s; white-space: nowrap;
   }
   .save-btn:hover { background: #2563eb; }
   .save-btn.saved { background: #166534; }
-  .email-footer-label {
-    font-size: var(--fs-sm);
-    color: #475569;
-    white-space: nowrap;
-  }
+  .email-footer-label { font-size: var(--fs-sm); color: #475569; white-space: nowrap; }
   .email-input {
-    flex: 1;
-    padding: 0.3rem 0.65rem;
-    background: #0f172a;
-    border: 1px solid #1e293b;
-    border-radius: 0.3rem;
-    color: #e2e8f0;
-    font-size: var(--fs-base);
-    outline: none;
-    transition: border-color 0.15s;
+    flex: 1; padding: 0.3rem 0.65rem; background: #0f172a;
+    border: 1px solid #1e293b; border-radius: 0.3rem; color: #e2e8f0;
+    font-size: var(--fs-base); outline: none; transition: border-color 0.15s;
   }
   .email-input:focus { border-color: #3b82f6; }
   .send-btn {
-    padding: 0.3rem 0.9rem;
-    background: #1d4ed8;
-    border: none;
-    border-radius: 0.3rem;
-    color: white;
-    font-size: var(--fs-base);
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s;
-    white-space: nowrap;
+    padding: 0.3rem 0.9rem; background: #1d4ed8; border: none; border-radius: 0.3rem;
+    color: white; font-size: var(--fs-base); font-weight: 600; cursor: pointer; transition: all 0.15s; white-space: nowrap;
   }
   .send-btn:hover:not(:disabled) { background: #2563eb; }
   .send-btn:disabled { opacity: 0.4; cursor: default; }
@@ -442,22 +727,4 @@
   }
   .recording-download:hover { border-color: #60a5fa; background: #1e3a5f; }
   .recording-empty { display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem 0; }
-  .qa-section { display: flex; flex-direction: column; gap: 0.75rem; }
-  .qa-item {
-    background: #060e1a; border: 1px solid #1a2d4a; border-radius: 0.4rem;
-    padding: 0.65rem 0.8rem; display: flex; flex-direction: column; gap: 0.4rem;
-  }
-  .qa-q {
-    font-size: var(--fs-sm); font-weight: 700; color: #93c5fd;
-    display: flex; gap: 0.5rem; align-items: baseline; line-height: 1.4;
-  }
-  .qa-num {
-    font-size: var(--fs-xs); color: #334155; font-weight: 700;
-    background: #0d1f35; border: 1px solid #1e3a5f; border-radius: 0.25rem;
-    padding: 0 0.3em; line-height: 1.6; flex-shrink: 0;
-  }
-  .qa-coaching {
-    font-size: var(--fs-sm); color: #94a3b8; line-height: 1.55;
-    white-space: pre-wrap;
-  }
 </style>

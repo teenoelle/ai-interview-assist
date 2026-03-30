@@ -4,12 +4,14 @@
   import { parseSuggestion, parseCues, getAnswerType } from '../lib/parseSuggestion';
   import * as ttsClient from '../lib/ttsClient';
   import type { CombinedVoice } from '../lib/ttsClient';
+  import type { PracticeAnswer } from '../lib/types';
 
-  const { questions, systemPrompt, onStartInterview, onBackToSetup } = $props<{
+  const { questions, systemPrompt = '', onStartInterview, onBackToSetup, onAnswer } = $props<{
     questions: string[];
-    systemPrompt: string;
+    systemPrompt?: string;
     onStartInterview: () => void;
     onBackToSetup?: () => void;
+    onAnswer?: (a: PracticeAnswer) => void;
   }>();
 
   // Font picker (mirrors app.svelte FONTS)
@@ -249,6 +251,17 @@
       if (resp.ok) {
         const data = await resp.json();
         scores = { ...scores, [idx]: data };
+        const vocal = vocalResults[idx];
+        onAnswer?.({
+          question: questions[idx],
+          answerText: answer,
+          score: data.score,
+          coaching: data.coaching,
+          strong: data.strong,
+          vocalTone: vocal?.tone,
+          vocalConfidence: vocal?.confidence_score,
+          recordedAt: Date.now(),
+        });
       }
     } catch { /* ignore */ }
     scoringIdx = null;

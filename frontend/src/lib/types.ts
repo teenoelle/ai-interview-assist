@@ -15,6 +15,14 @@ export type Emotion = 'engaged' | 'curious' | 'neutral' | 'skeptical' | 'confuse
 
 export type QuestionTag = 'behavioral' | 'technical' | 'culture' | 'salary' | 'closing' | 'personal' | 'motivation' | 'future' | 'strengths' | 'weaknesses' | 'situational' | 'general';
 
+export interface DebriefResult {
+  summary: string;
+  strong_points: string[];
+  improvement_areas: string[];
+  followup_email: string[];
+  followup_email_draft?: string;
+}
+
 export interface RedFlag {
   category: string;
   coachingNote: string;
@@ -40,10 +48,22 @@ export interface TranscriptEntry {
   speaker: string;
 }
 
+export interface PracticeAnswer {
+  question: string;
+  answerText: string;
+  score?: number;
+  coaching?: string;
+  strong?: string;
+  vocalTone?: string;
+  vocalConfidence?: number;
+  recordedAt: number;
+}
+
 export interface SuggestionEntry {
   question: string;
   suggestion: string;
   streaming: boolean;
+  source?: 'live' | 'simulated';
   tag?: QuestionTag;
   secondaryTag?: QuestionTag;
   // Compound mode slots (only present when secondaryTag is set)
@@ -60,4 +80,5 @@ export interface SuggestionEntry {
   answered?: boolean;
   provider?: string;
   providerLocal?: boolean;
+  detectedAt?: number;  // timestamp_ms when question was detected
 }

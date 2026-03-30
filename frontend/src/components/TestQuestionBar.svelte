@@ -1,7 +1,7 @@
 <script lang="ts">
   import { authFetch } from '../lib/api';
 
-  const { capturing = false } = $props<{ capturing?: boolean }>();
+  const { capturing = false, onSimulate } = $props<{ capturing?: boolean; onSimulate?: (q: string) => void }>();
 
   let sending = $state(false);
   let presetsOpen = $state(false);
@@ -47,6 +47,7 @@
 
   async function send(q: string) {
     if (sending) return;
+    onSimulate?.(q);
     sending = true;
     try {
       await authFetch('/api/simulate-question', {
@@ -63,7 +64,7 @@
 <div class="tqb">
   <div class="tqb-header">
     <button class="tqb-toggle" onclick={() => presetsOpen = !presetsOpen}>
-      {presetsOpen ? '▾' : '▸'} Examples
+      {presetsOpen ? '▾' : '▸'} Example Questions
       <span class="tqb-count">{PRESET_GROUPS.reduce((n, g) => n + g.questions.length, 0)}</span>
     </button>
   </div>
@@ -150,17 +151,18 @@
 
   .tqb-presets {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
+    flex-direction: column;
+    gap: 0.15rem;
   }
 
   .tqb-preset {
-    background: #081428;
-    border: 1px solid #1e3a5f;
-    color: #7dd3fc;
-    font-size: var(--fs-xs);
-    padding: 0.15rem 0.45rem;
-    border-radius: 0.25rem;
+    background: none;
+    border: none;
+    border-left: 2px solid #1a2d4a;
+    color: #94a3b8;
+    font-size: var(--fs-sm);
+    padding: 0.15rem 0.5rem;
+    border-radius: 0;
     cursor: pointer;
     white-space: normal;
     word-break: break-word;
@@ -169,9 +171,9 @@
     text-align: left;
   }
   .tqb-preset:hover:not(:disabled) {
-    border-color: #38bdf8;
-    color: #e0f2fe;
-    background: #0c2240;
+    border-left-color: #3b82f6;
+    color: #e2e8f0;
+    background: rgba(59,130,246,0.05);
   }
   .tqb-preset:disabled { opacity: 0.4; cursor: not-allowed; }
 

@@ -8,7 +8,6 @@
   import TestQuestionBar from './components/TestQuestionBar.svelte';
   import PracticeQuestionsBar from './components/PracticeQuestionsBar.svelte';
   import RateLimitPanel from './components/RateLimitPanel.svelte';
-  import DebriefModal from './components/DebriefModal.svelte';
   import ReviewPanel from './components/ReviewPanel.svelte';
   import type { ReviewReport } from './components/ReviewPanel.svelte';
   import PracticePanel from './components/PracticePanel.svelte';
@@ -77,12 +76,13 @@
   let statusMessages = $state<string[]>([]);
   let errorMessages = $state<string[]>([]);
   let predictedQuestions = $state<string[]>([]);
-  let showDebrief = $state(false);
   let recordingUrl = $state<string | undefined>(undefined);
   let focusMode = $state(false);
   let showPastInterviews = $state(false);
   let showReviewPanel = $state(false);
   let reviewReport = $state<ReviewReport | null>(null);
+  let reviewInitialTab = $state<'qa' | 'ai-review'>('qa');
+  let reviewIsLive = $state(false);
   let savingLiveReport = $state(false);
   let showWhisper = $state(false);
   let emotionHistory = $state<string[]>([]);
@@ -114,7 +114,7 @@
   let flashTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Salary coach
-  let salaryTactics = $state<{ deflect: string; anchor: string; counter_range: string; never_say: string } | null>(null);
+  let salaryTactics = $state<{ early_round: string; reveal: string; direct_ask: string; total_package: string; counter: string } | null>(null);
   let loadingSalary = $state(false);
 
   // Next question predictor
@@ -374,10 +374,13 @@
   let histViewIdx = $state(-1);
   let histTestQuestion = $state('');
   let histTestSending = $state(false);
+  let practiceAnswers = $state<import('./lib/types').PracticeAnswer[]>([]);
+  const pendingSimulated = new Set<string>();
 
   async function sendTestQuestion() {
     const q = histTestQuestion.trim();
     if (!q || histTestSending) return;
+    pendingSimulated.add(q);
     histTestSending = true;
     try {
       await authFetch('/api/simulate-question', {
@@ -865,26 +868,101 @@
   let loadingSummaries = $state(false);
   let loadingPredict = $state(false);
 
+  let loadingCompanyBrief = $state(false);
+
   async function fetchBackgroundSetup() {
-    // Only enrich is auto — provides JD keywords used for live transcript highlighting
+    // Auto-fetch JD keywords for live transcript highlighting; company brief loads on demand
     try {
       const resp = await fetch('/api/enrich', { method: 'POST' });
+      if (resp.ok) {
+        const d = await resp.json();
+        if (d.jd_keywords?.length) { jdKeywords = d.jd_keywords; mentionedKeywords = new Set(); interviewerRaisedKeywords = new Set(); }
+        // Only update companyBrief if not already loaded (don't overwrite on-demand load)
+        if (d.company_brief && !companyBrief) companyBrief = d.company_brief;
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function fetchCompanyBrief() {
+    if (companyBrief || loadingCompanyBrief) return;
+    loadingCompanyBrief = true;
+    try {
+      const resp = await fetch('/api/enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company_url: localStorage.getItem('setup-company-url') ?? '',
+          jd_text: localStorage.getItem('setup-jd') ?? '',
+        }),
+      });
       if (resp.ok) {
         const d = await resp.json();
         if (d.company_brief) companyBrief = d.company_brief;
         if (d.jd_keywords?.length) { jdKeywords = d.jd_keywords; mentionedKeywords = new Set(); interviewerRaisedKeywords = new Set(); }
       }
     } catch { /* ignore */ }
+    loadingCompanyBrief = false;
+  }
+
+  function buildInterviewerStubs(): InterviewerSummary[] {
+    try {
+      const raw = JSON.parse(localStorage.getItem('setup-interviewers') ?? '[]') as string[];
+      const texts = raw.filter(t => t.trim().length > 0);
+      // Use cached AI summaries for name+role if count matches, otherwise heuristic parse
+      let cached: InterviewerSummary[] = [];
+      try {
+        const c = JSON.parse(localStorage.getItem('setup-interviewer-summaries') ?? '[]') as InterviewerSummary[];
+        if (c.length === texts.length) cached = c;
+      } catch { /* ignore */ }
+      return texts.map((t, i) => {
+        if (cached[i]?.name) {
+          // Cached: use accurate name+role, clear detail fields so expand triggers fresh load
+          return { name: cached[i].name, role: cached[i].role, background: '', tenure: '', rapport_tips: [] };
+        }
+        // Heuristic: first non-empty line = name, second non-empty line = role
+        const lines = t.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+        return { name: lines[0] ?? '', role: lines[1] ?? '', background: '', tenure: '', rapport_tips: [] };
+      });
+    } catch { return []; }
   }
 
   async function fetchInterviewerSummaries() {
-    if (loadingSummaries || interviewerSummaries.length > 0) return;
+    // Fall back: fetch all (used for reload button)
     loadingSummaries = true;
     try {
       const resp = await authFetch('/api/interviewer-summaries', { method: 'POST' });
       if (resp.ok) { const d = await resp.json(); if (d?.length) interviewerSummaries = d; }
     } catch { /* ignore */ }
     loadingSummaries = false;
+  }
+
+  let loadingProfileIndices = $state<number[]>([]);
+
+  async function fetchInterviewerSummaryByIndex(index: number) {
+    if (loadingProfileIndices.includes(index)) return;
+    // Get the raw profile text from localStorage
+    let profileText = '';
+    try {
+      const raw = JSON.parse(localStorage.getItem('setup-interviewers') ?? '[]') as string[];
+      profileText = raw.filter((t: string) => t.trim().length > 0)[index] ?? '';
+    } catch { /* ignore */ }
+    if (!profileText) return;
+    loadingProfileIndices = [...loadingProfileIndices, index];
+    try {
+      const resp = await authFetch('/api/interviewer-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_text: profileText }),
+      });
+      if (resp.ok) {
+        const d = await resp.json() as InterviewerSummary;
+        const updated = interviewerSummaries.map((s, i) => i === index ? d : s);
+        interviewerSummaries = updated;
+        // Cache so name+role show instantly on next visit
+        try { localStorage.setItem('setup-interviewer-summaries', JSON.stringify(updated)); } catch { /* ignore */ }
+      }
+    } catch { /* ignore */ }
+    loadingProfileIndices = loadingProfileIndices.filter(i => i !== index);
   }
 
   async function fetchPredictedQuestions() {
@@ -899,9 +977,12 @@
 
   function handleSetupComplete() {
     phase = 'interview';
-    // Clear on-demand caches so re-running setup picks up new interviewers/data
-    interviewerSummaries = [];
+    // Build stubs immediately from localStorage (no API calls) so names show right away
+    interviewerSummaries = buildInterviewerStubs();
+    loadingProfileIndices = [];
     predictedQuestions = [];
+    companyBrief = null; // clear so fresh data loads on next expand
+    loadingCompanyBrief = false;
     connectWs();
     void fetchBackgroundSetup();
   }
@@ -1070,6 +1151,10 @@
         const secondaryTag = event.secondary_tag as import('./lib/types').QuestionTag | undefined;
         youSegmentsSinceQuestion = [];
 
+        // Check if this question came from simulate (TestQuestionBar, PracticeQuestionsBar, or typed input)
+        const isSimulated = pendingSimulated.has(event.question.trim());
+        if (isSimulated) pendingSimulated.delete(event.question.trim());
+
         for (let qi = 0; qi < subQuestions.length; qi++) {
           const q = subQuestions[qi];
           const isFirst = qi === 0;
@@ -1087,6 +1172,8 @@
             secondarySuggestion: isCompound ? '' : undefined,
             secondaryStreaming: false,
             redFlag: detectRedFlag(q) ?? undefined,
+            detectedAt: Date.now(),
+            source: isSimulated ? 'simulated' : 'live',
           }];
         }
         resetAnswerTimer();
@@ -1115,7 +1202,7 @@
         if (event.mode === 'compound') {
           suggestions = suggestions.map(s =>
             s.compoundStreaming
-              ? { ...s, compoundSuggestion: event.full_text, compoundStreaming: false, streaming: true }
+              ? { ...s, compoundSuggestion: event.full_text, compoundStreaming: false }
               : s
           );
           speakText(event.full_text);
@@ -1305,6 +1392,14 @@
       {/if}
     </div>
 
+  {:else if phase === 'practice'}
+    <PracticePanel
+      questions={predictedQuestions}
+      onStartInterview={() => { phase = 'interview'; connectWs(); void fetchBackgroundSetup(); }}
+      onBackToSetup={() => { phase = 'setup'; }}
+      onAnswer={(a) => { practiceAnswers = [...practiceAnswers, a]; }}
+    />
+
   {:else}
     <div class="interview-layout">
       <header class="interview-header">
@@ -1384,46 +1479,35 @@
             location.reload();
           }}>Reset Layout</button>
           <div class="end-split-wrapper">
-            <button class="end-main-btn" onclick={() => { showDebrief = true; showEndMenu = false; }}>End Interview</button>
+            <button class="end-main-btn"
+              onclick={() => {
+                showEndMenu = false;
+                reviewInitialTab = 'ai-review'; reviewIsLive = true; showReviewPanel = true;
+                if (!savingLiveReport) {
+                  savingLiveReport = true;
+                  authFetch('/api/review/from-live', { method: 'POST' })
+                    .then(r => r.ok ? r.json() : null)
+                    .then(d => { if (d) reviewReport = d; })
+                    .finally(() => { savingLiveReport = false; });
+                }
+              }}
+            >End Interview</button>
             <button class="end-arrow-btn" onclick={(e) => { e.stopPropagation(); showEndMenu = !showEndMenu; }}>▾</button>
             {#if showEndMenu}
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div class="end-menu-backdrop" onclick={() => showEndMenu = false}></div>
               <div class="end-dropdown">
-                <button class="end-menu-item"
-                  class:end-menu-loading={savingLiveReport}
-                  disabled={savingLiveReport}
-                  onclick={async () => {
-                    showEndMenu = false;
+                <button class="end-menu-item" onclick={() => {
+                  showEndMenu = false;
+                  reviewInitialTab = 'ai-review'; reviewIsLive = true; showReviewPanel = true;
+                  if (!savingLiveReport && !reviewReport) {
                     savingLiveReport = true;
-                    try {
-                      const resp = await authFetch('/api/review/from-live', { method: 'POST' });
-                      if (resp.ok) { reviewReport = await resp.json(); showReviewPanel = true; }
-                    } finally { savingLiveReport = false; }
-                  }}
-                >{savingLiveReport ? 'Saving…' : 'Save Report'}</button>
-                <div class="end-menu-divider"></div>
-                {#each [Object.keys(localStorage).filter(k => k.startsWith('transcript_'))] as transcriptKeys}
-                  {#if transcriptKeys.length === 0}
-                    <div class="end-menu-empty">No saved transcripts</div>
-                  {:else}
-                    <div class="end-menu-section">Download Transcript</div>
-                    {#each transcriptKeys as key}
-                      <button class="end-menu-item end-menu-transcript" onclick={() => {
-                        const data = localStorage.getItem(key);
-                        if (data) {
-                          const entries = JSON.parse(data);
-                          const lines = entries.map((e: any) => `[${new Date(e.timestamp_ms).toLocaleTimeString()}] ${e.speaker}: ${e.text}`);
-                          const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement('a'); a.href = url; a.download = key + '.txt'; a.click();
-                          URL.revokeObjectURL(url);
-                        }
-                        showEndMenu = false;
-                      }}>📄 {key.replace('transcript_', '')}</button>
-                    {/each}
-                  {/if}
-                {/each}
+                    authFetch('/api/review/from-live', { method: 'POST' })
+                      .then(r => r.ok ? r.json() : null)
+                      .then(d => { if (d) reviewReport = d; })
+                      .finally(() => { savingLiveReport = false; });
+                  }
+                }}>AI Debrief</button>
                 <div class="end-menu-divider"></div>
                 <button class="end-menu-item" onclick={() => { showPastInterviews = true; showEndMenu = false; }}>Reports</button>
               </div>
@@ -1513,8 +1597,8 @@
               {#if !collapsedCols.has('hist')}
                 <div class="col-body hist-col-body" bind:this={histColBodyEl}>
                   <div class="col-body-scroll" style="zoom: {histZoom/100}; padding: 0.3rem 0.4rem 0; display: flex; flex-direction: column; gap: 0.4rem;">
-                    <TestQuestionBar {capturing} />
-                    <PracticeQuestionsBar questions={predictedQuestions} {capturing} onPredict={fetchPredictedQuestions} loadingPredict={loadingPredict} />
+                    <TestQuestionBar {capturing} onSimulate={(q) => pendingSimulated.add(q.trim())} />
+                    <PracticeQuestionsBar questions={predictedQuestions} {capturing} onPredict={fetchPredictedQuestions} loadingPredict={loadingPredict} onSimulate={(q) => pendingSimulated.add(q.trim())} />
                     <QuestionsHistoryPanel
                       {suggestions}
                       currentIndex={histViewIdx === -1 ? currentQuestionIdx : histViewIdx}
@@ -1879,10 +1963,10 @@
                   {/if}
                 {:else if sid === 'company-brief'}
                   {#if companyBrief}
-                    <CompanyBriefPanel brief={companyBrief} />
+                    <CompanyBriefPanel brief={companyBrief} companyName={localStorage.getItem('setup-company-name') ?? ''} onLoad={fetchCompanyBrief} loading={loadingCompanyBrief} />
                   {/if}
                 {:else if sid === 'interviewer-profiles'}
-                  <InterviewerProfilePanel interviewers={interviewerSummaries} onLoad={fetchInterviewerSummaries} onReload={() => { interviewerSummaries = []; void fetchInterviewerSummaries(); }} loading={loadingSummaries} />
+                  <InterviewerProfilePanel interviewers={interviewerSummaries} onLoad={fetchInterviewerSummaries} onReload={() => { interviewerSummaries = buildInterviewerStubs(); loadingProfileIndices = []; void fetchInterviewerSummaries(); }} loading={loadingSummaries} onLoadProfile={fetchInterviewerSummaryByIndex} loadingProfileIndices={loadingProfileIndices} />
                 {:else if sid === 'stats'}
                   <div class="side-stats">
                     <div class="side-stat" title="Time since you started answering. Green = under 30s (concise), amber = 30–60s (detailed), red = over 60s (wrap up). Aim for 30–90 seconds per answer.">
@@ -2151,20 +2235,6 @@
       </div>
     {/if}
 
-    {#if showDebrief}
-      <DebriefModal
-        {transcript}
-        {suggestions}
-        {recordingUrl}
-        onClose={() => showDebrief = false}
-        onSave={(r) => saveInterview({
-          summary: r.summary,
-          strong_points: r.strong_points,
-          improvement_areas: r.improvement_areas,
-          rehearsal_questions: r.improvement_areas.map(a => `Practice answering: ${a}`),
-        })}
-      />
-    {/if}
     {#if showWhisper && whisperTell}
       <WhisperOverlay tell={whisperTell} onClose={() => showWhisper = false} />
     {/if}
@@ -2172,16 +2242,52 @@
 {#if showPastInterviews}
   <PastInterviewsPanel
     onClose={() => showPastInterviews = false}
-    onReport={(r) => { reviewReport = r; showPastInterviews = false; showReviewPanel = true; }}
+    onReport={(r) => { reviewReport = r; reviewIsLive = false; reviewInitialTab = 'qa'; showPastInterviews = false; showReviewPanel = true; }}
     onRehearsal={(questions) => { predictedQuestions = questions; showPastInterviews = false; }}
   />
 {/if}
-{#if showReviewPanel && reviewReport}
+{#if showReviewPanel && (reviewReport || reviewIsLive)}
   <ReviewPanel
     report={reviewReport}
-    onClose={() => showReviewPanel = false}
-    onDelete={(id) => { if (reviewReport?.id === id) reviewReport = null; showReviewPanel = false; }}
+    onClose={() => { showReviewPanel = false; reviewIsLive = false; }}
+    onDelete={(id) => { if (reviewReport?.id === id) reviewReport = null; showReviewPanel = false; reviewIsLive = false; }}
     onPractice={(q) => { predictedQuestions = [...predictedQuestions, q]; showReviewPanel = false; }}
+    initialTab={reviewInitialTab}
+    liveSuggestions={reviewIsLive ? suggestions : undefined}
+    liveTranscript={reviewIsLive ? transcript : undefined}
+    practiceAnswers={reviewIsLive ? practiceAnswers : undefined}
+    recordingUrl={reviewIsLive ? recordingUrl : undefined}
+    onSave={reviewIsLive ? (r) => saveInterview({
+      summary: r.summary,
+      strong_points: r.strong_points,
+      improvement_areas: r.improvement_areas,
+      rehearsal_questions: r.improvement_areas.map(a => `Practice answering: ${a}`),
+      qa_entries: suggestions
+        .filter(s => s.question && s.suggestion)
+        .map((s, i, arr) => {
+          const nextDetectedAt = arr[i + 1]?.detectedAt;
+          const candidateTexts = transcript
+            .filter(e => e.speaker !== 'Interviewer' && e.speaker !== 'interviewer')
+            .filter(e => s.detectedAt != null && e.timestamp_ms >= s.detectedAt && (nextDetectedAt == null || e.timestamp_ms < nextDetectedAt))
+            .map(e => e.text);
+          return {
+            question: s.question, suggestion: s.suggestion,
+            confidenceScore: s.confidenceScore, coaching: s.answerFeedback?.coaching, tag: s.tag,
+            candidateAnswer: candidateTexts.join(' ').trim()
+              || practiceAnswers.find(pa => pa.question === s.question)?.answerText
+              || undefined,
+            vocalScore: s.vocalFeedback?.confidence_score, vocalCoaching: s.vocalFeedback?.coaching,
+            vocalTone: s.vocalFeedback?.tone, vocalPace: s.vocalFeedback?.pace,
+            vocalFillers: s.vocalFeedback?.fillers_noted,
+          };
+        }),
+      transcript: transcript.map(e => {
+        const d = new Date(e.timestamp_ms);
+        const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        return `[${t}] ${e.speaker}: ${e.text}`;
+      }).join('\n'),
+      debrief_result: r,
+    }) : undefined}
   />
 {/if}
 </main>

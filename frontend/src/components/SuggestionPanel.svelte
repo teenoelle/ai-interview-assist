@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { SuggestionEntry, VocalSentiment } from '../lib/types';
   import { TAG_CONFIG } from '../lib/questionTagger';
-  import { parseSuggestion, parseCues, getAnswerType } from '../lib/parseSuggestion';
+  import { parseSuggestion, parseCues, getAnswerType, getSectionLabels } from '../lib/parseSuggestion';
   import PanelHeader from './PanelHeader.svelte';
   import { PracticeRecorder } from '../lib/practiceRecorder';
   import { authFetch } from '../lib/api';
@@ -86,9 +86,6 @@
     for (const cue of cues) {
       expandCue(current.question, cue.text);
     }
-    for (const ask of parsed.asks) {
-      expandCue(current.question, '[Ask] ' + ask.topic);
-    }
   });
 
   function wordCount(text: string): number {
@@ -168,6 +165,9 @@
 
   let openAsks = $state<Record<string, boolean>>({});
   function toggleAsk(key: string) { openAsks = { ...openAsks, [key]: !openAsks[key] }; }
+
+  let collapsedSecs = $state<Record<string, boolean>>({});
+  function toggleSec(key: string) { collapsedSecs = { ...collapsedSecs, [key]: !collapsedSecs[key] }; }
 
   function shortAsk(text: string, words = 6): string {
     const w = text.split(' ');
@@ -269,7 +269,7 @@
         <div class="tp-active-q-row">
           {#if current.tag}
             {@const tc = TAG_CONFIG[current.tag]}
-            <span class="tp-tag" style="color: {tc.color}; background: {tc.bg}">{tc.label}</span>
+            <span class="tp-tag">{tc.label}</span>
           {/if}
           {#if current.confidenceScore != null}
             {#key current.confidenceScore}
@@ -291,12 +291,12 @@
       {@const tpSuggestion = getModeContent(tpMode, current)}
       {@const tpStreaming = getModeStreaming(tpMode, current)}
       {@const parsedText = typeof tpSuggestion === 'string' ? tpSuggestion : ''}
-      {@const parsed = parseSuggestion(parsedText)}
+      {@const parsed = parseSuggestion(parsedText, tpStreaming)}
       {@const bodyCues = parsed.body ? parseCues(parsed.body) : []}
       {@const ansType = getAnswerType(parsed, tpMode === 'compound' ? undefined : current.tag)}
       {#if ansType.framework && !tpStreaming}
         <div class="tp-breadcrumb">
-          <span class="tp-bc-a">{ansType.label}</span>
+          <span class="tp-bc-a">{ansType.framework}</span>
         </div>
       {/if}
       {#if current.secondaryTag}
@@ -306,26 +306,14 @@
         <div class="mode-tabs">
           <button class="mode-tab" class:mode-tab-active={activeMode === 'compound'}
                   onclick={() => setActiveMode(currentIndex, 'compound')}>
-            <span class="mode-tab-dot"
-              class:mode-tab-streaming={current.compoundStreaming}
-              class:mode-tab-ready={!current.compoundStreaming && !!current.compoundSuggestion}
-            ></span>
             Compound
           </button>
           <button class="mode-tab" class:mode-tab-active={activeMode === 'primary'}
                   onclick={() => setActiveMode(currentIndex, 'primary')}>
-            <span class="mode-tab-dot"
-              class:mode-tab-streaming={current.streaming}
-              class:mode-tab-ready={!current.streaming && !!current.suggestion}
-            ></span>
             <span style="color:{tc1.color}">{tc1.label}</span>
           </button>
           <button class="mode-tab" class:mode-tab-active={activeMode === 'secondary'}
                   onclick={() => setActiveMode(currentIndex, 'secondary')}>
-            <span class="mode-tab-dot"
-              class:mode-tab-streaming={current.secondaryStreaming}
-              class:mode-tab-ready={!current.secondaryStreaming && !!current.secondarySuggestion}
-            ></span>
             <span style="color:{tc2.color}">{tc2.label}</span>
           </button>
         </div>
@@ -379,7 +367,7 @@
             {/if}
             {#if parsed.transition3}<div class="tp-transition">{parsed.transition3}</div>{/if}
             {#if parsed.close}<div class="tp-sec tp-sec-close"><span class="cue-badge cue-close">Close</span><span class="tp-close-text">{parsed.close}</span></div>{/if}
-            {#if parsed.asks.length > 0}<div class="tp-sec tp-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content"><span class="tp-ask-topic">{ask.topic}</span><span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
+            {#if parsed.asks.length > 0}<div class="tp-sec tp-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
           {:else if isMotiv}
             <!-- MOTIVATION: Company → Role → Self -->
@@ -405,7 +393,7 @@
             {/if}
             {#if parsed.transition3}<div class="tp-transition">{parsed.transition3}</div>{/if}
             {#if parsed.close}<div class="tp-sec tp-sec-close"><span class="cue-badge cue-close">Close</span><span class="tp-close-text">{parsed.close}</span></div>{/if}
-            {#if parsed.asks.length > 0}<div class="tp-sec tp-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content"><span class="tp-ask-topic">{ask.topic}</span><span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
+            {#if parsed.asks.length > 0}<div class="tp-sec tp-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
           {:else if isFutureTy}
             <!-- FUTURE: Direction → Alignment → Contribution -->
@@ -431,7 +419,7 @@
             {/if}
             {#if parsed.transition3}<div class="tp-transition">{parsed.transition3}</div>{/if}
             {#if parsed.close}<div class="tp-sec tp-sec-close"><span class="cue-badge cue-close">Close</span><span class="tp-close-text">{parsed.close}</span></div>{/if}
-            {#if parsed.asks.length > 0}<div class="tp-sec tp-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content"><span class="tp-ask-topic">{ask.topic}</span><span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
+            {#if parsed.asks.length > 0}<div class="tp-sec tp-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
           {:else if isClosing}
             <!-- CLOSING: Featured question cards -->
@@ -451,22 +439,32 @@
 
           {:else}
             <!-- BEHAVIORAL / COMPETENCY / STRENGTHS: existing layout -->
+            {@const sl = getSectionLabels(tpMode === 'compound' ? undefined : current.tag)}
             {#if parsed.acknowledge}
               <div class="tp-sec tp-sec-ack">
-                <span class="cue-badge cue-ack">Acknowledge</span>
-                <span class="tp-ack-text">{parsed.acknowledge}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-ack')}>
+                  <span class="cue-badge cue-ack">{sl.ack}</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-ack'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-ack']}<span class="tp-ack-text">{parsed.acknowledge}</span>{/if}
               </div>
             {/if}
             {#if parsed.solve}
               <div class="tp-sec tp-sec-solve">
-                <span class="cue-badge cue-solve">Solve</span>
-                <span class="tp-solve-text">{parsed.solve}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-solve')}>
+                  <span class="cue-badge cue-solve">{sl.solve}</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-solve'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-solve']}<span class="tp-solve-text">{parsed.solve}</span>{/if}
               </div>
             {/if}
             {#if parsed.bridge}
               <div class="tp-sec tp-sec-bridge">
-                <span class="cue-badge cue-bridge">Bridge</span>
-                <span class="tp-bridge-text">{parsed.bridge}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-bridge')}>
+                  <span class="cue-badge cue-bridge">{sl.bridge}</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-bridge'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-bridge']}<span class="tp-bridge-text">{parsed.bridge}</span>{/if}
               </div>
             {/if}
 
@@ -475,12 +473,10 @@
           {@const _sayEx = bodyCues.some(c => c.label === 'Example' || c.typeTag === 'Example')}
           <div class="tp-sec tp-sec-say" class:tp-sec-say-example={_sayEx} class:tp-sec-say-pivot={_sayPi}>
             <div class="tp-sec-header">
-              <span class="cue-badge">{parsed.cue}</span>
+              <span class="cue-badge">{sl.answer}</span>
               {#if parsed.tell && !tpStreaming}
                 {@const secs = estimateSecs(parsed)}
                 <span class="tp-time-est">~{secs < 60 ? secs + 's' : Math.floor(secs/60) + 'm ' + (secs%60) + 's'}</span>
-                {#if _sayEx}<span class="cue-type-tag cue-type-example">Example</span>{/if}
-                {#if _sayPi}<span class="cue-type-tag cue-type-pivot">Pivot</span>{/if}
               {/if}
             </div>
             <div class="tp-tell">
@@ -515,21 +511,18 @@
                 <div class="tp-cues">
                   {#each bodyCues as cue}
                     {@const isFlat = cue.label === 'Pivot' || cue.typeTag === 'Pivot'}
-                    {@const isOpen = !isFlat && !!openCues[cue.text]}
                     {#if isFlat}
                       <div class="tp-cue-flat">
                         <span class="cue-label-sm" class:cue-label-transfer={cue.typeTag === 'Pivot' || cue.label === 'Pivot'}>{cue.typeTag || (cue.label === 'General' ? 'Point' : cue.label)}</span>
                         <span class="tp-cue-flat-text">{cue.text}</span>
                       </div>
                     {:else}
-                      <div class="tp-cue-block" class:tp-cue-open={isOpen}>
-                        <button class="tp-cue-toggle" onclick={() => { const opening = !isOpen; toggleCueOpen(cue.text); if (opening) expandCue(current.question, cue.text); }}>
-                          <span class="cue-label-sm" class:cue-label-example={cue.label === 'Example' || cue.label === 'Story'}>{cue.label}</span>
-                          {#if cue.typeTag}<span class="tp-cue-keyword">{cue.typeTag}</span>{/if}
+                      <div class="tp-cue-block" class:tp-cue-open={!!openCues[cue.text]}>
+                        <button class="tp-cue-toggle" onclick={() => { const opening = !openCues[cue.text]; toggleCueOpen(cue.text); if (opening) expandCue(current.question, cue.text); }}>
                           <span class="tp-cue-preview">{cue.title || (cue.text.split(/(?<=[.!?])\s+/)[0] ?? cue.text)}</span>
-                          <span class="tp-cue-chevron">{isOpen ? '▾' : '▸'}</span>
+                          <span class="tp-cue-chevron">{openCues[cue.text] ? '▾' : '▸'}</span>
                         </button>
-                        {#if isOpen}
+                        {#if openCues[cue.text]}
                           <div class="tp-cue-body">
                             {#if expandedCues[cue.text]?.loading}
                               <div class="cue-sentence cue-loading">…</div>
@@ -576,8 +569,8 @@
                   {@const askKey = '[Ask] ' + ask.topic}
                   <div class="tp-ask-item">
                     <div class="tp-ask-content">
-                      <span class="tp-ask-topic">{ask.topic}</span>
-                      <span class="tp-ask-question">{expandedCues[askKey]?.sentence || ask.question}</span>
+                      {#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}
+                      <span class="tp-ask-question">{ask.question}</span>
                       {#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}
                     </div>
                   </div>
@@ -636,6 +629,38 @@
         {:else if parsed.asks.length >= 3 && !parsed.acknowledge && !parsed.tell}Questions to ask the interviewer
         {:else}Acknowledge → Answer → Close · Ask = follow-up{/if}
       </span>
+      {#if !tpStreaming && tpSuggestion && practiceRecorder.supported}
+        {@const pState = practiceState[currentIndex]}
+        {@const pResult = practiceResults[currentIndex]}
+        <div class="practice-bar">
+          {#if !pState}
+            <button class="practice-btn" onclick={() => startPractice(currentIndex)}>● Practice answer</button>
+          {:else if pState === 'recording'}
+            <div class="practice-recording-row">
+              <span class="practice-rec-dot">●</span>
+              <span class="practice-live-text">{practiceLiveText[currentIndex] || 'Listening…'}</span>
+              <button class="practice-stop-btn" onclick={() => stopPractice(currentIndex)}>◼ Stop</button>
+            </div>
+          {:else if pState === 'loading'}
+            <span class="practice-scoring">Scoring<span class="dots">...</span></span>
+          {/if}
+          {#if pResult}
+            <div class="practice-result">
+              <div class="pr-header">
+                <span class="pr-score"
+                  class:pr-score-good={pResult.confidence_score >= 70}
+                  class:pr-score-mid={pResult.confidence_score >= 50 && pResult.confidence_score < 70}
+                >{pResult.confidence_score}</span>
+                <span class="pr-tone">{pResult.tone}</span>
+                <span class="pr-pace">{pResult.pace}</span>
+                <button class="practice-btn practice-retry-btn" onclick={() => startPractice(currentIndex)}>↺ Retry</button>
+              </div>
+              {#if pResult.fillers_noted}<div class="pr-fillers">{pResult.fillers_noted}</div>{/if}
+              <div class="pr-coaching">{pResult.coaching}</div>
+            </div>
+          {/if}
+        </div>
+      {/if}
     {:else}
       <div class="tp-empty">Waiting for a question...</div>
     {/if}
@@ -659,7 +684,7 @@
           {@const eMode = getActiveMode(i, entry)}
           {@const eModeSuggestion = getModeContent(eMode, entry)}
           {@const eModeStreaming = getModeStreaming(eMode, entry)}
-          {@const parsed = parseSuggestion(eModeSuggestion)}
+          {@const parsed = parseSuggestion(eModeSuggestion, eModeStreaming)}
           {@const bodyCues = parsed.body ? parseCues(parsed.body) : []}
           {@const isLatest = i === suggestions.length - 1}
           {@const eAnsType = getAnswerType(parsed, eMode === 'compound' ? undefined : entry.tag)}
@@ -669,10 +694,10 @@
               <p class="question-text">"{entry.question}"</p>
               {#if entry.tag}
                 {@const tc = TAG_CONFIG[entry.tag]}
-                <span class="entry-tag" style="color: {tc.color}; background: {tc.bg}">{tc.label}</span>
+                <span class="entry-tag">{tc.label}</span>
               {/if}
               {#if eAnsType.framework && !entry.streaming}
-                <span class="entry-ans-type">{eAnsType.label}</span>
+                <span class="entry-ans-type" title={eAnsType.label}>{eAnsType.framework}</span>
               {/if}
               <button class="entry-collapse-btn" onclick={() => { collapsed[i] = !collapsed[i]; collapsed = [...collapsed]; }} title={collapsed[i] ? 'Expand' : 'Collapse'}>{collapsed[i] ? '▸' : '▾'}</button>
             </div>
@@ -682,22 +707,56 @@
               <div class="mode-tabs mode-tabs-entry">
                 <button class="mode-tab" class:mode-tab-active={eMode === 'compound'}
                         onclick={() => setActiveMode(i, 'compound')}>
-                  <span class="mode-tab-dot" class:mode-tab-streaming={entry.compoundStreaming} class:mode-tab-ready={!entry.compoundStreaming && !!entry.compoundSuggestion}></span>
                   Compound
                 </button>
                 <button class="mode-tab" class:mode-tab-active={eMode === 'primary'}
                         onclick={() => setActiveMode(i, 'primary')}>
-                  <span class="mode-tab-dot" class:mode-tab-streaming={entry.streaming} class:mode-tab-ready={!entry.streaming && !!entry.suggestion}></span>
                   <span style="color:{etc1.color}">{etc1.label}</span>
                 </button>
                 <button class="mode-tab" class:mode-tab-active={eMode === 'secondary'}
                         onclick={() => setActiveMode(i, 'secondary')}>
-                  <span class="mode-tab-dot" class:mode-tab-streaming={entry.secondaryStreaming} class:mode-tab-ready={!entry.secondaryStreaming && !!entry.secondarySuggestion}></span>
                   <span style="color:{etc2.color}">{etc2.label}</span>
                 </button>
               </div>
             {/if}
             {#if !collapsed[i]}
+            <!-- Practice bar — shown above cues so it's always visible without scrolling -->
+            {#if !eModeStreaming && eModeSuggestion}
+              {@const pState = practiceState[i]}
+              {@const pResult = practiceResults[i]}
+              <div class="practice-bar">
+                {#if practiceRecorder.supported}
+                  {#if !pState}
+                    <button class="practice-btn" onclick={() => startPractice(i)}>● Practice answer</button>
+                  {:else if pState === 'recording'}
+                    <div class="practice-recording-row">
+                      <span class="practice-rec-dot">●</span>
+                      <span class="practice-live-text">{practiceLiveText[i] || 'Listening…'}</span>
+                      <button class="practice-stop-btn" onclick={() => stopPractice(i)}>◼ Stop</button>
+                    </div>
+                  {:else if pState === 'loading'}
+                    <span class="practice-scoring">Scoring<span class="dots">...</span></span>
+                  {/if}
+                {:else}
+                  <span class="practice-unsupported">Voice recording requires Chrome or Edge</span>
+                {/if}
+                {#if pResult}
+                  <div class="practice-result">
+                    <div class="pr-header">
+                      <span class="pr-score"
+                        class:pr-score-good={pResult.confidence_score >= 70}
+                        class:pr-score-mid={pResult.confidence_score >= 50 && pResult.confidence_score < 70}
+                      >{pResult.confidence_score}</span>
+                      <span class="pr-tone">{pResult.tone}</span>
+                      <span class="pr-pace">{pResult.pace}</span>
+                      <button class="practice-btn practice-retry-btn" onclick={() => startPractice(i)}>↺ Retry</button>
+                    </div>
+                    {#if pResult.fillers_noted}<div class="pr-fillers">{pResult.fillers_noted}</div>{/if}
+                    <div class="pr-coaching">{pResult.coaching}</div>
+                  </div>
+                {/if}
+              </div>
+            {/if}
             {#if entry.redFlag}
               <div class="entry-redflag">
                 <span class="redflag-cat">{entry.redFlag.category}</span>
@@ -721,7 +780,7 @@
                 {#if parsed.future}<div class="e-sec e-sec-future"><span class="cue-badge cue-future">Next</span><span class="affirm-text">{parsed.future}</span></div>{/if}
                 {#if parsed.transition3}<div class="e-transition">{parsed.transition3}</div>{/if}
                 {#if parsed.close}<div class="e-sec e-sec-close"><span class="cue-badge cue-close">Close</span><span class="affirm-text">{parsed.close}</span></div>{/if}
-                {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content"><span class="tp-ask-topic">{ask.topic}</span><span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
+                {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
               {:else if eIsMotiv}
                 {#if parsed.company}<div class="e-sec e-sec-company"><span class="cue-badge cue-company">Company</span><span class="affirm-text">{parsed.company}</span></div>{/if}
@@ -731,7 +790,7 @@
                 {#if parsed.self}<div class="e-sec e-sec-self"><span class="cue-badge cue-self">Self</span><span class="affirm-text">{parsed.self}</span></div>{/if}
                 {#if parsed.transition3}<div class="e-transition">{parsed.transition3}</div>{/if}
                 {#if parsed.close}<div class="e-sec e-sec-close"><span class="cue-badge cue-close">Close</span><span class="affirm-text">{parsed.close}</span></div>{/if}
-                {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content"><span class="tp-ask-topic">{ask.topic}</span><span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
+                {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
               {:else if eIsFutureTy}
                 {#if parsed.direction}<div class="e-sec e-sec-direction"><span class="cue-badge cue-direction">Direction</span><span class="affirm-text">{parsed.direction}</span></div>{/if}
@@ -741,7 +800,7 @@
                 {#if parsed.contribution}<div class="e-sec e-sec-contribution"><span class="cue-badge cue-contribution">Contribution</span><span class="affirm-text">{parsed.contribution}</span></div>{/if}
                 {#if parsed.transition3}<div class="e-transition">{parsed.transition3}</div>{/if}
                 {#if parsed.close}<div class="e-sec e-sec-close"><span class="cue-badge cue-close">Close</span><span class="affirm-text">{parsed.close}</span></div>{/if}
-                {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content"><span class="tp-ask-topic">{ask.topic}</span><span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
+                {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
               {:else if eIsClosing}
                 <div class="e-closing-wrap">
@@ -759,39 +818,49 @@
 
               {:else}
               <!-- ACKNOWLEDGE -->
+              {@const esl = getSectionLabels(eMode === 'compound' ? undefined : entry.tag)}
               {#if parsed.acknowledge}
                 <div class="e-sec e-sec-ack">
-                  <span class="cue-badge cue-ack">Acknowledge</span>
-                  <span class="affirm-text">{parsed.acknowledge}</span>
+                  <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-ack`)}>
+                    <span class="cue-badge cue-ack">{esl.ack}</span>
+                    <span class="e-sec-chevron">{collapsedSecs[`${i}-ack`] ? '▸' : '▾'}</span>
+                  </button>
+                  {#if !collapsedSecs[`${i}-ack`]}<span class="affirm-text">{parsed.acknowledge}</span>{/if}
                 </div>
               {/if}
               <!-- SOLVE -->
               {#if parsed.solve}
                 <div class="e-sec e-sec-solve">
-                  <span class="cue-badge cue-solve">Solve</span>
-                  <span class="affirm-text">{parsed.solve}</span>
+                  <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-solve`)}>
+                    <span class="cue-badge cue-solve">{esl.solve}</span>
+                    <span class="e-sec-chevron">{collapsedSecs[`${i}-solve`] ? '▸' : '▾'}</span>
+                  </button>
+                  {#if !collapsedSecs[`${i}-solve`]}<span class="affirm-text">{parsed.solve}</span>{/if}
                 </div>
               {/if}
               <!-- BRIDGE -->
               {#if parsed.bridge}
                 <div class="e-sec e-sec-bridge">
-                  <span class="cue-badge cue-bridge">Bridge</span>
-                  <span class="affirm-text">{parsed.bridge}</span>
+                  <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-bridge`)}>
+                    <span class="cue-badge cue-bridge">{esl.bridge}</span>
+                    <span class="e-sec-chevron">{collapsedSecs[`${i}-bridge`] ? '▸' : '▾'}</span>
+                  </button>
+                  {#if !collapsedSecs[`${i}-bridge`]}<span class="affirm-text">{parsed.bridge}</span>{/if}
                 </div>
               {/if}
               <!-- ANSWER -->
               {@const _eSayPi = bodyCues.some(c => c.label === 'Pivot' || c.typeTag === 'Pivot')}
               {@const _eSayEx = bodyCues.some(c => c.label === 'Example' || c.typeTag === 'Example')}
               <div class="e-sec e-sec-say" class:e-sec-say-example={_eSayEx} class:e-sec-say-pivot={_eSayPi}>
-                <div class="e-sec-header">
-                  <span class="cue-badge" class:cue-ask={parsed.cue === 'Ask'}>{parsed.cue}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-say`)}>
+                  <span class="cue-badge" class:cue-say={parsed.cue !== 'Ask'} class:cue-ask={parsed.cue === 'Ask'}>{esl.answer}</span>
+                  <span class="e-sec-chevron">{collapsedSecs[`${i}-say`] ? '▸' : '▾'}</span>
                   {#if parsed.tell && !eModeStreaming}
                     {@const secs = estimateSecs(parsed)}
                     <span class="tp-time-est">~{secs < 60 ? secs + 's' : Math.floor(secs/60) + 'm ' + (secs%60) + 's'}</span>
-                    {#if _eSayEx}<span class="cue-type-tag cue-type-example">Example</span>{/if}
-                    {#if _eSayPi}<span class="cue-type-tag cue-type-pivot">Pivot</span>{/if}
                   {/if}
-                </div>
+                </button>
+                {#if !collapsedSecs[`${i}-say`]}
                 <div class="tell-text">
                   {#if eModeStreaming && !parsed.body}
                     {parsed.tell}<span class="cursor">|</span>
@@ -820,7 +889,37 @@
                     {/each}
                   {/if}
                 </div>
-                {#if parsed.body}
+                {#if bodyCues.length > 0}
+                  <div class="e-cues">
+                    {#each bodyCues as cue}
+                      {@const isFlat = cue.label === 'Pivot' || cue.typeTag === 'Pivot'}
+                      {#if isFlat}
+                        <div class="tp-cue-flat">
+                          <span class="cue-label-sm" class:cue-label-transfer={cue.typeTag === 'Pivot' || cue.label === 'Pivot'}>{cue.typeTag || (cue.label === 'General' ? 'Point' : cue.label)}</span>
+                          <span class="tp-cue-flat-text">{cue.text}</span>
+                        </div>
+                      {:else}
+                        <div class="tp-cue-block" class:tp-cue-open={!!openCues[cue.text]}>
+                          <button class="tp-cue-toggle" onclick={() => { const opening = !openCues[cue.text]; toggleCueOpen(cue.text); if (opening) expandCue(entry.question, cue.text); }}>
+                            <span class="tp-cue-preview">{cue.title || (cue.text.split(/(?<=[.!?])\s+/)[0] ?? cue.text)}</span>
+                            <span class="tp-cue-chevron">{openCues[cue.text] ? '▾' : '▸'}</span>
+                          </button>
+                          {#if openCues[cue.text]}
+                            <div class="tp-cue-body">
+                              {#if expandedCues[cue.text]?.loading}
+                                <div class="cue-sentence cue-loading">…</div>
+                              {:else if expandedCues[cue.text]?.sentence}
+                                <div class="cue-sentence">{#each expandedCues[cue.text].sentence.split(/(?<=[.!?])\s+/) as s}{s.trim()}<br/>{/each}</div>
+                              {:else}
+                                <div class="cue-sentence">{#each cue.text.split(/(?<=[.!?])\s+/).filter(Boolean) as s}{s.trim()}<br/>{/each}</div>
+                              {/if}
+                            </div>
+                          {/if}
+                        </div>
+                      {/if}
+                    {/each}
+                  </div>
+                {:else if parsed.body}
                   <button class="expand-btn" onclick={() => toggleExpand(i)}>
                     {expanded[i] ? '▴ Less' : '▾ More context'}
                   </button>
@@ -830,6 +929,7 @@
                       {#if eModeStreaming}<span class="cursor">|</span>{/if}
                     </div>
                   {/if}
+                {/if}
                 {/if}
               </div>
               <!-- CLOSE -->
@@ -848,14 +948,9 @@
                       {@const askKey = '[Ask] ' + ask.topic}
                       <div class="tp-ask-item">
                         <div class="tp-ask-content">
-                          <span class="tp-ask-topic">{ask.topic}</span>
-                          {#if expandedCues[askKey]?.sentence}
-                            <span class="tp-ask-question">{expandedCues[askKey].sentence}</span>
-                          {:else if expandedCues[askKey]?.loading}
-                            <span class="tp-ask-question cue-loading">…</span>
-                          {:else}
-                            <span class="tp-ask-question">{ask.question}</span>
-                          {/if}
+                          {#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}
+                          <span class="tp-ask-question">{ask.question}</span>
+                          {#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}
                         </div>
                       </div>
                     {/each}
@@ -863,39 +958,6 @@
                 </div>
               {/if}
             {/if}
-            {/if}
-            <!-- Practice recording -->
-            {#if !eModeStreaming && eModeSuggestion && practiceRecorder.supported}
-              {@const pState = practiceState[i]}
-              {@const pResult = practiceResults[i]}
-              <div class="practice-bar">
-                {#if !pState}
-                  <button class="practice-btn" onclick={() => startPractice(i)}>● Practice answer</button>
-                {:else if pState === 'recording'}
-                  <div class="practice-recording-row">
-                    <span class="practice-rec-dot">●</span>
-                    <span class="practice-live-text">{practiceLiveText[i] || 'Listening…'}</span>
-                    <button class="practice-stop-btn" onclick={() => stopPractice(i)}>◼ Stop</button>
-                  </div>
-                {:else if pState === 'loading'}
-                  <span class="practice-scoring">Scoring<span class="dots">...</span></span>
-                {/if}
-                {#if pResult}
-                  <div class="practice-result">
-                    <div class="pr-header">
-                      <span class="pr-score"
-                        class:pr-score-good={pResult.confidence_score >= 70}
-                        class:pr-score-mid={pResult.confidence_score >= 50 && pResult.confidence_score < 70}
-                      >{pResult.confidence_score}</span>
-                      <span class="pr-tone">{pResult.tone}</span>
-                      <span class="pr-pace">{pResult.pace}</span>
-                      <button class="practice-btn practice-retry-btn" onclick={() => startPractice(i)}>↺ Retry</button>
-                    </div>
-                    {#if pResult.fillers_noted}<div class="pr-fillers">{pResult.fillers_noted}</div>{/if}
-                    <div class="pr-coaching">{pResult.coaching}</div>
-                  </div>
-                {/if}
-              </div>
             {/if}
             {/if}
           </div>
@@ -983,7 +1045,7 @@
   }
   .cue-badge.cue-ask    { background: #422006; color: #fbbf24; }
   .cue-badge.cue-ack    { background: #2e1065; color: #c084fc; }
-  .cue-badge.cue-solve  { background: #164e63; color: #67e8f9; }
+  .cue-badge.cue-solve  { background: #292524; color: #a8a29e; }
   .cue-badge.cue-bridge { background: #292524; color: #a8a29e; }
   .cue-badge.cue-close  { background: #1e3a5f; color: #93c5fd; }
 
@@ -1012,7 +1074,6 @@
     line-height: 1.4;
     overflow-wrap: break-word;
     flex: 1;
-    font-style: italic;
   }
 
   /* Close text (blue section) */
@@ -1027,6 +1088,9 @@
   /* Answer header row with time estimate */
   .tp-sec-header { display: flex; align-items: center; gap: 0.5rem; }
   .e-sec-header  { display: flex; align-items: center; gap: 0.5rem; }
+  .e-sec-header-toggle { cursor: pointer; border-radius: 0.2rem; padding: 0.1rem 0.2rem; margin: -0.1rem -0.2rem; background: none; border: none; text-align: left; width: 100%; }
+  .e-sec-header-toggle:hover { background: rgba(255,255,255,0.04); }
+  .e-sec-chevron { font-size: var(--fs-xs); color: #475569; }
   .tp-time-est {
     font-size: var(--fs-xs); color: #334155;
     font-variant-numeric: tabular-nums; font-style: italic;
@@ -1038,7 +1102,7 @@
   .tp-ask-content { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; }
   .tp-ask-topic { font-size: var(--fs-sm); color: #f59e0b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
   .tp-ask-question { font-size: var(--fs-lg); color: #fde68a; line-height: 1.4; overflow-wrap: break-word; }
-  .tp-ask-followup { font-size: var(--fs-sm); color: #78716c; line-height: 1.4; overflow-wrap: break-word; font-style: italic; }
+  .tp-ask-followup { font-size: var(--fs-sm); color: #a8956a; line-height: 1.4; overflow-wrap: break-word; font-style: italic; }
 
   /* Breadcrumb: Q type · A framework */
   .tp-breadcrumb {
@@ -1049,7 +1113,7 @@
   }
   .tp-bc-q { /* colored per tag, set inline */ }
   .tp-bc-sep { color: #334155; }
-  .tp-bc-a { color: #475569; }
+  .tp-bc-a { color: #475569; font-weight: 600; }
 
   /* Transition connector lines */
   .tp-transition {
@@ -1067,8 +1131,8 @@
   .entry-ans-type {
     font-size: var(--fs-xs); font-weight: 600; color: #475569;
     letter-spacing: 0.03em; white-space: nowrap;
-    padding: 0.05em 0.3em; background: #0d1525;
-    border: 1px solid #1e2d45; border-radius: 0.2em;
+    padding: 0.05em 0.4em; background: #080d18;
+    border: 1px solid #1a2540; border-radius: 0.2em;
     flex-shrink: 0;
   }
 
@@ -1114,7 +1178,7 @@
   :global(.tp-body strong) { color: #b8cce4; font-weight: 700; }
 
   /* Cue bullets (inside Say section) */
-  .tp-cues { display: flex; flex-direction: column; gap: 0.2rem; border-top: 1px solid #0d2010; padding-top: 0.35rem; }
+  .tp-cues, .e-cues { display: flex; flex-direction: column; gap: 0.2rem; border-top: 1px solid #0d2010; padding-top: 0.35rem; }
   .tp-cue-block {
     border-radius: 0.3rem; border: 1px solid #0d2010;
     overflow: hidden; background: #040b06;
@@ -1160,6 +1224,8 @@
   .tp-cue-flat { display: flex; align-items: center; gap: 0.4rem; padding: 0.15rem 0.4rem; }
   .tp-cue-flat-text { flex: 1; font-size: var(--fs-base); color: #3d8c52; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tp-sec > .cue-badge, .e-sec > .cue-badge { align-self: flex-start; }
+  .cue-badge.cue-toggle { appearance: none; border: none; cursor: pointer; font-family: inherit; font-size: inherit; font-weight: inherit; letter-spacing: inherit; user-select: none; }
+  .cue-badge.cue-toggle:hover { filter: brightness(1.2); }
   .cue-type-tag { display: inline-block; font-size: var(--fs-xs); font-weight: 800; padding: 0.1rem 0.4rem; border-radius: 0.25rem; background: #14532d; color: #4ade80; text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0; }
   .cue-type-example { background: #1a3a1a; color: #86efac; }
   .cue-type-pivot { background: #3b1506; color: #fb923c; }
@@ -1204,8 +1270,9 @@
   /* Question tag */
   .tp-tag {
     display: inline-block; padding: 0.08rem 0.4rem; border-radius: 0.2rem;
-    font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
-    letter-spacing: 0.07em; flex-shrink: 0; margin-top: 0.05rem;
+    font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.03em; flex-shrink: 0; margin-top: 0.05rem;
+    color: #475569; background: #080d18; border: 1px solid #1a2540;
   }
   .conf-good-pulse { animation: conf-glow 1.5s ease-out forwards; }
   @keyframes conf-glow {
@@ -1267,8 +1334,9 @@
   }
   .entry-tag {
     display: inline-block; padding: 0.05rem 0.35rem; border-radius: 0.2rem;
-    font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
-    letter-spacing: 0.06em; flex-shrink: 0; align-self: flex-start; margin-top: 0.15rem;
+    font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.03em; flex-shrink: 0; align-self: flex-start; margin-top: 0.15rem;
+    color: #475569; background: #080d18; border: 1px solid #1a2540;
   }
   .entry-redflag {
     display: flex; flex-direction: column; gap: 0.1rem;
@@ -1446,35 +1514,23 @@
     align-items: center;
     gap: 0.3rem;
     padding: 0.25rem 0.6rem;
-    background: #050d1a;
-    border: 1px solid #1a2540;
+    background: #071428;
+    border: 1px solid #1e3a5f;
     border-radius: 0.3rem;
     font-size: var(--fs-xs);
     font-weight: 700;
-    color: #475569;
+    color: #64748b;
     cursor: pointer;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     transition: all 0.1s;
   }
-  .mode-tab:hover { background: #0d1a2e; border-color: #2d4060; color: #94a3b8; }
+  .mode-tab:hover { background: #0d1a2e; border-color: #3b5998; color: #94a3b8; }
   .mode-tab.mode-tab-active {
     background: #071a0d;
     border-color: #166534;
     color: #4ade80;
   }
-  .mode-tab-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #1e293b;
-    flex-shrink: 0;
-  }
-  .mode-tab-dot.mode-tab-streaming {
-    background: #60a5fa;
-    animation: pulse 1.5s ease-in-out infinite;
-  }
-  .mode-tab-dot.mode-tab-ready { background: #22c55e; }
 
   /* === Peek sections === */
   .tp-peek {
@@ -1620,6 +1676,7 @@
   }
   .practice-stop-btn:hover { background: #450a0a; }
 
+  .practice-unsupported { font-size: var(--fs-xs); color: #334155; font-style: italic; }
   .practice-scoring {
     font-size: var(--fs-xs);
     color: #475569;

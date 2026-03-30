@@ -18,9 +18,6 @@
     }
   });
 
-  function shortQ(q: string, max = 55): string {
-    return q.length > max ? q.slice(0, max) + '…' : q;
-  }
 </script>
 
 <div class="qhist">
@@ -33,31 +30,22 @@
           class="qhist-item"
           class:active={i === currentIndex}
           onclick={() => onJump(i)}
-          title={entry.question}
         >
           <div class="qhist-top">
-            <span class="qhist-num">Q{i + 1}</span>
-            {#if i === currentIndex}<span class="qhist-current-badge">▶ Now</span>{/if}
             {#if entry.tag}
               {@const tc = TAG_CONFIG[entry.tag]}
-              <span class="qhist-tag" style="color: {tc.color}; background: {tc.bg}">{tc.label}</span>
+              <span class="qhist-tag">{tc.label}</span>
             {/if}
             {#if entry.secondaryTag}
               {@const tc2 = TAG_CONFIG[entry.secondaryTag]}
-              <span class="qhist-tag qhist-tag-secondary" style="color: {tc2.color}; background: {tc2.bg}" title="Also: {tc2.label}">+{tc2.label}</span>
+              <span class="qhist-tag qhist-tag-secondary" title="Also: {tc2.label}">+{tc2.label}</span>
             {/if}
             {#if entry.suggestion && !entry.streaming}
               {@const at = getAnswerType(parseSuggestion(entry.suggestion), entry.tag)}
               {#if at.framework}<span class="qhist-ans-type">{at.framework}</span>{/if}
             {/if}
-            <span class="qhist-status-dot"
-              class:dot-answered={entry.answered === true}
-              class:dot-unanswered={entry.answered === false}
-              class:dot-active={i === currentIndex && entry.answered == null}
-              title={entry.answered === true ? 'Answered' : entry.answered === false ? 'Not answered' : i === currentIndex ? 'Current' : 'Pending'}
-            ></span>
           </div>
-          <div class="qhist-q">{shortQ(entry.question)}</div>
+          <div class="qhist-q">{entry.question}</div>
           {#if entry.redFlag}
             <div class="qhist-redflag">⚠ {entry.redFlag.category}</div>
           {/if}
@@ -138,33 +126,20 @@
     flex-wrap: nowrap;
   }
 
-  .qhist-num {
+.qhist-tag {
     font-size: var(--fs-xs);
-    font-weight: 800;
-    color: #334155;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    flex-shrink: 0;
-  }
-  .qhist-item.active .qhist-num { color: #4ade80; }
-  .qhist-current-badge {
-    font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
-    color: #4ade80; background: #14532d; border-radius: 0.2em; padding: 0.1em 0.4em;
-    flex-shrink: 0;
-  }
-
-  .qhist-tag {
-    font-size: var(--fs-xs);
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.03em;
     padding: 0.05em 0.35em;
     border-radius: 0.2em;
     flex-shrink: 0;
+    color: #475569;
+    background: #080d18;
+    border: 1px solid #1a2540;
   }
   .qhist-tag-secondary {
     opacity: 0.7;
-    border: 1px solid currentColor;
   }
 
   .qhist-ans-type {

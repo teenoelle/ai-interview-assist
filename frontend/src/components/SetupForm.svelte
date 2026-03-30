@@ -305,7 +305,7 @@
               rows={3}
               value={text}
               oninput={(e) => updateInterviewer(i, (e.target as HTMLTextAreaElement).value)}
-              placeholder="Paste the interviewer's LinkedIn profile text here..."
+              placeholder="Start with their full name on the first line, then paste the rest of their LinkedIn profile..."
             ></textarea>
             {#if interviewers.length > 1}
               <button type="button" class="btn-remove" onclick={() => removeInterviewer(i)}>✕</button>
@@ -313,7 +313,7 @@
           </div>
         </div>
       {/each}
-      <small>Paste text copied from their LinkedIn page. Add one entry per interviewer.</small>
+      <small>Paste text copied from their LinkedIn page. <strong>Start each entry with the interviewer's full name on the first line.</strong> Add one entry per interviewer.</small>
     </div>
 
     <div class="field">

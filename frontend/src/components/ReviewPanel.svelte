@@ -49,13 +49,24 @@
     start_ms: number;
   }
 
-  const { report, onClose, onDelete, onPractice } = $props<{
-    report: ReviewReport;
+  import type { TranscriptEntry, SuggestionEntry, PracticeAnswer, DebriefResult } from '../lib/types';
+  import { TAG_CONFIG } from '../lib/questionTagger';
+
+  const { report, onClose, onDelete, onPractice, liveSuggestions, liveTranscript, practiceAnswers, recordingUrl, onSave, initialTab } = $props<{
+    report?: ReviewReport;
     onClose: () => void;
     onDelete?: (id: string) => void;
     onPractice?: (question: string) => void;
+    liveSuggestions?: SuggestionEntry[];
+    liveTranscript?: TranscriptEntry[];
+    practiceAnswers?: PracticeAnswer[];
+    recordingUrl?: string;
+    onSave?: (result: DebriefResult) => void;
+    initialTab?: 'qa' | 'transcript' | 'ai-review' | 'timeline' | 'practice' | 'recording';
   }>();
 
+  type Tab = 'qa' | 'transcript' | 'ai-review' | 'timeline' | 'practice' | 'recording';
+  let activeTab = $state<Tab>(initialTab ?? 'qa');
   let mediaEl = $state<HTMLVideoElement | HTMLAudioElement | null>(null);
   let currentMs = $state(0);
   let qaListEl = $state<HTMLDivElement | null>(null);
@@ -66,12 +77,124 @@
   let confirmDelete = $state(false);
   let coachingExpanded = $state(false);
 
-  const isVideo = $derived(['mp4','webm','mov','mkv','avi'].some(
-    ext => report.source_filename.toLowerCase().endsWith(`.${ext}`)
-  ));
+  // ── Live debrief state ─────────────────────────────────────────────────────
+  interface DebriefQaEntry {
+    question: string; tag?: string; suggestion: string; answerText: string;
+    coaching: string; missedFollowup: boolean; missedMetric: boolean;
+    confidenceScore?: number; loadingCoaching: boolean; suggestionOpen: boolean;
+  }
+  let debriefLoading = $state(false);
+  let debriefResult = $state<DebriefResult | null>(null);
+  let debriefError = $state('');
+  let nextSteps = $state<string[]>([]);
+  let loadingNextSteps = $state(false);
+  let debriefQa = $state<DebriefQaEntry[]>([]);
+  let debriefFetched = $state(false);
+  let debriefEmailCopied = $state(false);
 
-  const sourceUrl = $derived(`/api/review/${report.id}/source`);
-  const downloadUrl = $derived(`/api/review/${report.id}/download`);
+  const simulatedSuggestions = $derived(
+    (liveSuggestions ?? [])
+      .filter(s => s.question && s.suggestion && s.source === 'simulated')
+      .sort((a, b) => (a.detectedAt ?? 0) - (b.detectedAt ?? 0))
+  );
+  const totalPracticeCount = $derived(simulatedSuggestions.length + (practiceAnswers?.length ?? 0));
+
+  function extractAnswer(detectedAt: number, nextDetectedAt: number): string {
+    return (liveTranscript ?? [])
+      .filter(e => e.speaker === 'You' && e.timestamp_ms > detectedAt && (nextDetectedAt === 0 || e.timestamp_ms < nextDetectedAt))
+      .map(e => e.text).join(' ').trim();
+  }
+
+  function initDebriefQa() {
+    if (!liveSuggestions) return;
+    const sorted = [...liveSuggestions]
+      .filter(s => s.question && s.suggestion && s.source !== 'simulated')
+      .sort((a, b) => (a.detectedAt ?? 0) - (b.detectedAt ?? 0));
+    debriefQa = sorted.map((s, i) => {
+      const nextAt = sorted[i + 1]?.detectedAt ?? 0;
+      const answerText = extractAnswer(s.detectedAt ?? 0, nextAt)
+        || (practiceAnswers ?? []).find(pa => pa.question === s.question)?.answerText
+        || '';
+      return {
+        question: s.question, tag: s.tag, suggestion: s.suggestion, answerText,
+        coaching: s.answerFeedback?.coaching ?? '',
+        missedFollowup: s.answerFeedback?.missed_followup ?? false,
+        missedMetric: s.answerFeedback?.missed_metric ?? false,
+        confidenceScore: s.vocalFeedback?.confidence_score,
+        loadingCoaching: !s.answerFeedback && !!answerText,
+        suggestionOpen: false,
+      };
+    });
+  }
+
+  async function fetchMissingCoaching() {
+    for (let i = 0; i < debriefQa.length; i++) {
+      if (!debriefQa[i].loadingCoaching) continue;
+      try {
+        const resp = await fetch('/api/answer-feedback', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: debriefQa[i].question, answer: debriefQa[i].answerText, suggestion: debriefQa[i].suggestion }),
+        });
+        const data = resp.ok ? await resp.json() : null;
+        debriefQa[i] = { ...debriefQa[i], ...(data ? { coaching: data.coaching, missedFollowup: data.missed_followup, missedMetric: data.missed_metric } : {}), loadingCoaching: false };
+      } catch { debriefQa[i] = { ...debriefQa[i], loadingCoaching: false }; }
+      debriefQa = [...debriefQa];
+    }
+  }
+
+  async function fetchNextSteps() {
+    if (!liveTranscript?.length) return;
+    loadingNextSteps = true;
+    try {
+      const resp = await fetch('/api/next-steps', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript: liveTranscript.map(e => ({ speaker: e.speaker, text: e.text })) }) });
+      if (resp.ok) { const d = await resp.json(); nextSteps = d.steps ?? []; }
+    } catch { /**/ }
+    loadingNextSteps = false;
+  }
+
+  async function fetchDebrief() {
+    if (debriefFetched || !liveSuggestions) return;
+    debriefFetched = true;
+    debriefLoading = true;
+    fetchNextSteps();
+    initDebriefQa();
+    try {
+      const resp = await fetch('/api/debrief', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transcript: (liveTranscript ?? []).map(e => ({ speaker: e.speaker, text: e.text })),
+          suggestions: liveSuggestions.filter(s => s.suggestion).map(s => ({ question: s.question, suggestion: s.suggestion })),
+        }) });
+      if (!resp.ok) throw new Error(`Debrief failed: ${resp.status}`);
+      debriefResult = await resp.json();
+      onSave?.(debriefResult);
+    } catch (e) { debriefError = String(e); }
+    finally { debriefLoading = false; }
+    fetchMissingCoaching();
+  }
+
+  // Auto-run debrief on mount when live — ensures saveInterview fires regardless of which tab user visits
+  if (liveSuggestions) fetchDebrief();
+
+  $effect(() => {
+    // If user navigates to timeline before debrief finishes, init Q&A entries immediately
+    if (activeTab === 'timeline' && !debriefFetched) { debriefFetched = true; initDebriefQa(); fetchMissingCoaching(); }
+  });
+
+  async function copyDebriefEmail() {
+    if (!debriefResult) return;
+    const text = debriefResult.followup_email_draft ?? debriefResult.followup_email.map(p => `• ${p}`).join('\n');
+    await navigator.clipboard.writeText(text);
+    debriefEmailCopied = true;
+    setTimeout(() => { debriefEmailCopied = false; }, 2000);
+  }
+
+  const isVideo = $derived(report ? ['mp4','webm','mov','mkv','avi'].some(
+    ext => report.source_filename.toLowerCase().endsWith(`.${ext}`)
+  ) : false);
+
+  const sourceUrl = $derived(report ? `/api/review/${report.id}/source` : '');
+  const downloadUrl = $derived(report ? `/api/review/${report.id}/download` : '');
 
   function fmtDuration(secs: number): string {
     const m = Math.floor(secs / 60);
@@ -118,9 +241,9 @@
 
   // Progressive Q&A reveal
   const visibleQa = $derived(
-    currentMs > 0
+    report ? (currentMs > 0
       ? report.qa_pairs.filter(qa => currentMs >= qa.start_ms)
-      : report.qa_pairs
+      : report.qa_pairs) : []
   );
 
   $effect(() => {
@@ -134,6 +257,7 @@
 
   const activeSegIdx = $derived(() => {
     const ms = currentMs;
+    if (!report) return -1;
     for (let i = report.transcript.length - 1; i >= 0; i--) {
       if (report.transcript[i].start_ms <= ms) return i;
     }
@@ -141,7 +265,7 @@
   });
 
   const currentSentiment = $derived(() => {
-    const events = report.sentiment_events ?? [];
+    const events = report?.sentiment_events ?? [];
     if (!events.length || currentMs === 0) return null;
     for (let i = events.length - 1; i >= 0; i--) {
       if (events[i].timestamp_ms <= currentMs) return events[i];
@@ -268,23 +392,24 @@
     <!-- Header -->
     <div class="modal-header">
       <div class="header-left">
-        <h2>{report.source_filename || 'Interview Review'}</h2>
-        <span class="meta">
-          {fmtDate(report.created_at)} · {fmtDuration(report.duration_secs)}
-          {#if report.source_type === 'live'}
-            <span class="badge live">Live</span>
-          {:else}
-            <span class="badge upload">Upload</span>
-          {/if}
-        </span>
+        <h2>{report?.source_filename || 'Interview Review'}</h2>
+        {#if report}
+          <span class="meta">
+            {fmtDate(report.created_at)} · {fmtDuration(report.duration_secs)}
+            {#if report.source_type === 'live'}
+              <span class="badge live">Live</span>
+            {:else}
+              <span class="badge upload">Upload</span>
+            {/if}
+          </span>
+        {/if}
       </div>
       <button class="close-btn" onclick={onClose}>✕</button>
     </div>
 
-    <div class="modal-body">
-
-      <!-- Summary row -->
-      <div class="summary-row">
+    <!-- Summary row — only when report is loaded -->
+    {#if report}
+      <div class="summary-bar">
         <div class="stat-card">
           <span class="stat-val">{report.speaker_summary.you_pct.toFixed(0)}%</span>
           <span class="stat-label">You spoke</span>
@@ -299,52 +424,131 @@
         </div>
         <div class="stat-card">
           <span class="stat-val">{report.keywords_mentioned.length}</span>
-          <span class="stat-label">keywords used</span>
+          <span class="stat-label">keywords</span>
         </div>
       </div>
+    {/if}
 
-      {#if report.keywords_mentioned.length > 0}
-        <div class="keyword-row">
-          {#each report.keywords_mentioned as kw}
-            <span class="kw-chip">{kw}</span>
-          {/each}
-        </div>
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      {#if report}
+        <button class="tab" class:active={activeTab === 'qa'} onclick={() => activeTab = 'qa'}>
+          Q&amp;A Review {#if report.qa_pairs.length > 0}<span class="tab-count">{report.qa_pairs.length}</span>{/if}
+        </button>
+        <button class="tab" class:active={activeTab === 'transcript'} onclick={() => activeTab = 'transcript'}>Transcript</button>
       {/if}
-
-      <!-- Replay -->
-      <div class="replay-section">
-        <div class="section-label">REPLAY</div>
-        {#if isVideo}
-          <!-- svelte-ignore a11y_media_has_caption -->
-          <video bind:this={mediaEl} src={sourceUrl} controls class="media-el" ontimeupdate={onTimeUpdate}></video>
-        {:else}
-          <audio bind:this={mediaEl} src={sourceUrl} controls class="audio-el" ontimeupdate={onTimeUpdate}></audio>
+      {#if liveSuggestions}
+        <button class="tab" class:active={activeTab === 'ai-review'} onclick={() => activeTab = 'ai-review'}>AI Review</button>
+        <button class="tab" class:active={activeTab === 'timeline'} onclick={() => activeTab = 'timeline'}>
+          Timeline {debriefQa.length > 0 ? `(${debriefQa.length})` : ''}
+        </button>
+        {#if totalPracticeCount > 0}
+          <button class="tab" class:active={activeTab === 'practice'} onclick={() => activeTab = 'practice'}>
+            Practice ({totalPracticeCount})
+          </button>
         {/if}
+        {#if recordingUrl}
+          <button class="tab" class:active={activeTab === 'recording'} onclick={() => activeTab = 'recording'}>Recording</button>
+        {/if}
+      {/if}
+    </div>
 
-        {#if (report.sentiment_events?.length ?? 0) > 0}
-          {@const sent = currentSentiment()}
-          {#if sent}
-            {@const color = EMOTION_COLOR[sent.emotion] ?? '#94a3b8'}
-            <div class="sentiment-strip">
-              <span class="sent-emotion" style="color: {color}">{sent.emotion}</span>
-              {#if sent.reason}<span class="sent-reason">{sent.reason}</span>{/if}
-              {#if sent.coaching}
-                <button class="sent-coaching-btn" onclick={() => { coachingExpanded = !coachingExpanded; }}>
-                  {coachingExpanded ? '▾' : '▸'} tip
-                </button>
-                {#if coachingExpanded}
-                  <span class="sent-coaching">{sent.coaching}</span>
-                {/if}
-              {/if}
-            </div>
-          {:else if currentMs > 0}
-            <div class="sentiment-strip sentiment-waiting">
-              <span class="sent-waiting">Interviewer sentiment will appear at speaker turns…</span>
-            </div>
+    <div class="modal-body">
+
+      {#if activeTab === 'qa' && !report}
+        <div class="deb-loading">Saving session report…</div>
+      {:else if activeTab === 'qa' && report}
+        <!-- Media player compact bar -->
+        <div class="replay-bar">
+          {#if isVideo}
+            <!-- svelte-ignore a11y_media_has_caption -->
+            <video bind:this={mediaEl} src={sourceUrl} controls class="media-el" ontimeupdate={onTimeUpdate}></video>
+          {:else}
+            <audio bind:this={mediaEl} src={sourceUrl} controls class="audio-el" ontimeupdate={onTimeUpdate}></audio>
           {/if}
+          {#if (report.sentiment_events?.length ?? 0) > 0}
+            {@const sent = currentSentiment()}
+            {#if sent}
+              {@const color = EMOTION_COLOR[sent.emotion] ?? '#94a3b8'}
+              <div class="sentiment-strip">
+                <span class="sent-emotion" style="color: {color}">{sent.emotion}</span>
+                {#if sent.reason}<span class="sent-reason">{sent.reason}</span>{/if}
+                {#if sent.coaching}
+                  <button class="sent-coaching-btn" onclick={() => { coachingExpanded = !coachingExpanded; }}>
+                    {coachingExpanded ? '▾' : '▸'} tip
+                  </button>
+                  {#if coachingExpanded}<span class="sent-coaching">{sent.coaching}</span>{/if}
+                {/if}
+              </div>
+            {/if}
+          {/if}
+        </div>
+
+        {#if report.keywords_mentioned.length > 0}
+          <div class="keyword-row">
+            {#each report.keywords_mentioned as kw}
+              <span class="kw-chip">{kw}</span>
+            {/each}
+          </div>
         {/if}
 
-        <div class="transcript-scroll">
+        {#if report.qa_pairs.length === 0}
+          <div class="qa-empty">No Q&amp;A pairs were detected in this recording.</div>
+        {:else}
+          {#if currentMs === 0}
+            <div class="qa-replay-hint">▶ Play to reveal cards in real time, or all shown below</div>
+          {/if}
+          <div class="qa-list" bind:this={qaListEl}>
+            {#each visibleQa as qa}
+              {@const grade = qaGrade(qa)}
+              {@const gcolor = gradeColor(grade)}
+              <div class="qa-card">
+                <div class="qa-card-header">
+                  <span class="qa-grade" style="color:{gcolor}; border-color:{gcolor}40">{grade}</span>
+                  <span class="qa-question">{qa.question}</span>
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <span class="seek-btn" role="button" tabindex="0"
+                    title="Jump to this question"
+                    onclick={() => seekTo(qa.start_ms)}
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') seekTo(qa.start_ms); }}
+                  >⏩ {fmtDuration(qa.start_ms / 1000)}</span>
+                </div>
+                <div class="qa-card-body">
+                  <div class="qa-col-left">
+                    <div class="qa-stats">
+                      <span style="color:{wpmColor(qa.wpm)}">{qa.wpm} wpm</span>
+                      <span class="qa-stat-sep">·</span>
+                      <span>{fmtDuration(qa.duration_secs)}</span>
+                      {#if qa.missed_followup}<span class="qa-stat-sep">·</span><span class="qa-flag">no follow-up</span>{/if}
+                      {#if qa.missed_metric}<span class="qa-stat-sep">·</span><span class="qa-flag">no metric</span>{/if}
+                    </div>
+                    <div class="qa-col-label">What you said</div>
+                    <p class="qa-answer">{qa.answer_text}</p>
+                  </div>
+                  <div class="qa-col-right">
+                    <div class="qa-col-label">Coaching</div>
+                    <p class="qa-coaching">{qa.coaching}</p>
+                    {#if onPractice}
+                      <button class="practice-btn" onclick={() => { onPractice?.(qa.question); onClose(); }}>Practice this →</button>
+                    {/if}
+                  </div>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+      {:else if activeTab === 'transcript' && report}
+        <!-- Transcript tab -->
+        <div class="replay-bar">
+          {#if isVideo}
+            <!-- svelte-ignore a11y_media_has_caption -->
+            <video bind:this={mediaEl} src={sourceUrl} controls class="media-el" ontimeupdate={onTimeUpdate}></video>
+          {:else}
+            <audio bind:this={mediaEl} src={sourceUrl} controls class="audio-el" ontimeupdate={onTimeUpdate}></audio>
+          {/if}
+        </div>
+        <div class="transcript-full">
           {#each report.transcript as seg, i}
             <div
               class="seg"
@@ -361,73 +565,192 @@
             </div>
           {/each}
         </div>
-      </div>
 
-      <!-- Q&A two-column cards -->
-      {#if report.qa_pairs.length > 0}
-        <div class="section-label">Q&amp;A REVIEW</div>
-        {#if currentMs === 0}
-          <div class="qa-replay-hint">▶ Play recording to reveal cards in real time, or review all below</div>
-        {/if}
-        <div class="qa-list" bind:this={qaListEl}>
-          {#each visibleQa as qa}
-            {@const grade = qaGrade(qa)}
-            {@const gcolor = gradeColor(grade)}
-            <div class="qa-card">
-              <div class="qa-card-header">
-                <span class="qa-grade" style="color:{gcolor}; border-color:{gcolor}40">{grade}</span>
-                <span class="qa-question">{qa.question}</span>
-                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <span class="seek-btn" role="button" tabindex="0"
-                  title="Jump to this question"
-                  onclick={() => seekTo(qa.start_ms)}
-                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') seekTo(qa.start_ms); }}
-                >⏩ {fmtDuration(qa.start_ms / 1000)}</span>
+      {:else if activeTab === 'ai-review'}
+        <!-- AI Review tab -->
+        {#if debriefLoading}
+          <div class="deb-loading">Analyzing your interview…</div>
+        {:else if debriefError}
+          <div class="deb-error">{debriefError}</div>
+        {:else if debriefResult}
+          <section class="deb-section">
+            <h3 class="deb-h3">Overall</h3>
+            <p class="deb-summary">{debriefResult.summary}</p>
+          </section>
+          <div class="deb-two-col">
+            <section class="deb-section">
+              <h3 class="deb-h3 deb-green">Strong Moments</h3>
+              <ul class="deb-list">{#each debriefResult.strong_points as p}<li>{p}</li>{/each}</ul>
+            </section>
+            <section class="deb-section">
+              <h3 class="deb-h3 deb-yellow">Areas to Improve</h3>
+              <ul class="deb-list">{#each debriefResult.improvement_areas as p}<li>{p}</li>{/each}</ul>
+            </section>
+          </div>
+          <section class="deb-section">
+            <h3 class="deb-h3 deb-amber">Next Steps</h3>
+            {#if loadingNextSteps}
+              <p class="deb-muted">Extracting next steps…</p>
+            {:else if nextSteps.length > 0}
+              <ul class="deb-list">{#each nextSteps as s}<li>{s}</li>{/each}</ul>
+            {:else}
+              <p class="deb-muted">No specific next steps mentioned.</p>
+            {/if}
+          </section>
+          <section class="deb-section">
+            <div class="deb-email-header">
+              <h3 class="deb-h3">Follow-up Email</h3>
+              <button class="deb-copy-btn" class:copied={debriefEmailCopied} onclick={copyDebriefEmail}>
+                {debriefEmailCopied ? '✓ Copied!' : 'Copy email'}
+              </button>
+            </div>
+            {#if debriefResult.followup_email_draft}
+              <div class="deb-email-draft">
+                {#each debriefResult.followup_email_draft.split('\n') as line}
+                  {#if line.trim() === ''}<div class="deb-email-blank"></div>
+                  {:else}<div class="deb-email-line">{line}</div>{/if}
+                {/each}
               </div>
-              <div class="qa-card-body">
-                <div class="qa-col-left">
-                  <div class="qa-stats">
-                    <span style="color:{wpmColor(qa.wpm)}">{qa.wpm} wpm</span>
-                    <span class="qa-stat-sep">·</span>
-                    <span>{fmtDuration(qa.duration_secs)}</span>
-                    {#if qa.missed_followup}
-                      <span class="qa-stat-sep">·</span>
-                      <span class="qa-flag">no follow-up</span>
-                    {/if}
-                    {#if qa.missed_metric}
-                      <span class="qa-stat-sep">·</span>
-                      <span class="qa-flag">no metric</span>
-                    {/if}
-                  </div>
-                  <div class="qa-col-label">What you said</div>
-                  <p class="qa-answer">{qa.answer_text}</p>
+            {:else}
+              <ul class="deb-list">{#each debriefResult.followup_email as p}<li>{p}</li>{/each}</ul>
+            {/if}
+          </section>
+        {/if}
+
+      {:else if activeTab === 'timeline'}
+        <!-- Timeline tab -->
+        <div class="deb-timeline">
+          {#if debriefQa.length === 0}
+            <p class="deb-muted">No live questions detected this session.</p>
+          {:else}
+            {#each debriefQa as qa, i}
+              <div class="tl-item">
+                <div class="tl-q-row">
+                  {#if qa.tag}
+                    {@const tc = TAG_CONFIG[qa.tag]}
+                    <span class="tl-tag" style="color: {tc.color}; background: {tc.bg}">{tc.label}</span>
+                  {/if}
+                  <span class="tl-num">{i + 1}</span>
+                  <span class="tl-q-text">"{qa.question}"</span>
                 </div>
-                <div class="qa-col-right">
-                  <div class="qa-col-label">Coaching</div>
-                  <p class="qa-coaching">{qa.coaching}</p>
-                  {#if onPractice}
-                    <button class="practice-btn" onclick={() => { onPractice?.(qa.question); onClose(); }}>
-                      Practice this →
+                {#if qa.answerText}
+                  <div class="tl-answer">
+                    <span class="tl-answer-label">You</span>
+                    <span class="tl-answer-text">{qa.answerText}</span>
+                  </div>
+                {/if}
+                <div class="tl-coaching">
+                  {#if qa.loadingCoaching}
+                    <span class="deb-muted">Analyzing answer…</span>
+                  {:else}
+                    {#if qa.coaching}<p class="tl-coaching-note">{qa.coaching}</p>{/if}
+                    {#if qa.missedFollowup || qa.missedMetric || qa.confidenceScore}
+                      <div class="tl-flags">
+                        {#if qa.missedMetric}<span class="tl-flag tl-flag-warn">Missing metric</span>{/if}
+                        {#if qa.missedFollowup}<span class="tl-flag tl-flag-warn">Missing follow-up</span>{/if}
+                        {#if qa.confidenceScore && qa.confidenceScore >= 70}<span class="tl-flag tl-flag-good">Strong answer</span>{/if}
+                      </div>
+                    {/if}
+                  {/if}
+                  {#if qa.suggestion}
+                    <button class="tl-toggle" onclick={() => { debriefQa[i] = { ...debriefQa[i], suggestionOpen: !debriefQa[i].suggestionOpen }; debriefQa = [...debriefQa]; }}>
+                      {debriefQa[i].suggestionOpen ? '▾' : '▸'} AI Suggestion
                     </button>
+                    {#if debriefQa[i].suggestionOpen}
+                      <div class="tl-suggestion">{qa.suggestion}</div>
+                    {/if}
                   {/if}
                 </div>
               </div>
-            </div>
-          {/each}
+            {/each}
+          {/if}
         </div>
+
+      {:else if activeTab === 'practice'}
+        <!-- Practice tab -->
+        <div class="deb-timeline">
+          {#if totalPracticeCount === 0}
+            <p class="deb-muted">No practice questions this session.</p>
+          {:else}
+            {#if simulatedSuggestions.length > 0}
+              <div class="practice-label">Example &amp; Predicted Questions</div>
+              {#each simulatedSuggestions as s, i}
+                <div class="tl-item tl-item-practice">
+                  <div class="tl-q-row">
+                    {#if s.tag}
+                      {@const tc = TAG_CONFIG[s.tag]}
+                      <span class="tl-tag" style="color: {tc.color}; background: {tc.bg}">{tc.label}</span>
+                    {/if}
+                    <span class="tl-num">{i + 1}</span>
+                    <span class="tl-q-text">"{s.question}"</span>
+                    <span class="tl-practice-badge">Practice</span>
+                  </div>
+                  {#if s.suggestion}
+                    <div class="tl-coaching">
+                      <p class="tl-suggestion">{s.suggestion}</p>
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            {/if}
+            {#if practiceAnswers && practiceAnswers.length > 0}
+              <div class="practice-label" style="margin-top: {simulatedSuggestions.length > 0 ? '1rem' : '0'}">Recorded Practice Answers</div>
+              {#each practiceAnswers as pa, i}
+                <div class="tl-item tl-item-practice">
+                  <div class="tl-q-row">
+                    <span class="tl-num">{simulatedSuggestions.length + i + 1}</span>
+                    <span class="tl-q-text">"{pa.question}"</span>
+                    <span class="tl-practice-badge tl-practice-badge-rec">Recorded</span>
+                  </div>
+                  {#if pa.answerText}
+                    <div class="tl-answer">
+                      <span class="tl-answer-label">You</span>
+                      <span class="tl-answer-text">{pa.answerText}</span>
+                    </div>
+                  {/if}
+                  <div class="tl-coaching">
+                    {#if pa.score !== undefined}
+                      <div class="tl-flags">
+                        <span class="tl-flag" style="color:{pa.score >= 70 ? '#22c55e' : pa.score >= 50 ? '#f59e0b' : '#ef4444'}; border-color:currentColor">Score: {pa.score}/100</span>
+                        {#if pa.vocalTone}<span class="tl-flag" style="color:#94a3b8; border-color:#334155">Tone: {pa.vocalTone}{pa.vocalConfidence !== undefined ? ` · ${pa.vocalConfidence}%` : ''}</span>{/if}
+                      </div>
+                    {/if}
+                    {#if pa.coaching}<p class="tl-coaching-note">{pa.coaching}</p>{/if}
+                    {#if pa.strong}<p class="tl-coaching-note" style="color:#4ade80">{pa.strong}</p>{/if}
+                  </div>
+                </div>
+              {/each}
+            {/if}
+          {/if}
+        </div>
+
+      {:else if activeTab === 'recording'}
+        <!-- Recording tab -->
+        {#if recordingUrl}
+          <div class="rec-section">
+            <!-- svelte-ignore a11y_media_has_caption -->
+            <video class="rec-player" src={recordingUrl} controls></video>
+            <a class="share-btn" href={recordingUrl} download="interview-recording.webm">⬇ Download recording</a>
+          </div>
+        {/if}
+
       {/if}
 
     </div>
 
     <!-- Export footer -->
     <div class="share-footer">
-      <div class="share-group">
-        <button class="share-btn" onclick={downloadPrepSheet}>↓ Prep Sheet</button>
-        <button class="share-btn" class:copied={copyMdState === 'copied'} onclick={copyMarkdown}>
-          {copyMdState === 'copied' ? '✓ Copied!' : 'Copy Markdown'}
-        </button>
-        <a class="share-btn" href={downloadUrl} download title="Full server-generated report">↓ Full Report</a>
-      </div>
+      {#if report}
+        <div class="share-group">
+          <button class="share-btn" onclick={downloadPrepSheet}>↓ Prep Sheet</button>
+          <button class="share-btn" class:copied={copyMdState === 'copied'} onclick={copyMarkdown}>
+            {copyMdState === 'copied' ? '✓ Copied!' : 'Copy Markdown'}
+          </button>
+          <a class="share-btn" href={downloadUrl} download title="Full server-generated report">↓ Full Report</a>
+        </div>
+      {:else}
+        <span class="share-saving">Saving report…</span>
+      {/if}
       <div class="email-row">
         <input
           class="email-input"
@@ -440,7 +763,7 @@
           {emailSent ? '✓' : '✉'}
         </button>
       </div>
-      {#if onDelete}
+      {#if onDelete && report}
         <div class="delete-group">
           {#if confirmDelete}
             <button class="del-confirm-btn" onclick={doDelete}>Confirm delete</button>
@@ -476,13 +799,20 @@
   .close-btn { background: none; border: none; color: #64748b; font-size: 1rem; cursor: pointer; flex-shrink: 0; padding: 0.2rem 0.4rem; }
   .close-btn:hover { color: #e2e8f0; }
 
-  .modal-body { overflow-y: auto; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; flex: 1; }
+  /* Summary bar */
+  .summary-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; padding: 0.75rem 1.5rem 0; flex-shrink: 0; }
+  .stat-card { background: #0a1628; border: 1px solid #1e293b; border-radius: 0.5rem; padding: 0.55rem; display: flex; flex-direction: column; align-items: center; gap: 0.1rem; }
+  .stat-val { font-size: 1.2rem; font-weight: 700; color: #60a5fa; }
+  .stat-label { font-size: 0.68rem; color: #64748b; text-align: center; }
 
-  /* Summary */
-  .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; }
-  .stat-card { background: #0a1628; border: 1px solid #1e293b; border-radius: 0.5rem; padding: 0.75rem; display: flex; flex-direction: column; align-items: center; gap: 0.2rem; }
-  .stat-val { font-size: 1.4rem; font-weight: 700; color: #60a5fa; }
-  .stat-label { font-size: 0.72rem; color: #64748b; text-align: center; }
+  /* Tab bar */
+  .tab-bar { display: flex; border-bottom: 1px solid #1e293b; padding: 0 1.5rem; flex-shrink: 0; margin-top: 0.5rem; }
+  .tab { background: none; border: none; border-bottom: 2px solid transparent; color: #475569; font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.75rem; cursor: pointer; transition: color 0.12s, border-color 0.12s; margin-bottom: -1px; display: flex; align-items: center; gap: 0.35rem; }
+  .tab:hover { color: #94a3b8; }
+  .tab.active { color: #60a5fa; border-bottom-color: #60a5fa; }
+  .tab-count { background: #1e3a5f; color: #60a5fa; border-radius: 0.75rem; font-size: 0.65rem; padding: 0.05rem 0.4rem; font-weight: 700; }
+
+  .modal-body { overflow-y: auto; padding: 0.75rem 1.5rem 1rem; display: flex; flex-direction: column; gap: 0.85rem; flex: 1; }
 
   .keyword-row { display: flex; flex-wrap: wrap; gap: 0.35rem; }
   .kw-chip { padding: 0.15rem 0.6rem; border-radius: 1rem; background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3); color: #93c5fd; font-size: 0.75rem; }
@@ -492,12 +822,12 @@
   .badge.upload { background: rgba(59,130,246,0.12); color: #60a5fa; }
 
   /* Replay */
-  .section-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; color: #475569; text-transform: uppercase; margin-bottom: -0.5rem; }
-  .replay-section { display: flex; flex-direction: column; gap: 0.75rem; }
-  .media-el { width: 100%; border-radius: 0.5rem; background: #000; max-height: 240px; object-fit: contain; }
+  .replay-bar { display: flex; flex-direction: column; gap: 0.5rem; }
+  .media-el { width: 100%; border-radius: 0.5rem; background: #000; max-height: 200px; object-fit: contain; }
   .audio-el { width: 100%; }
 
-  .transcript-scroll { max-height: 180px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 0.5rem; display: flex; flex-direction: column; }
+  .transcript-full { flex: 1; border: 1px solid #1e293b; border-radius: 0.5rem; display: flex; flex-direction: column; overflow-y: auto; }
+  .qa-empty { color: #475569; font-style: italic; font-size: var(--fs-sm); padding: 2rem; text-align: center; }
   .seg { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.35rem 0.75rem; cursor: pointer; transition: background 0.1s; font-size: 0.8rem; }
   .seg:hover { background: #0f1f35; }
   .seg.active { background: rgba(59,130,246,0.12); }
@@ -571,6 +901,7 @@
     padding: 0.65rem 1.25rem; border-top: 1px solid #1e293b;
     background: #080f1c; flex-shrink: 0; border-radius: 0 0 0.75rem 0.75rem;
   }
+  .share-saving { font-size: var(--fs-xs); color: #334155; font-style: italic; }
   .share-group { display: flex; gap: 0.4rem; align-items: center; }
   .share-btn {
     padding: 0.28rem 0.65rem; background: transparent;
@@ -592,4 +923,53 @@
   .del-btn:hover { border-color: #f87171; color: #f87171; }
   .del-confirm-btn { padding: 0.28rem 0.6rem; background: #7f1d1d; border: none; border-radius: 0.3rem; color: #fca5a5; font-size: 0.78rem; cursor: pointer; }
   .del-cancel-btn { padding: 0.28rem 0.6rem; background: none; border: 1px solid #334155; border-radius: 0.3rem; color: #64748b; font-size: 0.78rem; cursor: pointer; }
+
+  /* ── AI Review / debrief tabs ── */
+  .deb-loading { color: #475569; font-style: italic; text-align: center; padding: 2rem; font-size: var(--fs-base); }
+  .deb-error { color: #f87171; font-size: var(--fs-sm); padding: 1rem; background: #1c0a0a; border: 1px solid #7f1d1d; border-radius: 0.4rem; }
+  .deb-muted { color: #475569; font-style: italic; font-size: var(--fs-sm); margin: 0; }
+  .deb-section { display: flex; flex-direction: column; gap: 0.5rem; }
+  .deb-h3 { font-size: var(--fs-sm); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #64748b; margin: 0; }
+  .deb-h3.deb-green { color: #4ade80; }
+  .deb-h3.deb-yellow { color: #f59e0b; }
+  .deb-h3.deb-amber { color: #fb923c; }
+  .deb-summary { color: #cbd5e1; line-height: 1.6; font-size: var(--fs-base); margin: 0; }
+  .deb-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .deb-list { margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.3rem; }
+  .deb-list li { color: #94a3b8; font-size: 0.875rem; line-height: 1.5; }
+  .deb-email-header { display: flex; align-items: center; justify-content: space-between; }
+  .deb-copy-btn { padding: 0.22rem 0.65rem; background: transparent; border: 1px solid #334155; border-radius: 0.25rem; color: #64748b; font-size: var(--fs-sm); cursor: pointer; transition: all 0.15s; }
+  .deb-copy-btn:hover { border-color: #60a5fa; color: #60a5fa; }
+  .deb-copy-btn.copied { border-color: #4ade80; color: #4ade80; }
+  .deb-email-draft { background: #060e1a; border: 1px solid #1a2d4a; border-radius: 0.5rem; padding: 0.85rem 1.1rem; }
+  .deb-email-line { font-size: var(--fs-base); color: #cbd5e1; line-height: 1.7; }
+  .deb-email-blank { height: 0.6rem; }
+
+  /* ── Timeline / Practice shared ── */
+  .deb-timeline { display: flex; flex-direction: column; gap: 0.75rem; }
+  .tl-item { background: #060e1a; border: 1px solid #1a2d4a; border-left: 3px solid #1e3a5f; border-radius: 0.4rem; padding: 0.65rem 0.85rem; display: flex; flex-direction: column; gap: 0.4rem; }
+  .tl-item-practice { border-left-color: #1e3a5f; }
+  .tl-q-row { display: flex; align-items: baseline; gap: 0.45rem; flex-wrap: wrap; }
+  .tl-tag { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 0.25em; padding: 0.05em 0.4em; flex-shrink: 0; }
+  .tl-num { font-size: var(--fs-xs); color: #334155; font-weight: 700; background: #0d1f35; border: 1px solid #1e3a5f; border-radius: 0.2rem; padding: 0 0.3em; line-height: 1.6; flex-shrink: 0; }
+  .tl-q-text { font-size: var(--fs-sm); color: #93c5fd; font-weight: 600; line-height: 1.4; flex: 1; }
+  .tl-answer { display: flex; gap: 0.5rem; align-items: baseline; padding: 0.4rem 0.5rem; background: #0a1628; border-radius: 0.3rem; }
+  .tl-answer-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; color: #60a5fa; flex-shrink: 0; }
+  .tl-answer-text { font-size: var(--fs-sm); color: #94a3b8; line-height: 1.5; flex: 1; }
+  .tl-coaching { display: flex; flex-direction: column; gap: 0.3rem; }
+  .tl-coaching-note { font-size: var(--fs-sm); color: #7dd3fc; line-height: 1.5; margin: 0; font-style: italic; }
+  .tl-flags { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+  .tl-flag { font-size: var(--fs-xs); border: 1px solid; border-radius: 0.25em; padding: 0.05em 0.4em; font-weight: 600; }
+  .tl-flag-warn { color: #f59e0b; border-color: #92400e; }
+  .tl-flag-good { color: #4ade80; border-color: #166534; }
+  .tl-toggle { background: none; border: none; color: #334155; font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; padding: 0; transition: color 0.12s; align-self: flex-start; }
+  .tl-toggle:hover { color: #475569; }
+  .tl-suggestion { font-size: var(--fs-sm); color: #475569; line-height: 1.5; white-space: pre-wrap; font-style: italic; border-left: 2px solid #1e293b; padding-left: 0.6rem; margin: 0; }
+  .tl-practice-badge { margin-left: auto; font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #3b82f6; background: #0c1f3a; border: 1px solid #1e3a5f; border-radius: 0.25em; padding: 0.05em 0.45em; }
+  .tl-practice-badge-rec { color: #a78bfa; background: #130c2a; border-color: #3b1f7a; }
+  .practice-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #334155; padding-bottom: 0.25rem; border-bottom: 1px solid #0f172a; }
+
+  /* ── Recording tab ── */
+  .rec-section { display: flex; flex-direction: column; gap: 0.75rem; }
+  .rec-player { width: 100%; border-radius: 0.5rem; background: #000; max-height: 300px; object-fit: contain; }
 </style>

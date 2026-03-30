@@ -654,12 +654,26 @@ pub struct EnrichResponse {
     pub jd_keywords: Vec<String>,
 }
 
+#[derive(serde::Deserialize, Default)]
+pub struct EnrichRequest {
+    pub company_url: Option<String>,
+    pub jd_text: Option<String>,
+}
+
 pub async fn handle_enrich(
     State(state): State<AppState>,
+    body: Option<Json<EnrichRequest>>,
 ) -> Json<EnrichResponse> {
-    let company_url = state.company_url.read().await.clone();
+    let body = body.map(|b| b.0).unwrap_or_default();
+    let company_url = {
+        let s = state.company_url.read().await.clone();
+        if s.is_empty() { body.company_url.unwrap_or_default() } else { s }
+    };
     let portfolio_url = state.portfolio_url.read().await.clone();
-    let jd_text = state.jd_text.read().await.clone();
+    let jd_text = {
+        let s = state.jd_text.read().await.clone();
+        if s.is_empty() { body.jd_text.unwrap_or_default() } else { s }
+    };
 
     const CRAWL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
@@ -745,4 +759,82 @@ pub async fn handle_interviewer_summaries(
         usage: Some(state.call_counts.clone()),
     };
     Json(generate_interviewer_summary(&linkedin_text, &cfg).await)
+}
+
+#[derive(serde::Deserialize)]
+pub struct InterviewerSingleRequest {
+    pub profile_text: String,
+}
+
+#[derive(serde::Deserialize)]
+pub struct DraftFollowupRequest {
+    pub summary: String,
+    pub strong_points: Vec<String>,
+    pub improvement_areas: Vec<String>,
+    pub interviewer_names: Vec<String>,
+}
+
+#[derive(serde::Serialize)]
+pub struct DraftFollowupResponse {
+    pub email: String,
+}
+
+pub async fn handle_draft_followup(
+    State(state): State<AppState>,
+    Json(req): Json<DraftFollowupRequest>,
+) -> Result<Json<DraftFollowupResponse>, (StatusCode, String)> {
+    let salutation = if req.interviewer_names.is_empty() {
+        "there".to_string()
+    } else {
+        req.interviewer_names.iter()
+            .map(|n| n.trim().split_whitespace().next().unwrap_or(n.as_str()).to_string())
+            .collect::<Vec<_>>()
+            .join(" and ")
+    };
+    let strong_text = req.strong_points.join("; ");
+    let improve_text = req.improvement_areas.join("; ");
+    let user_prompt = format!(
+        "Write a professional follow-up email after a job interview.\n\nSalutation name(s): {salutation}\nInterview summary: {summary}\nStrong points to reference: {strong}\nTopics to acknowledge improving: {improve}\n\nRequirements:\n- Start with 'Dear {salutation},' on its own line\n- 3-4 short paragraphs, warm and professional tone\n- Naturally reference one strong moment from the interview\n- Express genuine continued interest in the role\n- End with 'Best regards,' on its own line, then a blank line, then '[Your name]'\n- Plain text only, no markdown, no bullet points\n- Under 180 words total",
+        salutation = salutation,
+        summary = req.summary,
+        strong = strong_text,
+        improve = improve_text,
+    );
+    let cfg = AiConfig {
+        gemini_key: &state.gemini_key,
+        anthropic_key: state.anthropic_key.as_deref(),
+        groq_key: state.groq_key.as_deref(),
+        groq_key_2: state.groq_key_2.as_deref(),
+        ollama_url: &state.ollama_url,
+        ollama_model: &state.ollama_model,
+        usage: Some(state.call_counts.clone()),
+    };
+    let email = call_ai_simple(&cfg, "", &user_prompt)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(DraftFollowupResponse { email }))
+}
+
+pub async fn handle_interviewer_summary_single(
+    State(state): State<AppState>,
+    Json(body): Json<InterviewerSingleRequest>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    if body.profile_text.trim().is_empty() {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    let cfg = AiConfig {
+        gemini_key: &state.gemini_key,
+        anthropic_key: state.anthropic_key.as_deref(),
+        groq_key: state.groq_key.as_deref(),
+        groq_key_2: state.groq_key_2.as_deref(),
+        ollama_url: &state.ollama_url,
+        ollama_model: &state.ollama_model,
+        usage: Some(state.call_counts.clone()),
+    };
+    let results = generate_interviewer_summary(&body.profile_text, &cfg).await;
+    match results.into_iter().next() {
+        Some(s) => Json(s).into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }

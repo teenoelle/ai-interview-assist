@@ -13,12 +13,27 @@ pub fn is_question(text: &str) -> bool {
     if text.ends_with('?') {
         return true;
     }
-    let lower = text.to_lowercase();
+    // Strip leading "and " / "but " so split compound sentences still match
+    // e.g. "And why are you interested in this role?"
+    let lower = {
+        let s = lower_start.trim_start_matches("and ").trim_start_matches("but ");
+        s.to_string()
+    };
     let question_starters = [
+        // Direct question words
         "what", "why", "how", "when", "where", "who", "which",
+        // Direct imperatives
         "can you", "could you", "would you", "tell me", "describe", "explain",
         "have you", "do you", "did you", "are you", "were you",
-        "walk me", "give me", "share",
+        "walk me", "walk us", "give me", "share", "take me through", "take us through",
+        // Indirect / conversational interview openers
+        "i'd love to hear", "i would love to hear",
+        "i'm curious", "i am curious",
+        "i want to understand", "i'd like to understand", "i would like to understand",
+        "i'd like to know", "i would like to know",
+        "help me understand",
+        "let's talk about", "let's discuss",
+        "tell us", "tell me how", "tell me about", "tell me what",
     ];
     let words: Vec<&str> = lower.split_whitespace().collect();
     if words.is_empty() {
@@ -75,6 +90,26 @@ mod tests {
         assert!(is_question("Explain how you approach debugging"));
         assert!(is_question("Could you elaborate on that"));
         assert!(is_question("Would you be open to relocation"));
+    }
+
+    #[test]
+    fn indirect_question_openers() {
+        assert!(is_question("I'd love to hear about your background"));
+        assert!(is_question("I'm curious about what motivates you"));
+        assert!(is_question("I want to understand how you approach conflict"));
+        assert!(is_question("I'd like to know more about your experience"));
+        assert!(is_question("Help me understand how you handle deadlines"));
+        assert!(is_question("Let's talk about your career goals"));
+        assert!(is_question("Let's discuss your strengths"));
+        assert!(is_question("Tell me how you think about prioritization"));
+        assert!(is_question("Tell us about your experience with distributed systems"));
+    }
+
+    #[test]
+    fn leading_conjunction_stripped() {
+        assert!(is_question("And why are you interested in this role?"));
+        assert!(is_question("But how would you handle that situation?"));
+        assert!(is_question("And tell me about a time you led a team"));
     }
 
     #[test]

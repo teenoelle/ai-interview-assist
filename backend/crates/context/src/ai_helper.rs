@@ -577,10 +577,11 @@ pub struct InterviewerSummary {
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct SalaryTactics {
-    pub deflect: String,
-    pub anchor: String,
-    pub counter_range: String,
-    pub never_say: String,
+    pub early_round: String,
+    pub reveal: String,
+    pub direct_ask: String,
+    pub total_package: String,
+    pub counter: String,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -702,22 +703,34 @@ pub async fn predict_next_questions(
 
 pub async fn generate_salary_tactics(role_context: &str, cfg: &AiConfig<'_>) -> SalaryTactics {
     let prompt = format!(
-        "Generate salary negotiation tactics for a candidate interviewing for this role.\n\nRespond in EXACTLY this format:\nDEFLECT: [exact words to use to deflect salary question early — e.g. 'I'm flexible and focused on fit — can you share the budgeted range?']\nANCHOR: [exact words to anchor high when asked for a number — 1 sentence]\nCOUNTER: [suggested counter-offer approach — 1 sentence with placeholder like '15% above initial offer']\nNEVER: [the one thing never to say — e.g. 'Never give a number first if you can avoid it']\n\nROLE CONTEXT:\n{}",
+        "Generate tactful salary alignment language for a candidate interviewing for this role. \
+The tone must be collaborative and confident — never evasive, never demanding, never telling the interviewer how to do their job.\n\n\
+Respond in EXACTLY this format:\n\
+EARLY: [For early rounds when it's too soon to anchor. Warm and genuine, no specific number. Express focus on finding the right fit and openness to learning more about the full package. 1-2 sentences. Do NOT ask the interviewer to reveal their budget.]\n\
+REVEAL: [For when they press for a number but the candidate hasn't anchored yet — invite the interviewer to share their range first, framed as wanting alignment not deflection. 1 sentence. Collaborative tone — candidate has already expressed genuine interest, now invites the other side to share so both can find common ground.]\n\
+DIRECT: [For when they still want a number after the reveal attempt. Three beats: (1) acknowledge warmly, (2) give a confident market-researched range using a placeholder like '$X–$Y', (3) briefly invite dialogue about the full package. 2-3 sentences.]\n\
+PACKAGE: [To naturally redirect toward total compensation — not a dodge, a genuine expression of how they think about comp holistically. Mentions base, equity, and benefits as a package. 1-2 sentences.]\n\
+COUNTER: [If the initial offer comes in below expectations. Restate the expected range calmly, name the gap as something to work through together, never as an ultimatum. 2 sentences.]\n\n\
+ROLE CONTEXT:\n{}",
         trunc(&role_context, 800)
     );
-    let text = call_ai(cfg, &prompt, 300).await.unwrap_or_default();
+    let text = call_ai(cfg, &prompt, 350).await.unwrap_or_default();
     let mut t = SalaryTactics {
-        deflect: String::new(), anchor: String::new(),
-        counter_range: String::new(), never_say: String::new(),
+        early_round: String::new(), reveal: String::new(),
+        direct_ask: String::new(), total_package: String::new(), counter: String::new(),
     };
     for line in text.lines() {
-        if let Some(v) = line.strip_prefix("DEFLECT:") { t.deflect = v.trim().to_string(); }
-        else if let Some(v) = line.strip_prefix("ANCHOR:") { t.anchor = v.trim().to_string(); }
-        else if let Some(v) = line.strip_prefix("COUNTER:") { t.counter_range = v.trim().to_string(); }
-        else if let Some(v) = line.strip_prefix("NEVER:") { t.never_say = v.trim().to_string(); }
+        if let Some(v) = line.strip_prefix("EARLY:")        { t.early_round   = v.trim().to_string(); }
+        else if let Some(v) = line.strip_prefix("REVEAL:")  { t.reveal        = v.trim().to_string(); }
+        else if let Some(v) = line.strip_prefix("DIRECT:")  { t.direct_ask    = v.trim().to_string(); }
+        else if let Some(v) = line.strip_prefix("PACKAGE:") { t.total_package = v.trim().to_string(); }
+        else if let Some(v) = line.strip_prefix("COUNTER:") { t.counter       = v.trim().to_string(); }
     }
-    if t.deflect.is_empty() { t.deflect = "I'm flexible on compensation — can you share the range you have budgeted?".to_string(); }
-    if t.never_say.is_empty() { t.never_say = "Never give a specific number first if you can avoid it.".to_string(); }
+    if t.early_round.is_empty()   { t.early_round   = "I'm focused on finding the right fit — I'm open to learning more about the full package as things progress.".to_string(); }
+    if t.reveal.is_empty()        { t.reveal        = "I've shared where I'm anchored in my thinking — I'd love to understand the range you have in mind so we can make sure we're aligned.".to_string(); }
+    if t.direct_ask.is_empty()    { t.direct_ask    = "I've researched the market and based on the scope of the role, I'd expect something in the range of $X–$Y. I'm also thinking about the full picture, so I'd love to understand the complete package.".to_string(); }
+    if t.total_package.is_empty() { t.total_package = "I think about compensation holistically — base, equity, and benefits together. I'd welcome understanding the full package before landing on a specific number.".to_string(); }
+    if t.counter.is_empty()       { t.counter       = "I appreciate the offer — it's a bit below the range I'd anticipated based on the scope and market. I'd love to find a way to bridge that gap together.".to_string(); }
     t
 }
 

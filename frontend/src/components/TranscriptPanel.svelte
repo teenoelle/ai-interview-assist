@@ -21,18 +21,7 @@
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
 
-  function exportTranscript() {
-    const lines = entries.map(e => `[${formatTime(e.timestamp_ms)}] ${e.speaker}: ${e.text}`);
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `interview-transcript-${new Date().toISOString().slice(0,10)}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  const FILLER_RE = /\b(um+h?|uh+|er+|hmm+|mhm+|you know|i mean|kind of|sort of|basically|literally|right\?|like,|like )\b/gi;
+const FILLER_RE = /\b(um+h?|uh+|er+|hmm+|mhm+|you know|i mean|kind of|sort of|basically|literally|right\?|like,|like )\b/gi;
 
   function wordCount(text: string): number {
     return text.trim().split(/\s+/).filter(Boolean).length;
@@ -78,7 +67,7 @@
 
 <div class="transcript-panel">
   {#if entries.length > 0}
-    <PanelHeader title="Transcript" actionLabel="↓ Export" onAction={exportTranscript} />
+    <PanelHeader title="Transcript" />
   {/if}
   <div class="entries" bind:this={container}>
     {#if entries.length === 0}

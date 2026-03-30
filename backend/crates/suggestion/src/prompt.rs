@@ -43,6 +43,12 @@ const MOTIVATION_TRIGGERS: &[&str] = &[
     "why did you apply",
     "what interests you about",
     "what excites you about",
+    "why do you want to join",
+    "why do you want to be",
+    "why do you want to leave",
+    "why are you looking",
+    "what made you apply",
+    "what brought you to",
 ];
 
 const FUTURE_TRIGGERS: &[&str] = &[
@@ -94,6 +100,13 @@ const STRENGTHS_TRIGGERS: &[&str] = &[
     "how would your teammates describe you",
     "how would others describe you",
     "how would people describe you",
+    "what sets you apart",
+    "what makes you unique",
+    "what do you bring to the table",
+    "what value do you bring",
+    "best quality",
+    "top skill",
+    "what do you consider your strength",
 ];
 
 const BEHAVIORAL_TRIGGERS: &[&str] = &[
@@ -107,6 +120,11 @@ const BEHAVIORAL_TRIGGERS: &[&str] = &[
     "describe when",
     "describe a time",
     "can you give me an example of",
+    "give me an example where you",
+    "walk me through a time",
+    "walk us through a time",
+    "think of a time",
+    "recall a time",
 ];
 
 const WEAKNESSES_TRIGGERS: &[&str] = &[
@@ -137,6 +155,13 @@ const SITUATIONAL_TRIGGERS: &[&str] = &[
     "if you discovered",
     "what would your approach be if",
     "how would you respond if",
+    "what would you do when",
+    "how would you prioritize",
+    "if you had to",
+    "let's say you",
+    "picture a scenario",
+    "say you were",
+    "given a situation",
 ];
 
 // ── Question classification ───────────────────────────────────────────────────
@@ -291,7 +316,8 @@ Rules:\n\
 - Close second sentence must be exactly: 'And that\\'s why I\\'m so excited to be speaking with you today.'\n\
 - Ask topics: short noun phrases (2-4 words), not verb phrases. Directly related to what the interviewer asked about.\n\
 - NEVER invent metrics, percentages, dollar figures, headcount, or timeframes.\n\
-- NEVER name specific companies, clients, or employers — refer by industry only.",
+- NEVER name specific companies, clients, or employers — refer by industry only.\n\
+- No adjectives or adverbs. No 'passionate', 'excited', 'dedicated', 'driven'. Facts and direction only.",
         ctx_prefix, question
     )
 }
@@ -318,7 +344,8 @@ Rules:\n\
 - NEVER invent metrics, percentages, dollar figures, headcount, or timeframes. If no specific figure exists in the candidate background, use directional language only (e.g. 'improved', 'reduced', 'grew') — never fabricate a number.\n\
 - NEVER name specific companies, clients, or employers — refer by industry only (e.g. 'a retail brand', 'a tech startup').\n\
 - Ask topics: 2-4 word noun phrases naming the specific thing being asked about — e.g. 'team structure', 'success metrics', 'client mix'. Must directly relate to what the interviewer asked. Never a verb phrase. Never vague.\n\
-- Ask questions must probe the specific topic the interviewer raised — not generic role questions. If the recent conversation includes specific words or concerns the interviewer mentioned, prioritise those for Ask topics.",
+- Ask questions must probe the specific topic the interviewer raised — not generic role questions. If the recent conversation includes specific words or concerns the interviewer mentioned, prioritise those for Ask topics.\n\
+- No adjectives or adverbs. No 'passionate', 'excited', 'dedicated', 'driven'. Facts and direction only.",
         ctx_prefix, question
     )
 }
@@ -344,7 +371,8 @@ Rules:\n\
 - Alignment names the employer's actual challenge from the system prompt.\n\
 - NEVER invent metrics, percentages, dollar figures, headcount, or timeframes. If no specific figure exists in the candidate background, use directional language only (e.g. 'improved', 'reduced', 'grew') — never fabricate a number.\n\
 - NEVER name specific companies, clients, or employers — refer by industry only (e.g. 'a retail brand', 'a tech startup').\n\
-- Ask topics: 2-4 word noun phrases naming the specific thing being asked about. Must directly relate to what the interviewer asked — not generic role questions. If the recent conversation includes specific words or concerns the interviewer mentioned, prioritise those for Ask topics.",
+- Ask topics: 2-4 word noun phrases naming the specific thing being asked about. Must directly relate to what the interviewer asked — not generic role questions. If the recent conversation includes specific words or concerns the interviewer mentioned, prioritise those for Ask topics.\n\
+- No adjectives or adverbs. No 'passionate', 'excited', 'dedicated', 'driven'. Facts and direction only.",
         ctx_prefix, question
     )
 }
@@ -443,7 +471,7 @@ Rules:\n\
 - Keywords are multi-word phrases from the question (e.g. 'difficult conversation', 'conflicting priorities', 'client relationships').\n\
 - Ask topics: 2-4 word noun phrases naming the specific thing being asked about. Must directly relate to the topic the interviewer raised — not generic role questions. If the recent conversation includes specific words or concerns the interviewer mentioned, prioritise those for Ask topics. Never a verb phrase.\n\
 - Ask question: natural, specific, grammatical question the candidate asks the interviewer. Ends with '?'. No adjectives or adverbs. Never use 'this', 'it', 'that', or vague pronouns — always name the specific metric, tool, process, or concept explicitly.\n\
-- Ask follow-up (3rd pipe segment): 1 sentence the candidate says if the interviewer asks 'why do you ask?' or 'could you be more specific?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words. Explains the strategic reason behind asking.\n\
+- Ask follow-up (3rd pipe segment): REQUIRED on every Ask line. 1 sentence the candidate says if the interviewer asks 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words. Must appear after the second pipe — never omit it.\n\
 - Ask lines come AFTER the --- separator only.\n\
 - NEVER name specific clients, employers, or companies. Refer to them by industry only (e.g. 'retail brand', 'tech startup', 'financial services firm').\n\
 - Read the system prompt carefully to understand the employer's business model. If the employer is an agency, consultancy, or services firm that works with multiple clients, frame all answers in terms of client work across accounts — NEVER describe it as owning one company's strategy long-term.\n\
@@ -486,7 +514,7 @@ Rules:\n\
 - Keywords are multi-word phrases from the question (e.g. 'keyword research', 'client relationships', 'ad copywriting').\n\
 - Ask topics: 2-4 word noun phrases naming the specific thing being asked about. Must directly relate to the topic the interviewer raised — not generic role questions. If the recent conversation includes specific words or concerns the interviewer mentioned, prioritise those for Ask topics. Never a verb phrase.\n\
 - Ask question: natural, specific, grammatical question the candidate asks the interviewer. Ends with '?'. No adjectives or adverbs. Never use 'this', 'it', 'that', or vague pronouns — always name the specific metric, tool, process, or concept explicitly.\n\
-- Ask follow-up (3rd pipe segment): 1 sentence the candidate says if the interviewer asks 'why do you ask?' or 'could you be more specific?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words. Explains the strategic reason behind asking.\n\
+- Ask follow-up (3rd pipe segment): REQUIRED on every Ask line. 1 sentence the candidate says if the interviewer asks 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words. Must appear after the second pipe — never omit it.\n\
 - Ask lines come AFTER the --- separator only.\n\
 - NEVER name specific clients, employers, or companies. Refer to them by industry only (e.g. 'retail brand', 'tech startup', 'financial services firm').\n\
 - Use only background provided. No invented details.",

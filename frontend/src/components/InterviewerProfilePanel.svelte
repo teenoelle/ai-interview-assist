@@ -1,18 +1,34 @@
 <script lang="ts">
-  const { interviewers, onLoad, onReload, loading = false } = $props<{
+  const { interviewers, onLoad, onReload, loading = false, onLoadProfile, loadingProfileIndices = [] } = $props<{
     interviewers: Array<{ name: string; role: string; background: string; tenure: string; rapport_tips: string[] }>;
     onLoad?: () => void;
     onReload?: () => void;
     loading?: boolean;
+    onLoadProfile?: (index: number) => void;
+    loadingProfileIndices?: number[];
   }>();
 
   let expanded = $state(false);
-  let expandedCards = $state(new Set<number>());
+  let expandedCards = $state<number[]>([]);
+  // Track cards that have had a load requested (prevents flash of empty state)
+  let loadRequested = $state<number[]>([]);
 
   function toggleCard(i: number) {
-    const s = new Set(expandedCards);
-    s.has(i) ? s.delete(i) : s.add(i);
-    expandedCards = s;
+    if (expandedCards.includes(i)) {
+      expandedCards = expandedCards.filter(x => x !== i);
+    } else {
+      expandedCards = [...expandedCards, i];
+      const iv = interviewers[i];
+      if (iv && !iv.background && onLoadProfile) {
+        loadRequested = [...loadRequested, i];
+        onLoadProfile(i);
+      }
+    }
+  }
+
+  function retryCard(i: number) {
+    loadRequested = [...loadRequested, i];
+    onLoadProfile?.(i);
   }
 
   function firstName(name: string) { return name.trim().split(/\s+/)[0] ?? ''; }
@@ -54,7 +70,9 @@
       </div>
     {/if}
     {#each interviewers as iv, i}
-      {@const cardCollapsed = !expandedCards.has(i)}
+      {@const cardCollapsed = !expandedCards.includes(i)}
+      {@const cardLoading = loadingProfileIndices.includes(i) || (loadRequested.includes(i) && !iv.background)}
+      {@const cardLoaded = !!iv.background}
       <div class="profile-card">
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="profile-header" onclick={() => toggleCard(i)} role="button" tabindex="0"
@@ -68,34 +86,38 @@
           <span class="card-chevron">{cardCollapsed ? '▾' : '▴'}</span>
         </div>
         {#if !cardCollapsed}
-          {#if iv.background}
+          {#if cardLoading}
+            <span class="profile-loading">Loading profile…</span>
+          {:else if cardLoaded}
             <div class="profile-field">
               <span class="profile-field-label">Background</span>
               <span class="profile-field-value">{iv.background}</span>
             </div>
-          {/if}
-          {#if iv.tenure}
-            <div class="profile-field">
-              <span class="profile-field-label">Tenure</span>
-              <span class="profile-field-value">{iv.tenure}</span>
-            </div>
-          {/if}
-          <div class="rapport-section">
-            <span class="rapport-label">Rapport Tips</span>
-            {#if iv.rapport_tips?.length > 0}
-              <div class="rapport-tips-list">
-                {#each iv.rapport_tips as tip}
-                  {@const p = parseTip(tip)}
-                  <div class="rapport-tip">
-                    {#if p.keyword}<span class="rapport-kw">{p.keyword}</span>{/if}
-                    <span class="rapport-text">{p.text}</span>
-                  </div>
-                {/each}
+            {#if iv.tenure}
+              <div class="profile-field">
+                <span class="profile-field-label">Tenure</span>
+                <span class="profile-field-value">{iv.tenure}</span>
               </div>
-            {:else}
-              <span class="rapport-empty">No tips generated — re-run Setup to refresh.</span>
             {/if}
-          </div>
+            <div class="rapport-section">
+              <span class="rapport-label">Rapport Tips</span>
+              {#if iv.rapport_tips?.length > 0}
+                <div class="rapport-tips-list">
+                  {#each iv.rapport_tips as tip}
+                    {@const p = parseTip(tip)}
+                    <div class="rapport-tip">
+                      {#if p.keyword}<span class="rapport-kw">{p.keyword}</span>{/if}
+                      <span class="rapport-text">{p.text}</span>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <span class="rapport-empty">No rapport tips generated.</span>
+              {/if}
+            </div>
+          {:else}
+            <button class="profile-retry-btn" onclick={(e) => { e.stopPropagation(); retryCard(i); }}>↺ Load profile</button>
+          {/if}
         {/if}
       </div>
     {/each}
@@ -135,6 +157,9 @@
   .rapport-kw { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #93c5fd; }
   .rapport-text { font-size: var(--fs-sm); color: #94a3b8; line-height: 1.4; }
   .rapport-empty { font-size: var(--fs-xs); color: #334155; font-style: italic; }
+  .profile-loading { font-size: var(--fs-xs); color: #475569; font-style: italic; }
+  .profile-retry-btn { background: transparent; border: 1px solid #1e3a5f; color: #475569; font-size: var(--fs-xs); padding: 0.15rem 0.5rem; border-radius: 0.25rem; cursor: pointer; align-self: flex-start; }
+  .profile-retry-btn:hover { border-color: #3b82f6; color: #60a5fa; }
   .profiles-empty { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.1rem 0; }
   .profiles-load-btn {
     background: #081428; border: 1px solid #1e3a5f; color: #7dd3fc;

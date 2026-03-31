@@ -87,6 +87,12 @@
   let predictedQuestions = $state<string[]>([]);
   let recordingUrl = $state<string | undefined>(undefined);
   let focusMode = $state(false);
+  let focusCardW = $state(Number(localStorage.getItem('focus-card-w') ?? 680));
+  let focusCardFs = $state(Number(localStorage.getItem('focus-card-fs') ?? 100));
+  let focusCardDx = $state(0);
+  let focusCardDy = $state(0);
+  let focusMoveStart: { mx: number; my: number; dx: number; dy: number } | null = null;
+  let focusResizeStart: { mx: number; w: number } | null = null;
   let showPastInterviews = $state(false);
   let showReviewPanel = $state(false);
   let reviewReport = $state<ReviewReport | null>(null);
@@ -1380,7 +1386,7 @@
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       switch (e.key) {
-        case 'f': case 'F': focusMode = !focusMode; break;
+        case 'f': case 'F': focusMode = !focusMode; if (focusMode) { focusCardDx = 0; focusCardDy = 0; } break;
         case 'Escape':
           if (focusMode) { focusMode = false; break; }
           suggestions = suggestions.map(s => s.streaming ? s : { ...s, suggestion: '' });
@@ -1397,6 +1403,30 @@
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
+
+  function onFocusMoveDown(e: MouseEvent) {
+    e.stopPropagation();
+    focusMoveStart = { mx: e.clientX, my: e.clientY, dx: focusCardDx, dy: focusCardDy };
+  }
+  function onFocusResizeDown(e: MouseEvent) {
+    e.stopPropagation();
+    focusResizeStart = { mx: e.clientX, w: focusCardW };
+  }
+  function onFocusMouseMove(e: MouseEvent) {
+    if (focusMoveStart) {
+      focusCardDx = focusMoveStart.dx + (e.clientX - focusMoveStart.mx);
+      focusCardDy = focusMoveStart.dy + (e.clientY - focusMoveStart.my);
+    }
+    if (focusResizeStart) {
+      focusCardW = Math.round(Math.max(280, Math.min(window.innerWidth * 0.95, focusResizeStart.w + (e.clientX - focusResizeStart.mx))));
+      localStorage.setItem('focus-card-w', String(focusCardW));
+    }
+  }
+  function onFocusMouseUp() { focusMoveStart = null; focusResizeStart = null; }
+  function focusFsAdj(delta: number) {
+    focusCardFs = Math.max(60, Math.min(200, focusCardFs + delta));
+    localStorage.setItem('focus-card-fs', String(focusCardFs));
+  }
 
   $effect(() => {
     if (audioEmotion === 'wrapping up' && nextSteps.length === 0 && !loadingNextSteps && transcript.length > 4) {
@@ -2165,7 +2195,8 @@
 
     {#if focusMode}
       <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-      <div class="focus-overlay" onclick={() => focusMode = false}>
+      <div class="focus-overlay" onclick={() => focusMode = false}
+        onmousemove={onFocusMouseMove} onmouseup={onFocusMouseUp} onmouseleave={onFocusMouseUp}>
         {#if screenStream}
           <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
           <div class="focus-video-wrap" onclick={(e) => e.stopPropagation()}>
@@ -2182,7 +2213,19 @@
           </div>
         {/if}
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div class="focus-card" onclick={(e) => e.stopPropagation()}>
+        <div class="focus-card" onclick={(e) => e.stopPropagation()}
+          style="width:{focusCardW}px; transform:translate({focusCardDx}px,{focusCardDy}px)">
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="focus-drag-bar" onmousedown={onFocusMoveDown}>
+            <span class="focus-drag-dots">⠿</span>
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="focus-fs-btns" onmousedown={(e) => e.stopPropagation()}>
+              <button class="focus-fs-btn" onclick={() => focusFsAdj(-10)}>−</button>
+              <span class="focus-fs-val">{focusCardFs}%</span>
+              <button class="focus-fs-btn" onclick={() => focusFsAdj(+10)}>+</button>
+            </div>
+          </div>
+          <div style="zoom:{focusCardFs/100}">
           {#if latestSuggestion}
             {@const fp = parseSuggestion(latestSuggestion.suggestion ?? '')}
             {@const fcues = parseCues(fp.body)}
@@ -2228,8 +2271,11 @@
           {:else}
             <div class="focus-empty">Waiting for a question...</div>
           {/if}
+          </div>
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="focus-resize-handle" onmousedown={onFocusResizeDown}></div>
         </div>
-        <div class="focus-hint">glance at bold keywords · F or click outside to exit</div>
+        <div class="focus-hint">drag bar to move · drag edge to resize · F or click outside to exit</div>
       </div>
     {/if}
 
@@ -3390,11 +3436,35 @@
   .focus-video { width: 100%; display: block; }
   .focus-crop-shell { width: 100%; }
   .focus-card {
-    width: 100%; max-width: 680px; background: #07101e;
-    border: 1px solid #1e3a5f; border-radius: 1rem; padding: 1.75rem 2rem;
+    background: #07101e; position: relative;
+    border: 1px solid #1e3a5f; border-radius: 1rem; padding: 0 2rem 1.75rem;
     cursor: default; box-shadow: 0 0 60px rgba(59,130,246,0.08);
-    display: flex; flex-direction: column; gap: 1rem;
+    display: flex; flex-direction: column; gap: 0; max-width: 95vw;
+    flex-shrink: 0;
   }
+  .focus-card > div[style*="zoom"] { display: flex; flex-direction: column; gap: 1rem; padding-top: 0.75rem; }
+  .focus-drag-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.4rem 0; margin: 0 -2rem; padding: 0.4rem 0.75rem;
+    cursor: grab; border-radius: 1rem 1rem 0 0;
+    border-bottom: 1px solid #0d1f35;
+  }
+  .focus-drag-bar:active { cursor: grabbing; }
+  .focus-drag-dots { color: #1e3a5f; font-size: 1.1rem; letter-spacing: 0.15em; user-select: none; }
+  .focus-fs-btns { display: flex; align-items: center; gap: 0.3rem; }
+  .focus-fs-btn {
+    background: none; border: 1px solid #1e3a5f; color: #475569;
+    width: 1.4rem; height: 1.4rem; border-radius: 0.25rem;
+    font-size: 0.85rem; cursor: pointer; line-height: 1; padding: 0;
+    transition: border-color 0.1s, color 0.1s;
+  }
+  .focus-fs-btn:hover { border-color: #60a5fa; color: #60a5fa; }
+  .focus-fs-val { font-size: 0.65rem; color: #334155; min-width: 2.5rem; text-align: center; }
+  .focus-resize-handle {
+    position: absolute; right: -5px; top: 1rem; bottom: 1rem; width: 10px;
+    cursor: ew-resize; border-radius: 0 0.5rem 0.5rem 0; z-index: 1;
+  }
+  .focus-resize-handle:hover, .focus-resize-handle:active { background: rgba(59,130,246,0.25); }
   .focus-question {
     color: #60a5fa; font-style: italic; font-size: 0.95rem; line-height: 1.5;
     padding-bottom: 1rem; border-bottom: 1px solid #1e293b;

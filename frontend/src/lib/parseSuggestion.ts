@@ -281,11 +281,13 @@ export function getAnswerType(
   tag?: string,
 ): { framework: string; label: string } {
   // Tag-specific overrides for types that share STAR fields but have distinct coaching frames
+  if (tag === 'smalltalk')   return { framework: 'A: Small Talk',  label: '' };
   if (tag === 'weaknesses')  return { framework: 'A: Weakness',    label: 'Real → Growth → Evidence → Redirect' };
   if (tag === 'situational') return { framework: 'A: Situational', label: 'Stakes → Approach → Reasoning → Answer' };
   if (tag === 'strengths')   return { framework: 'A: Strengths',   label: 'Acknowledge → Strengths → Close' };
   if (tag === 'technical')   return { framework: 'A: Technical',   label: 'Problem → Experience → Method → Design' };
   if (tag === 'culture')     return { framework: 'A: Culture',     label: 'Context → Style → Example → Impact' };
+  if (tag === 'character')   return { framework: 'A: Character',   label: 'Acknowledge → Trait → Context → Relevance' };
 
   if (parsed.present || parsed.thread || parsed.past || parsed.future)
     return { framework: 'A: Intro', label: 'Summary → Story → Next' };
@@ -315,8 +317,9 @@ export function getSectionLabels(tag?: string): { ack: string; solve: string; br
   if (tag === 'weaknesses')  return { ack: 'Real',      solve: 'Growth',    bridge: 'Evidence', answer: 'Redirect' };
   if (tag === 'situational') return { ack: 'Stakes',    solve: 'Approach',  bridge: 'Reasoning',answer: 'Answer'   };
   if (tag === 'strengths')   return { ack: 'Acknowledge',solve: 'Solve',    bridge: 'Bridge',   answer: 'Strengths'};
-  if (tag === 'technical')   return { ack: 'Problem',   solve: 'Experience',bridge: 'Method',   answer: 'Design'   };
-  if (tag === 'culture')     return { ack: 'Context',   solve: 'Style',     bridge: 'Example',  answer: 'Impact'   };
+  if (tag === 'technical')   return { ack: 'Problem',     solve: 'Experience', bridge: 'Method',   answer: 'Design'    };
+  if (tag === 'culture')     return { ack: 'Context',     solve: 'Style',      bridge: 'Example',  answer: 'Impact'    };
+  if (tag === 'character')   return { ack: 'Acknowledge', solve: 'Trait',      bridge: 'Context',  answer: 'Relevance' };
   return { ack: 'Acknowledge', solve: 'Solve', bridge: 'Bridge', answer: 'Answer' };
 }
 

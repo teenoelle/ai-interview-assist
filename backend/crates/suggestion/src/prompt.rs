@@ -370,10 +370,10 @@ pub fn build_user_prompt_for_type(question: &str, transcript: &[TranscriptSegmen
 /// Variants rotate based on question length so consecutive greetings differ.
 pub fn smalltalk_response(question: &str) -> String {
     const VARIANTS: &[&str] = &[
-        "Tell: Doing well, thank you! Really looking forward to our conversation today.",
-        "Tell: Great, thanks for asking! I've been looking forward to this.",
-        "Tell: Really well, appreciate it! Ready to go — great to meet you.",
-        "Tell: Doing well, thank you for asking. Happy to be here.",
+        "Tell: Doing well, thank you! Really looking forward to our conversation today.\nAsk: Your role | How long have you been in this role? | What do you enjoy most about it?\nAsk: Team | How would you describe the team I'd be joining? |",
+        "Tell: Great, thanks for asking! I've been looking forward to this.\nAsk: Culture | How would you describe the culture here? | What makes it unique?\nAsk: Process | What does the rest of the interview process look like? |",
+        "Tell: Really well, appreciate it! Ready to go — great to meet you.\nAsk: Journey | How did you come to be in your current role? |\nAsk: Team | What's the team dynamic like? |",
+        "Tell: Doing well, thank you for asking. Happy to be here.\nAsk: Tenure | How long have you been with the company? | What keeps you here?\nAsk: Day-to-day | What does a typical day look like for this position? |",
     ];
     let idx = question.len() % VARIANTS.len();
     VARIANTS[idx].to_string()

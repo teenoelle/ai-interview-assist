@@ -624,6 +624,8 @@
   // Silence gating: track last time anyone spoke
   let lastSpeechAt = 0; // ms timestamp
   const TTS_SILENCE_GAP_MS = 2500;
+  // Early TTS: track whether we already spoke for the current question (to avoid double-speak)
+  let ttsSpokenForQuestion = false;
 
   $effect(() => {
     ttsClient.loadAllVoices().then(all => {
@@ -1217,6 +1219,7 @@
             });
           }
         }
+        ttsSpokenForQuestion = false;
         resetAnswerTimer();
         // Answer moment nudge (item 5)
         if (answerNudgeTimer) clearTimeout(answerNudgeTimer);
@@ -1237,6 +1240,18 @@
           suggestions = suggestions.map(s =>
             s.streaming ? { ...s, suggestion: s.suggestion + event.token } : s
           );
+          // Early TTS: fire as soon as the first field has a complete sentence
+          if (!ttsSpokenForQuestion) {
+            const streamingSug = suggestions.find(s => s.streaming);
+            if (streamingSug?.suggestion) {
+              const parsed = parseSuggestion(streamingSug.suggestion, true);
+              const firstField = parsed.acknowledge || parsed.present || parsed.company || parsed.direction || parsed.tell || parsed.asks?.[0]?.question || '';
+              if (firstField && firstField.search(/[.!?]/) >= 0) {
+                ttsSpokenForQuestion = true;
+                speakText(streamingSug.suggestion);
+              }
+            }
+          }
         }
         break;
       case 'suggestion_complete': {
@@ -1258,7 +1273,8 @@
             const next = s.secondaryTag ? { ...s, suggestion: event.full_text, streaming: false, secondaryStreaming: true } : { ...s, suggestion: event.full_text, streaming: false };
             return next;
           });
-          speakText(event.full_text);
+          if (!ttsSpokenForQuestion) speakText(event.full_text);
+          ttsSpokenForQuestion = true;
         }
         break;
       }

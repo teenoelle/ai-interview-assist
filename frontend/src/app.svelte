@@ -613,6 +613,25 @@
     { id: 'system-ui',               label: 'System Default' },
   ] as const;
   let appFont = $state(localStorage.getItem('app-font') ?? 'Inter');
+  const PANEL_FONTS: string[] = FONTS.map(f => f.id);
+  let fontLeft   = $state(localStorage.getItem('font-left')   ?? '');
+  let fontHist   = $state(localStorage.getItem('font-hist')   ?? '');
+  let fontCenter = $state(localStorage.getItem('font-center') ?? '');
+  let fontRight  = $state(localStorage.getItem('font-right')  ?? '');
+  function panelFontStack(font: string): string {
+    if (!font) return '';
+    return font === 'system-ui' ? 'system-ui, -apple-system, sans-serif' : `'${font}', system-ui, sans-serif`;
+  }
+  function cyclePanelFont(col: 'left' | 'hist' | 'center' | 'right') {
+    const cur = col === 'left' ? fontLeft : col === 'hist' ? fontHist : col === 'center' ? fontCenter : fontRight;
+    const idx = PANEL_FONTS.indexOf(cur);
+    const next = idx === -1 || idx === PANEL_FONTS.length - 1 ? '' : PANEL_FONTS[idx + 1] ?? '';
+    localStorage.setItem(`font-${col}`, next);
+    if (col === 'left') fontLeft = next;
+    else if (col === 'hist') fontHist = next;
+    else if (col === 'center') fontCenter = next;
+    else fontRight = next;
+  }
   $effect(() => {
     const stack = appFont === 'system-ui'
       ? 'system-ui, -apple-system, sans-serif'
@@ -1627,6 +1646,7 @@
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('left', -10)} title="Decrease font size">A−</button>
                     <button class="zoom-btn" onclick={() => adjustZoom('left', +10)} title="Increase font size">A+</button>
+                    <button class="zoom-btn" onclick={() => cyclePanelFont('left')} title={fontLeft || 'Font: global'} class:zoom-btn-active={!!fontLeft}>Ff</button>
                     <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('left')} title="Collapse">▾</button>
                   </div>
                 {:else}
@@ -1635,7 +1655,7 @@
               </div>
               {#if !collapsedCols.has('left')}
                 <div class="col-body">
-                  <div class="col-body-scroll" style="zoom: {leftZoom/100}">
+                  <div class="col-body-scroll" style="zoom: {leftZoom/100}; {fontLeft ? `font-family: ${panelFontStack(fontLeft)};` : ''}">
                     <TranscriptPanel entries={transcript} onFlipSpeaker={flipSpeaker} {jdKeywords} />
                   </div>
                 </div>
@@ -1653,6 +1673,7 @@
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('hist', -10)} title="Decrease font size">A−</button>
                     <button class="zoom-btn" onclick={() => adjustZoom('hist', +10)} title="Increase font size">A+</button>
+                    <button class="zoom-btn" onclick={() => cyclePanelFont('hist')} title={fontHist || 'Font: global'} class:zoom-btn-active={!!fontHist}>Ff</button>
                     <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('hist')} title="Collapse">▾</button>
                   </div>
                 {:else}
@@ -1661,7 +1682,7 @@
               </div>
               {#if !collapsedCols.has('hist')}
                 <div class="col-body hist-col-body" bind:this={histColBodyEl}>
-                  <div class="col-body-scroll" style="zoom: {histZoom/100}; padding: 0.3rem 0.4rem 0; display: flex; flex-direction: column; gap: 0.4rem;">
+                  <div class="col-body-scroll" style="zoom: {histZoom/100}; padding: 0.3rem 0.4rem 0; display: flex; flex-direction: column; gap: 0.4rem; {fontHist ? `font-family: ${panelFontStack(fontHist)};` : ''}">
                     <TestQuestionBar {capturing} onSimulate={(q) => pendingSimulated.add(q.trim())} />
                     <PracticeQuestionsBar questions={predictedQuestions} {capturing} onPredict={fetchPredictedQuestions} loadingPredict={loadingPredict} onSimulate={(q) => pendingSimulated.add(q.trim())} />
                     <QuestionsHistoryPanel
@@ -1748,6 +1769,7 @@
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('center', -10)} title="Decrease font size">A−</button>
                     <button class="zoom-btn" onclick={() => adjustZoom('center', +10)} title="Increase font size">A+</button>
+                    <button class="zoom-btn" onclick={() => cyclePanelFont('center')} title={fontCenter || 'Font: global'} class:zoom-btn-active={!!fontCenter}>Ff</button>
                     <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('center')} title="Collapse">▾</button>
                   </div>
                 {:else}
@@ -1756,7 +1778,7 @@
               </div>
               {#if !collapsedCols.has('center')}
                 <div class="col-body col-split-body" bind:this={centerColBodyEl}>
-                  <div class="col-body-scroll" style="zoom: {centerZoom/100}; padding: 0.25rem 0.5rem 0.5rem;">
+                  <div class="col-body-scroll" style="zoom: {centerZoom/100}; padding: 0.25rem 0.5rem 0.5rem; {fontCenter ? `font-family: ${panelFontStack(fontCenter)};` : ''}">
                     <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} {jumpSignal} {cueExpandSignal} onPinnedChange={(p) => (suggestionPinned = p)} {salaryTactics} />
                   </div>
                 </div>
@@ -1821,11 +1843,12 @@
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('rightTop', -10)} title="Decrease font size">A−</button>
                     <button class="zoom-btn" onclick={() => adjustZoom('rightTop', +10)} title="Increase font size">A+</button>
+                    <button class="zoom-btn" onclick={() => cyclePanelFont('right')} title={fontRight || 'Font: global'} class:zoom-btn-active={!!fontRight}>Ff</button>
                     <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('right')} title="Collapse">▾</button>
                   </div>
                 </div>
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <div class="right-panel-scroll" style="zoom: {rightTopZoom/100}" ondragover={(e) => { e.preventDefault(); }} ondrop={(e) => onPanelEmptyDrop('sentiment', e)}>
+                <div class="right-panel-scroll" style="zoom: {rightTopZoom/100}; {fontRight ? `font-family: ${panelFontStack(fontRight)};` : ''}" ondragover={(e) => { e.preventDefault(); }} ondrop={(e) => onPanelEmptyDrop('sentiment', e)}>
                   {#if answerNudgeVisible}
                     <div class="answer-nudge">
                       <span class="answer-nudge-icon">🧘</span>
@@ -2959,6 +2982,7 @@
     line-height: 1.4;
   }
   .zoom-btn:hover { border-color: #334155; color: #64748b; }
+  .zoom-btn-active { border-color: #1e3a5f; color: #60a5fa; }
 
   .col-body {
     flex: 1;

@@ -203,6 +203,20 @@ pub async fn run_agent(
                 let cc = call_counts.clone();
 
                 let (primary_type, secondary_type) = prompt::classify_question(&question);
+
+                // Smalltalk: emit instant pre-written response, skip LLM entirely
+                if matches!(primary_type, prompt::QuestionType::Smalltalk) {
+                    let _ = etx.send(WsEvent::QuestionDetected {
+                        question: question.clone(),
+                        secondary_tag: None,
+                    });
+                    let _ = etx.send(WsEvent::SuggestionComplete {
+                        full_text: prompt::smalltalk_response(&question),
+                        mode: SuggestionMode::Primary,
+                    });
+                    continue;
+                }
+
                 let secondary_tag = secondary_type.map(|qt| prompt::question_type_to_tag(qt).to_string());
 
                 let _ = etx.send(WsEvent::QuestionDetected {

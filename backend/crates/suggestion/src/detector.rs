@@ -27,6 +27,10 @@ pub fn is_question(text: &str) -> bool {
         "have you", "do you", "did you", "are you", "were you",
         "walk me", "walk us", "give me", "share", "take me through", "take us through",
         // Indirect / conversational interview openers
+        // Smalltalk / greetings
+        "nice to meet", "great to meet", "good to meet", "pleasure to meet", "lovely to meet",
+        "shall we", "ready to get started", "before we begin", "before we get started",
+        // Conversational openers
         "i'd love to hear", "i would love to hear",
         "i'm curious", "i am curious",
         "i want to understand", "i'd like to understand", "i would like to understand",

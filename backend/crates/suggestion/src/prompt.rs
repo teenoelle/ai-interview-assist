@@ -89,7 +89,6 @@ const STRENGTHS_TRIGGERS: &[&str] = &[
     "greatest strength",
     "biggest strength",
     "key strengths",
-    "what would your friends say about you",
     "what would your colleagues say about you",
     "what would your coworkers say about you",
     "what would your manager say about you",
@@ -107,6 +106,21 @@ const STRENGTHS_TRIGGERS: &[&str] = &[
     "best quality",
     "top skill",
     "what do you consider your strength",
+];
+
+const CHARACTER_TRIGGERS: &[&str] = &[
+    "what would your friends say about you",
+    "what would your family say about you",
+    "how would your friends describe you",
+    "how would people who know you personally describe you",
+    "how would someone who knows you outside of work describe you",
+    "describe yourself outside of work",
+    "outside of your professional life",
+    "how do people who know you well",
+    "what do your close friends say",
+    "what would people who know you say",
+    "how would you describe yourself as a person",
+    "what kind of person are you",
 ];
 
 const BEHAVIORAL_TRIGGERS: &[&str] = &[
@@ -207,10 +221,34 @@ const SITUATIONAL_TRIGGERS: &[&str] = &[
     "given a situation",
 ];
 
+const SMALLTALK_TRIGGERS: &[&str] = &[
+    "how are you",
+    "how's it going",
+    "how is it going",
+    "how have you been",
+    "how is your day",
+    "how was your day",
+    "how was your weekend",
+    "how was your morning",
+    "how are you doing",
+    "how are you today",
+    "nice to meet you",
+    "great to meet you",
+    "pleasure to meet you",
+    "lovely to meet you",
+    "good to meet you",
+    "wonderful to meet you",
+    "ready to get started",
+    "shall we get started",
+    "before we begin",
+    "before we get started",
+];
+
 // ── Question classification ───────────────────────────────────────────────────
 
 #[derive(Debug, Copy, Clone)]
 pub enum QuestionType {
+    Smalltalk,
     Introduction,
     Motivation,
     Future,
@@ -221,6 +259,7 @@ pub enum QuestionType {
     Situational,
     Technical,
     Culture,
+    Character,
     Competency,
 }
 
@@ -231,6 +270,7 @@ pub fn classify_question(question: &str) -> (QuestionType, Option<QuestionType>)
     let q = question.to_lowercase();
 
     let candidates: &[(usize, QuestionType)] = &[
+        (score_triggers(SMALLTALK_TRIGGERS,    &q), QuestionType::Smalltalk),
         (score_triggers(INTRODUCTION_TRIGGERS, &q), QuestionType::Introduction),
         (score_triggers(MOTIVATION_TRIGGERS,   &q), QuestionType::Motivation),
         (score_triggers(FUTURE_TRIGGERS,       &q), QuestionType::Future),
@@ -241,6 +281,7 @@ pub fn classify_question(question: &str) -> (QuestionType, Option<QuestionType>)
         (score_triggers(SITUATIONAL_TRIGGERS,  &q), QuestionType::Situational),
         (score_triggers(TECHNICAL_TRIGGERS,    &q), QuestionType::Technical),
         (score_triggers(CULTURE_TRIGGERS,      &q), QuestionType::Culture),
+        (score_triggers(CHARACTER_TRIGGERS,    &q), QuestionType::Character),
     ];
 
     let max_score = candidates.iter().map(|(s, _)| *s).max().unwrap_or(0);
@@ -271,6 +312,7 @@ pub fn is_behavioral(question: &str) -> bool {
 
 fn question_type_topic(qt: QuestionType) -> &'static str {
     match qt {
+        QuestionType::Smalltalk     => "small talk and pleasantries",
         QuestionType::Introduction => "your career background and story",
         QuestionType::Motivation   => "why you want this role and company",
         QuestionType::Future       => "your career direction and goals",
@@ -281,12 +323,14 @@ fn question_type_topic(qt: QuestionType) -> &'static str {
         QuestionType::Situational  => "how you would handle a hypothetical situation",
         QuestionType::Technical    => "your technical approach and design thinking",
         QuestionType::Culture      => "how you collaborate and work with others",
+        QuestionType::Character    => "your personal qualities and how others perceive you",
         QuestionType::Competency   => "your professional approach and methodology",
     }
 }
 
 pub fn question_type_to_tag(qt: QuestionType) -> &'static str {
     match qt {
+        QuestionType::Smalltalk    => "smalltalk",
         QuestionType::Introduction => "personal",
         QuestionType::Motivation   => "motivation",
         QuestionType::Future       => "future",
@@ -297,6 +341,7 @@ pub fn question_type_to_tag(qt: QuestionType) -> &'static str {
         QuestionType::Situational  => "situational",
         QuestionType::Technical    => "technical",
         QuestionType::Culture      => "culture",
+        QuestionType::Character    => "character",
         QuestionType::Competency   => "general",
     }
 }
@@ -321,6 +366,19 @@ pub fn build_user_prompt_for_type(question: &str, transcript: &[TranscriptSegmen
     dispatch_prompt(&ctx_prefix, question, qtype)
 }
 
+/// Returns a pre-written small-talk response — no LLM call needed.
+/// Variants rotate based on question length so consecutive greetings differ.
+pub fn smalltalk_response(question: &str) -> String {
+    const VARIANTS: &[&str] = &[
+        "Acknowledge: Doing well, thank you!\nAnswer: Really looking forward to our conversation today.",
+        "Acknowledge: Great, thanks for asking!\nAnswer: I've been looking forward to this — excited to be here.",
+        "Acknowledge: Really well, appreciate it!\nAnswer: Ready to go — it's great to meet you.",
+        "Acknowledge: Doing well, thank you for asking.\nAnswer: Happy to be here and looking forward to the conversation.",
+    ];
+    let idx = question.len() % VARIANTS.len();
+    VARIANTS[idx].to_string()
+}
+
 pub fn build_compound_user_prompt(question: &str, transcript: &[TranscriptSegment], primary: QuestionType, secondary: QuestionType) -> String {
     let ctx_prefix = make_ctx_prefix(transcript);
     build_compound_prompt(&ctx_prefix, question, primary, secondary)
@@ -328,6 +386,7 @@ pub fn build_compound_user_prompt(question: &str, transcript: &[TranscriptSegmen
 
 fn dispatch_prompt(ctx_prefix: &str, question: &str, qtype: QuestionType) -> String {
     match qtype {
+        QuestionType::Smalltalk    => build_competency_prompt(ctx_prefix, question), // fallback; normally short-circuited before LLM
         QuestionType::Introduction => build_introduction_prompt(ctx_prefix, question),
         QuestionType::Motivation   => build_motivation_prompt(ctx_prefix, question),
         QuestionType::Future       => build_future_prompt(ctx_prefix, question),
@@ -338,6 +397,7 @@ fn dispatch_prompt(ctx_prefix: &str, question: &str, qtype: QuestionType) -> Str
         QuestionType::Situational  => build_situational_prompt(ctx_prefix, question),
         QuestionType::Technical    => build_technical_prompt(ctx_prefix, question),
         QuestionType::Culture      => build_culture_prompt(ctx_prefix, question),
+        QuestionType::Character    => build_character_prompt(ctx_prefix, question),
         QuestionType::Competency   => build_competency_prompt(ctx_prefix, question),
     }
 }
@@ -629,6 +689,35 @@ Rules:\n\
 - Always use 'I' — never 'we' or 'our'.\n\
 - Acronyms: write in full on first use.\n\
 - NEVER invent metrics, percentages, or timeframes not in the candidate background.\n\
+- NEVER name specific clients or companies — refer by industry only.\n\
+- Use only background provided. No invented details.",
+        ctx_prefix, question
+    )
+}
+
+fn build_character_prompt(ctx_prefix: &str, question: &str) -> String {
+    format!(
+        "{}The interviewer asked a personal character question: '{}'\n\n\
+CRITICAL: This question is asking about personal qualities and how people outside of work perceive the candidate — NOT professional skills or job achievements. Output ONLY the exact labeled lines below. No preamble.\n\n\
+Acknowledge: <One complete sentence naming what the interviewer is really trying to understand — insight into the candidate\\'s character, values, and how they show up in relationships. Opens with: 'It sounds like you want to understand', 'From your question, I can see you\\'re interested in', or 'It seems like the priority is understanding'. Completes with the character dimension being probed (e.g. reliability, self-awareness, interpersonal style). Max 20 words. Never starts with 'I'.>\n\
+Solve: <One sentence naming 2-3 personal qualities the candidate\\'s friends or people close to them would genuinely say. These are CHARACTER traits — not job skills. e.g. directness, curiosity, reliability, warmth, follow-through, calm under pressure. Starts with 'My friends would say I am' or 'People who know me well would describe me as'. Draws from the candidate\\'s background — use their career narrative and the self-description in their LinkedIn About section or extra experience notes to infer authentic personal traits. Max 20 words.>\n\
+Bridge: <One sentence and a brief personal example or story that illustrates these traits outside a work context — or at the intersection of personal and professional. Starts with 'For example,' or 'A good example of this is' or 'Outside of work,'. Names the specific trait in action. Max 20 words. Draws from background if available; otherwise use directional language.>\n\
+Answer: <How these personal traits show up at work and create value for this specific employer. Each trait MUST begin with a [1-2 word keyword] immediately before its sentence — no space between ] and first word. For each trait: (A) [keyword] + one sentence naming how the personal trait translates to professional behaviour and business outcome. (B) One concrete proof point from the candidate background. Trait 2 onward: outcome sentence opens with 'Beyond that,' or 'I also'. Last sentence names the overall impact these traits have on teams and outcomes. 2-3 traits. No adjectives. No invented metrics. Draws from candidate background.>\n\
+Close: <One sentence connecting the candidate\\'s personal qualities to what the employer needs from their team, as described in the system prompt. Starts with 'That\\'s why', 'This is why', or 'I\\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
+---\n\
+Ask: <2-4 word noun phrase about team culture or values — what kind of person thrives here> | <Question about what personal or interpersonal qualities tend to make people successful at this company or in this team. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — team dynamics or working style> | <A different question about how the team works together or what values shape day-to-day interactions. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
+Rules:\n\
+- Output ONLY these lines. No extra text.\n\
+- Acknowledge: names the character dimension, not the job skill. Never starts with 'I'.\n\
+- Solve: names PERSONAL traits only — not professional competencies. e.g. 'direct', 'reliable', 'curious', 'calm', 'empathetic'. Starts with 'My friends would say' or 'People who know me well would describe me as'.\n\
+- Bridge: a specific personal example — not a work achievement. Can be from outside work or from a personal aspect of a work situation. Draws from background if available.\n\
+- Answer text must be on the same line as 'Answer:'. Uses [keyword] format. Each trait = personal quality translated to professional value.\n\
+- Answer: draws ONLY from candidate background. NEVER invent metrics. Directional language only.\n\
+- Close: connects personal traits to the specific team or employer challenge from the system prompt.\n\
+- Always use 'I' — never 'we' or 'our'.\n\
+- Acronyms: write in full on first use.\n\
+- NEVER invent metrics or timeframes not in the candidate background.\n\
 - NEVER name specific clients or companies — refer by industry only.\n\
 - Use only background provided. No invented details.",
         ctx_prefix, question

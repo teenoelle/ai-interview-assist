@@ -11,6 +11,13 @@
   });
 
   const PRESET_GROUPS: { label: string; tag: string; questions: string[] }[] = [
+    { label: 'Small Talk', tag: 'smalltalk', questions: [
+      'How are you doing today?',
+      'How is your day going?',
+      'Nice to meet you!',
+      'How was your morning?',
+      'Ready to get started?',
+    ]},
     { label: 'Intro', tag: 'personal', questions: [
       'Tell me about yourself.',
       'Walk me through your background.',
@@ -27,6 +34,11 @@
     { label: 'Strengths', tag: 'strengths', questions: [
       'What are your strengths?',
       'What would your colleagues say you do best?',
+    ]},
+    { label: 'Character', tag: 'character', questions: [
+      'What would your friends say about you?',
+      'How would people who know you personally describe you?',
+      'How would you describe yourself as a person?',
     ]},
     { label: 'Weakness', tag: 'weaknesses', questions: [
       'What is your greatest weakness?',
@@ -60,8 +72,9 @@
   ];
 
   const TAG_COLOR: Record<string, string> = {
+    smalltalk: '#67e8f9',
     personal: '#f472b6', motivation: '#fb923c', future: '#38bdf8',
-    strengths: '#4ade80', weaknesses: '#f87171', behavioral: '#a78bfa',
+    strengths: '#4ade80', character: '#e879f9', weaknesses: '#f87171', behavioral: '#a78bfa',
     situational: '#a3e635', technical: '#60a5fa', culture: '#34d399',
     salary: '#fbbf24', closing: '#94a3b8',
   };

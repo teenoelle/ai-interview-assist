@@ -625,7 +625,9 @@
   function cyclePanelFont(col: 'left' | 'hist' | 'center' | 'right') {
     const cur = col === 'left' ? fontLeft : col === 'hist' ? fontHist : col === 'center' ? fontCenter : fontRight;
     const idx = PANEL_FONTS.indexOf(cur);
-    const next = idx === -1 || idx === PANEL_FONTS.length - 1 ? '' : PANEL_FONTS[idx + 1] ?? '';
+    // idx === -1 means cur is '' (global) → advance to first font (idx+1 = 0)
+    // idx === last → wrap back to '' (global)
+    const next = idx === PANEL_FONTS.length - 1 ? '' : (PANEL_FONTS[idx + 1] ?? '');
     localStorage.setItem(`font-${col}`, next);
     if (col === 'left') fontLeft = next;
     else if (col === 'hist') fontHist = next;

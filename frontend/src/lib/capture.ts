@@ -194,15 +194,21 @@ export class MediaCapture {
 
   private _captureFrameFn: (() => Promise<void>) | null = null;
   private _cropRect: { x: number; y: number; w: number; h: number } | null = null;
+  private _sentimentEnabled = true;
 
   /** Update the crop rect used for sentiment frame capture. Pass null for full frame. */
   public setCropRect(rect: { x: number; y: number; w: number; h: number } | null) {
     this._cropRect = rect;
   }
 
+  /** Enable or disable sending video frames to the backend (saves API credits). */
+  public setSentimentEnabled(enabled: boolean) {
+    this._sentimentEnabled = enabled;
+  }
+
   /** Trigger an immediate sentiment frame capture (e.g. when interviewer starts talking). */
   public triggerFrameCapture() {
-    if (this._captureFrameFn) this._captureFrameFn();
+    if (this._captureFrameFn && this._sentimentEnabled) this._captureFrameFn();
   }
 
   private startVideoCapture() {
@@ -233,7 +239,7 @@ export class MediaCapture {
         const blob = await new Promise<Blob | null>((resolve) =>
           canvas.toBlob(resolve, 'image/jpeg', 0.7)
         );
-        if (blob) this.videoWs.send(await blob.arrayBuffer());
+        if (blob && this._sentimentEnabled) this.videoWs.send(await blob.arrayBuffer());
       }
     };
     this._captureFrameFn = captureFrame;

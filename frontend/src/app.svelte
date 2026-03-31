@@ -36,7 +36,8 @@
   import { analyzePace, detectEnergySignals } from './lib/paceCoach';
   import type { TranscriptEntry, SuggestionEntry, WsEvent } from './lib/types';
   import type { FillerCount } from './lib/filler';
-  import type { MediaCapture } from './lib/capture';
+  import { MediaCapture } from './lib/capture';
+  import AudioMeter from './components/AudioMeter.svelte';
   import type { CompanyBrief, InterviewerSummary } from './lib/api';
   import { fetchUsage, authFetch } from './lib/api';
   import { parseSuggestion, parseCues } from './lib/parseSuggestion';
@@ -153,6 +154,20 @@
   let lastSentimentTrigger = 0;
   // Sync crop rect to capture instance whenever either changes
   $effect(() => { captureInst?.setCropRect(cropRect); });
+
+  // Sentiment (vision) toggle — persisted so it survives page reload
+  let sentimentEnabled = $state(localStorage.getItem('sentiment-enabled') !== 'false');
+  $effect(() => { captureInst?.setSentimentEnabled(sentimentEnabled); });
+  $effect(() => { localStorage.setItem('sentiment-enabled', String(sentimentEnabled)); });
+
+  // Audio meter levels (lifted from CaptureButton for display in stats panel)
+  let captureMicLevel = $state(0);
+  let captureSystemLevel = $state(0);
+  let capturePaused = $state(false);
+
+  // Async capture-before-transition state
+  let transitioning = $state(false);
+  let captureError = $state('');
 
   // Rolling exponential moving average of system audio energy (RMS)
   let sysEnergyEma = $state(0);
@@ -647,6 +662,8 @@
   let ttsVoiceId = $state(localStorage.getItem('tts-voice-id') ?? localStorage.getItem(SK.ttsVoice) ?? '');
   let ttsRate = $state(Number(localStorage.getItem(SK.ttsRate) ?? 1.5));
   let ttsVolume = $state(Math.max(0.1, Number(localStorage.getItem(SK.ttsVolume) ?? 1.0)));
+  let ttsOutputDeviceId = $state(localStorage.getItem('tts-output-device') ?? '');
+  let ttsOutputDevices = $state<{ deviceId: string; label: string }[]>([]);
   let showVoiceMenu = $state(false);
   // Silence gating: track last time anyone spoke
   let lastSpeechAt = 0; // ms timestamp
@@ -659,10 +676,18 @@
       ttsVoices = all;
       if (!ttsVoiceId || !all.find(v => v.id === ttsVoiceId)) ttsVoiceId = all[0]?.id ?? '';
     });
+    ttsClient.getAudioOutputs().then(outputs => {
+      ttsOutputDevices = outputs;
+    });
+    if (ttsOutputDeviceId) ttsClient.setOutputDevice(ttsOutputDeviceId);
   });
   $effect(() => { localStorage.setItem(SK.ttsRate, String(ttsRate)); });
   $effect(() => { localStorage.setItem(SK.ttsVolume, String(ttsVolume)); });
   $effect(() => { if (ttsVoiceId) localStorage.setItem('tts-voice-id', ttsVoiceId); });
+  $effect(() => {
+    localStorage.setItem('tts-output-device', ttsOutputDeviceId);
+    ttsClient.setOutputDevice(ttsOutputDeviceId);
+  });
 
   function speakText(text: string) {
     if (!ttsEnabled || !text) return;
@@ -1030,8 +1055,30 @@
     loadingPredict = false;
   }
 
-  function handleSetupComplete() {
-    phase = 'interview';
+  async function startCaptureAndTransition() {
+    if (transitioning) return;
+    transitioning = true;
+    captureError = '';
+    const cap = new MediaCapture();
+    cap.onLevel((mic, sys) => { captureMicLevel = mic; captureSystemLevel = sys; updateSysEnergy(sys); });
+    cap.onStreamsReady((screen, webcam) => { screenStream = screen; webcamStream = webcam; });
+    cap.onRecording(url => { recordingUrl = url; });
+    try {
+      await cap.start();
+      captureInst = cap;
+      capturing = true;
+      ttsEnabled = true;
+      ttsClient.getAudioOutputs().then(o => { ttsOutputDevices = o; });
+      if (!cap.hasSystemAudio) captureError = 'No system audio captured — interviewer audio won\'t be transcribed. Stop, reshare your screen, and tick "Share system audio".';
+    } catch (e: unknown) {
+      const msg = String(e);
+      captureError = msg.includes('Permission denied') || msg.includes('NotAllowedError')
+        ? 'Screen share permission denied. Select Entire Screen and check "Share system audio".'
+        : msg.includes('NotFoundError') ? 'No screen or microphone found. Check your devices and try again.' : msg;
+      transitioning = false;
+      return;
+    }
+    transitioning = false;
     // Build stubs immediately from localStorage (no API calls) so names show right away
     interviewerSummaries = buildInterviewerStubs();
     loadingProfileIndices = [];
@@ -1040,6 +1087,11 @@
     loadingCompanyBrief = false;
     connectWs();
     void fetchBackgroundSetup();
+    phase = 'interview';
+  }
+
+  function handleSetupComplete() {
+    void startCaptureAndTransition();
   }
 
   function connectWs() {
@@ -1309,6 +1361,7 @@
         statusMessages = [...statusMessages.slice(-4), event.message];
         break;
       case 'error':
+        if (event.message.startsWith('Sentiment') && !capturing) break;
         if (!errorMessages.includes(event.message)) errorMessages = [...errorMessages, event.message];
         break;
       case 'rate_limit': {
@@ -1483,6 +1536,15 @@
         </div>
       </header>
       <SetupForm onSetupComplete={handleSetupComplete} />
+      {#if transitioning}
+        <div class="setup-transitioning">
+          <span class="setup-spinner"></span>
+          Waiting for screen share permissions…
+        </div>
+      {/if}
+      {#if captureError}
+        <div class="setup-capture-error">{captureError} <button onclick={() => captureError = ''}>✕</button></div>
+      {/if}
       <div class="setup-review-row">
         <button class="setup-review-btn" onclick={() => showPastInterviews = true}>
           Reports
@@ -1503,7 +1565,7 @@
   {:else if phase === 'practice'}
     <PracticePanel
       questions={predictedQuestions}
-      onStartInterview={() => { phase = 'interview'; connectWs(); void fetchBackgroundSetup(); }}
+      onStartInterview={() => { void startCaptureAndTransition(); }}
       onBackToSetup={() => { phase = 'setup'; }}
       onAnswer={(a) => { practiceAnswers = [...practiceAnswers, a]; }}
     />
@@ -1548,6 +1610,18 @@
                 title="Test current voice"
                 onclick={() => ttsClient.speak("Hi, I'm excited to be here today.", ttsVoiceId, ttsRate, ttsVolume)}
               >▶ Test</button>
+              {#if ttsOutputDevices.length > 1}
+                <select
+                  class="font-select"
+                  title="Audio output — pick headphones so only you hear it"
+                  bind:value={ttsOutputDeviceId}
+                >
+                  <option value="">Default output</option>
+                  {#each ttsOutputDevices as d}
+                    <option value={d.deviceId}>{d.label}</option>
+                  {/each}
+                </select>
+              {/if}
             {/if}
             <select class="font-select" bind:value={appFont} title="App font">
               {#each FONTS as f}
@@ -1600,10 +1674,12 @@
           >End Interview</button>
           <button class="history-btn" onclick={() => showPastInterviews = true}>Reports</button>
           <CaptureButton
-            onCapture={(v) => { capturing = v; if (v) ttsEnabled = true; if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); } }}
+            initialCapture={captureInst}
+            onCapture={(v) => { capturing = v; if (v) { ttsEnabled = true; ttsClient.getAudioOutputs().then(o => { ttsOutputDevices = o; }); } if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); captureMicLevel = 0; captureSystemLevel = 0; capturePaused = false; } }}
             onStreams={(screen, webcam) => { screenStream = screen; webcamStream = webcam; }}
             onReady={(cap) => { captureInst = cap; }}
-            onLevel={(_mic, sys) => updateSysEnergy(sys)}
+            onLevel={(mic, sys) => { captureMicLevel = mic; captureSystemLevel = sys; updateSysEnergy(sys); }}
+            onPause={(p) => { capturePaused = p; }}
             onRecording={(url) => { recordingUrl = url; }}
           />
         </div>
@@ -1642,9 +1718,6 @@
               <div class="col-header col-drag-handle" draggable={true} ondragstart={(e) => onColDragStart('left', e)}>
                 <span class="col-label">{collapsedCols.has('left') ? '…' : 'Transcript'}</span>
                 {#if !collapsedCols.has('left')}
-                  {#if providerStatus.transcription}
-                    <span class="provider-chip" class:provider-chip-local={providerStatus.transcription.local} title={providerStatus.transcription.local ? 'Local' : 'API'}>{providerStatus.transcription.name}</span>
-                  {/if}
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('left', -10)} title="Decrease font size">A−</button>
                     <button class="zoom-btn" onclick={() => adjustZoom('left', +10)} title="Increase font size">A+</button>
@@ -1765,9 +1838,6 @@
               <div class="col-header col-drag-handle" draggable={true} ondragstart={(e) => onColDragStart('center', e)} style="padding-top: 0.35rem;">
                 <span class="col-label">{collapsedCols.has('center') ? '…' : 'AI Suggestions'}</span>
                 {#if !collapsedCols.has('center')}
-                  {#if providerStatus.suggestions}
-                    <span class="provider-chip" class:provider-chip-local={providerStatus.suggestions.local} title={providerStatus.suggestions.local ? 'Local' : 'API'}>{providerStatus.suggestions.name}</span>
-                  {/if}
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('center', -10)} title="Decrease font size">A−</button>
                     <button class="zoom-btn" onclick={() => adjustZoom('center', +10)} title="Increase font size">A+</button>
@@ -1839,9 +1909,6 @@
                 {/if}
                 <div class="col-header col-drag-handle" draggable={true} ondragstart={(e) => onColDragStart('right', e)}>
                   <span class="col-label">Interviewer</span>
-                  {#if providerStatus.sentiment}
-                    <span class="provider-chip" class:provider-chip-local={providerStatus.sentiment.local} title={providerStatus.sentiment.local ? 'Local' : 'API'}>{providerStatus.sentiment.name}</span>
-                  {/if}
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('rightTop', -10)} title="Decrease font size">A−</button>
                     <button class="zoom-btn" onclick={() => adjustZoom('rightTop', +10)} title="Increase font size">A+</button>
@@ -1948,6 +2015,14 @@
                   <!-- svelte-ignore a11y_no_static_element_interactions -->
                   <div class="section-drag-handle" draggable={true} ondragstart={(e) => onSectionDragStart(sid, e)} ondragend={onSectionDragEnd}>⠿</div>
                   <button class="section-collapse-btn" onclick={() => toggleSectionCollapse(sid)}>▾</button>
+                  {#if sid === 'sentiment-bar'}
+                    <button
+                      class="sentiment-toggle-btn"
+                      class:sentiment-off={!sentimentEnabled}
+                      title={sentimentEnabled ? 'Disable vision analysis (saves credits)' : 'Enable vision analysis'}
+                      onclick={() => sentimentEnabled = !sentimentEnabled}
+                    >{sentimentEnabled ? 'Vision on' : 'Vision off'}</button>
+                  {/if}
                 </div>
                 {#if sid === 'screen-preview'}
                 {:else if sid === 'personality'}
@@ -2056,6 +2131,11 @@
                 {:else if sid === 'interviewer-profiles'}
                   <InterviewerProfilePanel interviewers={interviewerSummaries} onLoad={fetchInterviewerSummaries} onReload={() => { interviewerSummaries = buildInterviewerStubs(); loadingProfileIndices = []; void fetchInterviewerSummaries(); }} loading={loadingSummaries} onLoadProfile={fetchInterviewerSummaryByIndex} loadingProfileIndices={loadingProfileIndices} />
                 {:else if sid === 'stats'}
+                  {#if capturing}
+                    <div class="stats-audio-meter">
+                      <AudioMeter micLevel={captureMicLevel} systemLevel={captureSystemLevel} paused={capturePaused} capturing={capturing} />
+                    </div>
+                  {/if}
                   <div class="side-stats">
                     <div class="side-stat" title="Time since you started answering. Green = under 30s (concise), amber = 30–60s (detailed), red = over 60s (wrap up). Aim for 30–90 seconds per answer.">
                       <span class="side-label">Answer</span>
@@ -2447,7 +2527,7 @@
   }
 
   main {
-    min-height: 100vh;
+    min-height: 100dvh;
     font-family: var(--ff-base);
   }
 
@@ -2477,6 +2557,23 @@
   :global(.text-dim)       { color: var(--clr-text-dim); }
 
   .setup-container { max-width: 800px; margin: 0 auto; }
+  .setup-transitioning {
+    max-width: 800px; margin: 0.75rem auto 0; padding: 0.75rem 2rem;
+    display: flex; align-items: center; gap: 0.75rem;
+    color: #93c5fd; font-size: var(--fs-sm);
+  }
+  .setup-spinner {
+    display: inline-block; width: 14px; height: 14px; flex-shrink: 0;
+    border: 2px solid #1e3a6e; border-top-color: #3b82f6; border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .setup-capture-error {
+    max-width: 800px; margin: 0.5rem auto 0; padding: 0.5rem 2rem;
+    color: #fca5a5; font-size: var(--fs-sm); background: #450a0a;
+    border-radius: 0.375rem; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  }
+  .setup-capture-error button { background: none; border: none; color: #fca5a5; cursor: pointer; font-size: var(--fs-sm); }
   .setup-usage { max-width: 800px; margin: 0 auto 2rem; padding: 0 2rem; }
   .setup-review-row { max-width: 800px; margin: 0.75rem auto 0; padding: 0 2rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
   .setup-review-btn {
@@ -2548,7 +2645,7 @@
   .side-section-chevron { font-size: var(--fs-xs); color: #1e293b; }
 
 
-  .interview-layout { display: flex; flex-direction: column; height: 100vh; }
+  .interview-layout { display: flex; flex-direction: column; height: 100dvh; }
   .interview-header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 0.4rem 1rem; background: #0f172a; border-bottom: 1px solid #1e293b; flex-shrink: 0;
@@ -2948,29 +3045,6 @@
   }
   .col-header:hover .zoom-btns { opacity: 1; }
 
-  .provider-chip {
-    font-size: 0.6rem;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    padding: 0.08rem 0.35rem;
-    border-radius: 9999px;
-    background: #1e3a5f;
-    color: #7eb8f7;
-    border: 1px solid #2a4a7f;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 90px;
-    flex-shrink: 0;
-    cursor: default;
-    transition: opacity 0.3s;
-  }
-  .provider-chip-local {
-    background: #14302a;
-    color: #4ade80;
-    border-color: #166534;
-  }
-
   .zoom-btn {
     padding: 0.08rem 0.28rem;
     background: transparent;
@@ -3081,6 +3155,24 @@
   }
   .section-collapse-btn:hover { color: #64748b; }
 
+  .sentiment-toggle-btn {
+    margin-left: 4px;
+    background: none;
+    border: 1px solid #1e3a5f;
+    border-radius: 0.25em;
+    color: #3b82f6;
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0.05em 0.35em;
+    line-height: 1.4;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .sentiment-toggle-btn:hover { border-color: #3b82f6; background: #0f1e36; }
+  .sentiment-toggle-btn.sentiment-off { color: #475569; border-color: #1e293b; }
+  .sentiment-toggle-btn.sentiment-off:hover { color: #94a3b8; border-color: #334155; }
+
   /* Keywords bar meta */
   .keywords-bar-meta {
     display: flex;
@@ -3168,7 +3260,7 @@
     width: 82vw; max-width: 1200px; background: #0a1525;
     border: 1px solid #1e3a5f; border-radius: 0.75rem;
     display: flex; flex-direction: column; gap: 0.6rem; padding: 0.9rem;
-    max-height: calc(100vh - 2rem); overflow: hidden;
+    max-height: calc(100dvh - 2rem); overflow: hidden;
   }
   .crop-picker-header {
     display: flex; align-items: center; justify-content: space-between;
@@ -3417,6 +3509,15 @@
   }
   .right-sub-header:hover .zoom-btns { opacity: 1; }
 
+  .stats-audio-meter {
+    padding: 0.5rem 0.25rem 0;
+    flex-shrink: 0;
+  }
+  .stats-audio-meter :global(.meter) {
+    min-width: unset;
+    width: 100%;
+    box-sizing: border-box;
+  }
   .side-stats {
     display: flex; flex-direction: column; gap: 0.1rem;
     padding: 0.5rem 0.25rem;

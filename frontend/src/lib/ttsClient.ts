@@ -7,10 +7,34 @@ export interface CombinedVoice {
 let audioCtx: AudioContext | null = null;
 let currentSource: AudioBufferSourceNode | null = null;
 let currentGain: GainNode | null = null;
+let _sinkId = '';
+
+export async function getAudioOutputs(): Promise<{ deviceId: string; label: string }[]> {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices
+      .filter(d => d.kind === 'audiooutput')
+      .map(d => ({ deviceId: d.deviceId, label: d.label || `Speaker (${d.deviceId.slice(0, 6)})` }));
+  } catch {
+    return [];
+  }
+}
+
+export function setOutputDevice(deviceId: string) {
+  _sinkId = deviceId;
+  // Recreate context on next speak() so it picks up new sinkId
+  if (audioCtx && audioCtx.state !== 'closed') {
+    audioCtx.close();
+    audioCtx = null;
+  }
+}
 
 function getAudioCtx(): AudioContext {
   if (!audioCtx || audioCtx.state === 'closed') {
     audioCtx = new AudioContext();
+    if (_sinkId && 'setSinkId' in audioCtx) {
+      (audioCtx as any).setSinkId(_sinkId).catch(() => {});
+    }
   }
   return audioCtx;
 }

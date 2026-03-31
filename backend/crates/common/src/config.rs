@@ -22,6 +22,10 @@ pub struct Config {
     pub piper_models_dir: Option<String>,
     pub app_token: Option<String>,
     pub ffmpeg_bin: Option<String>,
+    /// Optional command to spawn the local Whisper / Ollama server (e.g. "ollama")
+    pub whisper_spawn_cmd: Option<String>,
+    /// Arguments for whisper_spawn_cmd (e.g. ["serve"])
+    pub whisper_spawn_args: Vec<String>,
 }
 
 impl Config {
@@ -67,6 +71,12 @@ impl Config {
         let piper_models_dir = std::env::var("PIPER_MODELS_DIR").ok().filter(|s| !s.is_empty());
         let app_token = std::env::var("APP_TOKEN").ok().filter(|s| !s.is_empty());
         let ffmpeg_bin = std::env::var("FFMPEG_BIN").ok().filter(|s| !s.is_empty());
-        Ok(Self { gemini_api_key, groq_api_key, groq_api_key_2, openrouter_api_key, mistral_api_key, cerebras_api_key, anthropic_api_key, qwen_api_key, whisper_url, whisper_model, ollama_url, ollama_model, ollama_models, ollama_vision_model, diarize_url, port, piper_binary, piper_models_dir, app_token, ffmpeg_bin })
+        let whisper_spawn_cmd = std::env::var("WHISPER_SPAWN_CMD").ok().filter(|s| !s.is_empty());
+        let whisper_spawn_args = std::env::var("WHISPER_SPAWN_ARGS")
+            .unwrap_or_default()
+            .split_whitespace()
+            .map(|s| s.to_string())
+            .collect();
+        Ok(Self { gemini_api_key, groq_api_key, groq_api_key_2, openrouter_api_key, mistral_api_key, cerebras_api_key, anthropic_api_key, qwen_api_key, whisper_url, whisper_model, ollama_url, ollama_model, ollama_models, ollama_vision_model, diarize_url, port, piper_binary, piper_models_dir, app_token, ffmpeg_bin, whisper_spawn_cmd, whisper_spawn_args })
     }
 }

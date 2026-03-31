@@ -51,6 +51,44 @@ async fn auth_middleware(
     next.run(req).await.into_response()
 }
 
+/// Spawn a detached process (fire-and-forget — the child outlives the server process).
+fn spawn_detached(cmd: &str, args: &[String]) {
+    match std::process::Command::new(cmd).args(args).spawn() {
+        Ok(_) => tracing::info!("Spawned Whisper process: {} {:?}", cmd, args),
+        Err(e) => tracing::warn!("Failed to spawn Whisper process '{}': {}", cmd, e),
+    }
+}
+
+/// Poll the Whisper URL root until it responds, or give up after ~30 s.
+async fn wait_for_whisper(url: &str) {
+    let client = reqwest::Client::new();
+    let check = format!("{}/", url.trim_end_matches('/'));
+    tracing::info!("Waiting for local Whisper at {} …", url);
+    for attempt in 1u32..=15 {
+        let result = client
+            .get(&check)
+            .timeout(std::time::Duration::from_secs(2))
+            .send()
+            .await;
+        match result {
+            // Any HTTP response (even 404) means the server is up
+            Ok(_) => {
+                tracing::info!("Local Whisper ready (attempt {})", attempt);
+                return;
+            }
+            Err(_) => {
+                if attempt < 15 {
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                }
+            }
+        }
+    }
+    tracing::warn!(
+        "Local Whisper at {} did not respond within 30 s — will fall back to Groq/Gemini",
+        url
+    );
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -62,6 +100,14 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let config = Config::from_env()?;
+
+    // Optionally start the local Whisper / Ollama process, then wait until ready
+    if let Some(ref cmd) = config.whisper_spawn_cmd {
+        spawn_detached(cmd, &config.whisper_spawn_args);
+    }
+    if let Some(ref url) = config.whisper_url {
+        wait_for_whisper(url).await;
+    }
 
     let (audio_tx, audio_rx) = mpsc::channel::<Vec<u8>>(256);
     let (mic_audio_tx, mic_audio_rx) = mpsc::channel::<Vec<u8>>(256);

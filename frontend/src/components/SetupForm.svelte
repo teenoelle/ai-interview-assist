@@ -104,7 +104,7 @@
   }
 
   function savePreset() {
-    const name = [companyName.trim(), roleName.trim()].filter(Boolean).join(' — ') || 'Untitled';
+    const name = [companyName.trim(), roleName.trim(), jobLocation.trim()].filter(Boolean).join(' — ') || 'Untitled';
     // Replace existing preset with same name, or add new
     const existing = presets.find(p => p.name === name);
     const id = existing?.id ?? Date.now().toString();

@@ -4,7 +4,7 @@ pub mod ollama_vision;
 
 use tokio::sync::{broadcast, mpsc};
 use common::messages::WsEvent;
-use common::rate_limiter::{RateLimiter, with_retry};
+use common::rate_limiter::RateLimiter;
 use common::providers::{is_quota_exhausted, is_rate_limit};
 
 pub async fn run_agent(
@@ -69,24 +69,19 @@ pub async fn run_agent(
                         Err(e) => tracing::warn!("Ollama vision unavailable, trying Gemini: {}", e),
                     }
 
-                    // 3. Gemini — last resort
-                    let result = with_retry(&rl, || {
-                        let k = gkey.clone();
-                        let jpg = jpeg_bytes.clone();
-                        async move { gemini_vision::analyze_sentiment(&k, &jpg).await }
-                    })
-                    .await;
-
-                    match result {
+                    // 3. Gemini — last resort, single attempt only (sentiment is non-critical;
+                    //    retrying for minutes in the background causes spurious errors after capture stops)
+                    rl.acquire().await;
+                    match gemini_vision::analyze_sentiment(&gkey, &jpeg_bytes).await {
                         Ok(result) => {
                             let _ = etx.send(WsEvent::Sentiment { emotion: result.emotion, reason: result.reason, coaching: result.coaching, coaching_why: result.coaching_why });
                             let _ = etx.send(WsEvent::ProviderUsed { service: "sentiment".to_string(), provider: "Gemini Vision".to_string(), local: false });
                         }
+                        Err(e) if is_rate_limit(&e) || is_quota_exhausted(&e) => {
+                            tracing::warn!("Gemini sentiment rate-limited, skipping frame: {}", e);
+                        }
                         Err(e) => {
                             tracing::error!("Sentiment error: {}", e);
-                            let _ = etx.send(WsEvent::Error {
-                                message: format!("Sentiment error: {}", e),
-                            });
                         }
                     }
                 });

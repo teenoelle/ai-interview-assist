@@ -53,7 +53,6 @@
             <div class="qhist-feedback">
               {#if entry.answerFeedback}
                 {#if entry.answerFeedback.missed_followup}<span class="fb-chip">No follow-up</span>{/if}
-                {#if entry.answerFeedback.missed_metric}<span class="fb-chip">No metric</span>{/if}
               {/if}
               {#if entry.answered === true && entry.vocalFeedback && entry.vocalFeedback.confidence_score >= 70}
                 <span class="fb-chip-good">✓ Strong</span>

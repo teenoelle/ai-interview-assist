@@ -1,13 +1,14 @@
 <script lang="ts">
   import { MediaCapture } from '../lib/capture';
-  import AudioMeter from './AudioMeter.svelte';
   type StreamsReadyCallback = (screen: MediaStream, webcam: MediaStream | null) => void;
-  const { onCapture, onStreams, onReady, onLevel: onLevelProp, onRecording } = $props<{
+  const { onCapture, onStreams, onReady, onLevel: onLevelProp, onPause, onRecording, initialCapture = null } = $props<{
     onCapture: (active: boolean) => void;
     onStreams?: StreamsReadyCallback;
     onReady?: (cap: MediaCapture) => void;
     onLevel?: (mic: number, sys: number) => void;
+    onPause?: (paused: boolean) => void;
     onRecording?: (url: string) => void;
+    initialCapture?: MediaCapture | null;
   }>();
 
   let capture: MediaCapture | null = $state(null);
@@ -16,6 +17,14 @@
   let error = $state('');
   let micLevel = $state(0);
   let systemLevel = $state(0);
+
+  // Adopt a pre-created capture instance (from async setup transition)
+  $effect(() => {
+    if (initialCapture && !capture) {
+      capture = initialCapture;
+      active = true;
+    }
+  });
 
   async function toggle() {
     error = '';
@@ -58,6 +67,7 @@
   function togglePause() {
     if (!capture) return;
     paused = capture.togglePause();
+    onPause?.(paused);
   }
 </script>
 
@@ -72,7 +82,6 @@
       <button onclick={togglePause} class="pause-btn" class:paused title="Pause/resume audio (P)">
         {paused ? '▶' : '⏸'}
       </button>
-      <AudioMeter {micLevel} {systemLevel} {paused} capturing={active} />
     {/if}
   </div>
 </div>

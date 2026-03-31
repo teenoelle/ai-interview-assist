@@ -640,9 +640,11 @@
     if (Date.now() - lastSpeechAt < TTS_SILENCE_GAP_MS) return;
     if (answerStartTime !== null) return;
     const parsed = parseSuggestion(text);
-    if (!parsed.acknowledge) return;
-    const toSpeak = [parsed.acknowledge, parsed.solve, parsed.bridge, parsed.tell, parsed.close].filter(Boolean).join(" ");
-    ttsClient.speak(toSpeak, ttsVoiceId, ttsRate, ttsVolume);
+    const firstField = parsed.acknowledge || parsed.present || parsed.company || parsed.direction || parsed.tell || parsed.asks?.[0]?.question || '';
+    if (!firstField) return;
+    const sentenceEnd = firstField.search(/[.!?]/);
+    const firstSentence = sentenceEnd >= 0 ? firstField.slice(0, sentenceEnd + 1) : firstField;
+    ttsClient.speak(firstSentence, ttsVoiceId, ttsRate, ttsVolume);
     lastSpeechAt = Date.now();
   }
 
@@ -824,7 +826,6 @@
 
   // Transcript auto-save
   const sessionKey = `transcript-${new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-')}`;
-  let showEndMenu = $state(false);
 
   let eventWs: EventWebSocket | null = null;
 
@@ -1518,41 +1519,19 @@
             Object.values(SK).forEach(k => localStorage.removeItem(k));
             location.reload();
           }}>Reset Layout</button>
-          <div class="end-split-wrapper">
-            <button class="end-main-btn"
-              onclick={() => {
-                showEndMenu = false;
-                reviewInitialTab = 'ai-review'; reviewIsLive = true; showReviewPanel = true;
-                if (!savingLiveReport) {
-                  savingLiveReport = true;
-                  authFetch('/api/review/from-live', { method: 'POST' })
-                    .then(r => r.ok ? r.json() : null)
-                    .then(d => { if (d) reviewReport = d; })
-                    .finally(() => { savingLiveReport = false; });
-                }
-              }}
-            >End Interview</button>
-            <button class="end-arrow-btn" onclick={(e) => { e.stopPropagation(); showEndMenu = !showEndMenu; }}>▾</button>
-            {#if showEndMenu}
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div class="end-menu-backdrop" onclick={() => showEndMenu = false}></div>
-              <div class="end-dropdown">
-                <button class="end-menu-item" onclick={() => {
-                  showEndMenu = false;
-                  reviewInitialTab = 'ai-review'; reviewIsLive = true; showReviewPanel = true;
-                  if (!savingLiveReport && !reviewReport) {
-                    savingLiveReport = true;
-                    authFetch('/api/review/from-live', { method: 'POST' })
-                      .then(r => r.ok ? r.json() : null)
-                      .then(d => { if (d) reviewReport = d; })
-                      .finally(() => { savingLiveReport = false; });
-                  }
-                }}>AI Debrief</button>
-                <div class="end-menu-divider"></div>
-                <button class="end-menu-item" onclick={() => { showPastInterviews = true; showEndMenu = false; }}>Reports</button>
-              </div>
-            {/if}
-          </div>
+          <button class="end-main-btn"
+            onclick={() => {
+              reviewInitialTab = 'ai-review'; reviewIsLive = true; showReviewPanel = true;
+              if (!savingLiveReport) {
+                savingLiveReport = true;
+                authFetch('/api/review/from-live', { method: 'POST' })
+                  .then(r => r.ok ? r.json() : null)
+                  .then(d => { if (d) reviewReport = d; })
+                  .finally(() => { savingLiveReport = false; });
+              }
+            }}
+          >End Interview</button>
+          <button class="history-btn" onclick={() => showPastInterviews = true}>Reports</button>
           <CaptureButton
             onCapture={(v) => { capturing = v; if (v) ttsEnabled = true; if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); } }}
             onStreams={(screen, webcam) => { screenStream = screen; webcamStream = webcam; }}
@@ -2503,49 +2482,13 @@
   }
   .history-btn:hover { border-color: #60a5fa; color: #60a5fa; }
 
-  /* End Interview split button */
-  .end-split-wrapper { position: relative; display: flex; }
   .end-main-btn {
     padding: 0.3rem 0.8rem; background: transparent;
-    border: 1px solid #334155; border-right: none;
-    border-radius: 0.375rem 0 0 0.375rem;
+    border: 1px solid #334155; border-radius: 0.375rem;
     color: #64748b; font-size: var(--fs-base); cursor: pointer; white-space: nowrap;
     transition: border-color 0.12s, color 0.12s;
   }
   .end-main-btn:hover { border-color: #a78bfa; color: #a78bfa; }
-  .end-arrow-btn {
-    padding: 0.3rem 0.5rem; background: transparent;
-    border: 1px solid #334155;
-    border-radius: 0 0.375rem 0.375rem 0;
-    color: #475569; font-size: var(--fs-xs); cursor: pointer;
-    transition: border-color 0.12s, color 0.12s, background 0.12s;
-  }
-  .end-arrow-btn:hover { border-color: #a78bfa; color: #a78bfa; background: #1a0d2e; }
-  .end-menu-backdrop { position: fixed; inset: 0; z-index: 299; }
-  .end-dropdown {
-    position: absolute; top: calc(100% + 4px); right: 0; z-index: 300;
-    background: #0f172a; border: 1px solid #1e293b; border-radius: 0.4rem;
-    display: flex; flex-direction: column; min-width: 200px;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.55);
-    overflow: hidden;
-  }
-  .end-menu-item {
-    padding: 0.45rem 0.85rem; background: none; border: none;
-    color: #94a3b8; font-size: var(--fs-sm); cursor: pointer; text-align: left;
-    transition: background 0.1s, color 0.1s;
-  }
-  .end-menu-item:hover:not(:disabled) { background: #1e293b; color: #e2e8f0; }
-  .end-menu-item:disabled { opacity: 0.5; cursor: default; }
-  .end-menu-loading { opacity: 0.6; }
-  .end-menu-transcript { padding-left: 1rem; font-size: var(--fs-xs); color: #64748b; }
-  .end-menu-transcript:hover { color: #94a3b8; }
-  .end-menu-section {
-    padding: 0.25rem 0.85rem 0.1rem;
-    font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.06em; color: #334155;
-  }
-  .end-menu-empty { padding: 0.35rem 0.85rem; font-size: var(--fs-xs); color: #334155; font-style: italic; }
-  .end-menu-divider { height: 1px; background: #1e293b; margin: 0.2rem 0; }
 
   .personality-strip {
     flex-shrink: 0;

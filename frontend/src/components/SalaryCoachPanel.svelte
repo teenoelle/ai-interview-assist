@@ -83,7 +83,7 @@
     letter-spacing: 0.06em; flex-shrink: 0;
   }
   .card-sub {
-    font-size: var(--fs-xs); color: #334155; font-style: italic;
+    font-size: var(--fs-xs); color: #334155; 
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .card-chevron {
@@ -92,7 +92,7 @@
 
   .card-text {
     font-size: var(--fs-sm); line-height: 1.45; margin: 0;
-    font-style: italic; padding: 0 0.55rem 0.45rem;
+     padding: 0 0.55rem 0.45rem;
   }
 
   /* Muted — early round */

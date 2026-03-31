@@ -120,6 +120,7 @@ async fn main() -> anyhow::Result<()> {
         company_url: Arc::new(RwLock::new(String::new())),
         portfolio_url: Arc::new(RwLock::new(String::new())),
         jd_text: Arc::new(RwLock::new(String::new())),
+        jd_location: Arc::new(RwLock::new(String::new())),
         transcript: Arc::new(RwLock::new(Vec::new())),
         jd_keywords: Arc::new(RwLock::new(Vec::new())),
         audio_tx,

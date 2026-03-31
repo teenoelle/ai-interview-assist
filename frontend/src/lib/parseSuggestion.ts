@@ -282,8 +282,10 @@ export function getAnswerType(
 ): { framework: string; label: string } {
   // Tag-specific overrides for types that share STAR fields but have distinct coaching frames
   if (tag === 'weaknesses')  return { framework: 'A: Weakness',    label: 'Real → Growth → Evidence → Redirect' };
-  if (tag === 'situational') return { framework: 'A: Situational', label: 'Stakes → Approach → Reasoning → Close' };
+  if (tag === 'situational') return { framework: 'A: Situational', label: 'Stakes → Approach → Reasoning → Answer' };
   if (tag === 'strengths')   return { framework: 'A: Strengths',   label: 'Acknowledge → Strengths → Close' };
+  if (tag === 'technical')   return { framework: 'A: Technical',   label: 'Problem → Experience → Method → Design' };
+  if (tag === 'culture')     return { framework: 'A: Culture',     label: 'Context → Style → Example → Impact' };
 
   if (parsed.present || parsed.thread || parsed.past || parsed.future)
     return { framework: 'A: Intro', label: 'Summary → Story → Next' };
@@ -294,7 +296,7 @@ export function getAnswerType(
   if (parsed.asks.length >= 3 && !parsed.acknowledge && !parsed.tell)
     return { framework: 'A: Closing', label: 'Questions to Ask' };
   if (parsed.tell || parsed.acknowledge)
-    return { framework: 'A: STAR', label: 'Acknowledge → Answer → Close' };
+    return { framework: 'A: STAR', label: 'Acknowledge → Solve → Bridge → Answer → Close' };
   return { framework: '', label: '' };
 }
 
@@ -310,8 +312,11 @@ function extractTypeTag(text: string): string {
 }
 
 export function getSectionLabels(tag?: string): { ack: string; solve: string; bridge: string; answer: string } {
-  if (tag === 'weaknesses')  return { ack: 'Real',    solve: 'Growth',   bridge: 'Evidence',  answer: 'Redirect' };
-  if (tag === 'situational') return { ack: 'Stakes',  solve: 'Approach', bridge: 'Reasoning', answer: 'Answer'   };
+  if (tag === 'weaknesses')  return { ack: 'Real',      solve: 'Growth',    bridge: 'Evidence', answer: 'Redirect' };
+  if (tag === 'situational') return { ack: 'Stakes',    solve: 'Approach',  bridge: 'Reasoning',answer: 'Answer'   };
+  if (tag === 'strengths')   return { ack: 'Acknowledge',solve: 'Solve',    bridge: 'Bridge',   answer: 'Strengths'};
+  if (tag === 'technical')   return { ack: 'Problem',   solve: 'Experience',bridge: 'Method',   answer: 'Design'   };
+  if (tag === 'culture')     return { ack: 'Context',   solve: 'Style',     bridge: 'Example',  answer: 'Impact'   };
   return { ack: 'Acknowledge', solve: 'Solve', bridge: 'Bridge', answer: 'Answer' };
 }
 

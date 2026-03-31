@@ -32,6 +32,7 @@ pub struct TranscriptSegment {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SetupPayload {
     pub job_description: String,
+    pub job_location: String,
     pub company_url: String,
     pub portfolio_url: String,
     pub linkedin_text: String,

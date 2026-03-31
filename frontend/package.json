@@ -16,9 +16,12 @@
     "vite": "^6.0.0"
   },
   "dependencies": {
+    "@fontsource/barlow-condensed": "^5.2.8",
     "@fontsource/dm-sans": "^5.2.8",
     "@fontsource/ibm-plex-sans": "^5.2.8",
+    "@fontsource/ibm-plex-sans-condensed": "^5.2.8",
     "@fontsource/inter": "^5.2.8",
+    "@fontsource/inter-tight": "^5.2.7",
     "@fontsource/outfit": "^5.2.8",
     "@fontsource/plus-jakarta-sans": "^5.2.8",
     "@mediapipe/tasks-vision": "^0.10.32"

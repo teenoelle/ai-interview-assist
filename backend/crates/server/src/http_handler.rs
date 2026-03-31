@@ -5,7 +5,7 @@ use axum::{
 };
 use sentiment::gemini_vision::analyze_presence;
 use common::messages::SetupPayload;
-use context::ai_helper::{generate_debrief, predict_questions, call_ai_simple, call_ai_fast, generate_company_brief, generate_interviewer_summary, extract_jd_keywords, assess_vocal_delivery, AiConfig};
+use context::ai_helper::{generate_debrief, predict_questions, call_ai_simple, call_ai_fast, generate_company_brief, generate_interviewer_summary, extract_jd_keywords, extract_jd_location, assess_vocal_delivery, AiConfig};
 use context::builder::build_system_prompt;
 use context::crawler::{crawl_website, extract_github_username, fetch_github_portfolio};
 use context::linkedin::parse_all_linkedin_profiles;
@@ -33,6 +33,9 @@ pub async fn handle_setup_finalize(
         match name.as_str() {
             "job_description" => {
                 payload.job_description = field.text().await.unwrap_or_default();
+            }
+            "job_location" => {
+                payload.job_location = field.text().await.unwrap_or_default();
             }
             "company_url" => {
                 payload.company_url = field.text().await.unwrap_or_default();
@@ -103,6 +106,9 @@ pub async fn handle_setup_finalize(
     }
     {
         let mut jd = state.jd_text.write().await; *jd = payload.job_description.clone();
+    }
+    if !payload.job_location.is_empty() {
+        let mut loc = state.jd_location.write().await; *loc = payload.job_location.clone();
     }
 
     // Build prediction context (used by /api/predict-questions)
@@ -347,6 +353,8 @@ pub async fn handle_next_question(
 #[derive(serde::Deserialize)]
 pub struct SalaryCoachRequest {
     pub role_context: String,
+    pub location: Option<String>,
+    pub jd_snippet: Option<String>,
 }
 
 pub async fn handle_salary_coach(
@@ -362,7 +370,16 @@ pub async fn handle_salary_coach(
         ollama_model: &state.ollama_model,
         usage: Some(state.call_counts.clone()),
     };
-    let tactics = context::ai_helper::generate_salary_tactics(&req.role_context, &cfg).await;
+    // Prefer server-stored location/JD over what frontend sends (more authoritative)
+    let location = {
+        let stored = state.jd_location.read().await.clone();
+        if !stored.is_empty() { stored } else { req.location.unwrap_or_default() }
+    };
+    let jd_snippet = {
+        let stored = state.jd_text.read().await.clone();
+        if !stored.is_empty() { stored } else { req.jd_snippet.unwrap_or_default() }
+    };
+    let tactics = context::ai_helper::generate_salary_tactics(&req.role_context, &location, &jd_snippet, &cfg).await;
     Ok(Json(tactics))
 }
 
@@ -652,6 +669,7 @@ pub async fn handle_predict_questions(
 pub struct EnrichResponse {
     pub company_brief: Option<context::ai_helper::CompanyBrief>,
     pub jd_keywords: Vec<String>,
+    pub jd_location: String,
 }
 
 #[derive(serde::Deserialize, Default)]
@@ -727,21 +745,27 @@ pub async fn handle_enrich(
         usage: Some(state.call_counts.clone()),
     };
 
-    // Run company brief + keyword extraction in parallel
-    let (brief, jd_keywords) = tokio::join!(
+    // Run company brief + keyword extraction + location extraction in parallel
+    let (brief, jd_keywords, jd_location) = tokio::join!(
         generate_company_brief(&company_info, &cfg),
         extract_jd_keywords(&jd_text, &cfg),
+        extract_jd_location(&jd_text, &cfg),
     );
 
-    // Store keywords for review pipeline
+    // Store keywords and location for later use
     {
         let mut kw = state.jd_keywords.write().await;
         *kw = jd_keywords.clone();
+    }
+    {
+        let mut loc = state.jd_location.write().await;
+        *loc = jd_location.clone();
     }
 
     Json(EnrichResponse {
         company_brief: if brief.name.is_empty() { None } else { Some(brief) },
         jd_keywords,
+        jd_location,
     })
 }
 

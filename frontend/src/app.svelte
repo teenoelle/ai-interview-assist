@@ -57,6 +57,15 @@
   import '@fontsource/outfit/400.css';
   import '@fontsource/outfit/600.css';
   import '@fontsource/outfit/700.css';
+  import '@fontsource/ibm-plex-sans-condensed/400.css';
+  import '@fontsource/ibm-plex-sans-condensed/600.css';
+  import '@fontsource/ibm-plex-sans-condensed/700.css';
+  import '@fontsource/inter-tight/400.css';
+  import '@fontsource/inter-tight/600.css';
+  import '@fontsource/inter-tight/700.css';
+  import '@fontsource/barlow-condensed/400.css';
+  import '@fontsource/barlow-condensed/600.css';
+  import '@fontsource/barlow-condensed/700.css';
 
   type Phase = 'setup' | 'practice' | 'interview';
 
@@ -108,6 +117,7 @@
 
   // Keyword tracker
   let jdKeywords = $state<string[]>(loadKeywords());
+  let jdLocation = $state<string>(localStorage.getItem('setup-location') ?? '');
   let mentionedKeywords = $state<Set<string>>(new Set());
   let interviewerRaisedKeywords = $state<Set<string>>(new Set());
   let flashingKeywords = $state<Set<string>>(new Set());
@@ -586,12 +596,15 @@
   import type { CombinedVoice } from './lib/ttsClient';
 
   const FONTS = [
-    { id: 'Inter',              label: 'Inter' },
-    { id: 'DM Sans',            label: 'DM Sans' },
-    { id: 'Plus Jakarta Sans',  label: 'Plus Jakarta Sans' },
-    { id: 'IBM Plex Sans',      label: 'IBM Plex Sans' },
-    { id: 'Outfit',             label: 'Outfit' },
-    { id: 'system-ui',          label: 'System Default' },
+    { id: 'Inter',                    label: 'Inter' },
+    { id: 'Inter Tight',             label: 'Inter Tight ↔' },
+    { id: 'IBM Plex Sans',           label: 'IBM Plex Sans' },
+    { id: 'IBM Plex Sans Condensed', label: 'IBM Plex Sans Condensed ↔' },
+    { id: 'Barlow Condensed',        label: 'Barlow Condensed ↔' },
+    { id: 'DM Sans',                 label: 'DM Sans' },
+    { id: 'Plus Jakarta Sans',       label: 'Plus Jakarta Sans' },
+    { id: 'Outfit',                  label: 'Outfit' },
+    { id: 'system-ui',               label: 'System Default' },
   ] as const;
   let appFont = $state(localStorage.getItem('app-font') ?? 'Inter');
   $effect(() => {
@@ -815,18 +828,28 @@
 
   let eventWs: EventWebSocket | null = null;
 
+  let salaryCoachPromise: Promise<void> | null = null;
   async function fetchSalaryCoach() {
-    if (salaryTactics || loadingSalary) return;
-    loadingSalary = true;
-    try {
-      const sp = companyBrief ? `${companyBrief.name}: ${companyBrief.what_they_do}` : 'unknown role';
-      const resp = await authFetch('/api/salary-coach', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role_context: sp }),
-      });
-      if (resp.ok) salaryTactics = await resp.json();
-    } catch { /* ignore */ }
-    loadingSalary = false;
+    if (salaryTactics) return;
+    if (salaryCoachPromise) return salaryCoachPromise;
+    salaryCoachPromise = (async () => {
+      loadingSalary = true;
+      try {
+        const sp = companyBrief ? `${companyBrief.name}: ${companyBrief.what_they_do}` : 'unknown role';
+        const jdSnippet = localStorage.getItem('setup-jd') ?? '';
+        const resp = await authFetch('/api/salary-coach', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            role_context: sp,
+            location: jdLocation || undefined,
+            jd_snippet: jdSnippet.slice(0, 1200) || undefined,
+          }),
+        });
+        if (resp.ok) salaryTactics = await resp.json();
+      } catch { /* ignore */ }
+      loadingSalary = false;
+    })();
+    return salaryCoachPromise;
   }
 
 
@@ -877,6 +900,7 @@
       if (resp.ok) {
         const d = await resp.json();
         if (d.jd_keywords?.length) { jdKeywords = d.jd_keywords; mentionedKeywords = new Set(); interviewerRaisedKeywords = new Set(); }
+        if (d.jd_location && !jdLocation) jdLocation = d.jd_location;
         // Only update companyBrief if not already loaded (don't overwrite on-demand load)
         if (d.company_brief && !companyBrief) companyBrief = d.company_brief;
       }
@@ -899,6 +923,7 @@
         const d = await resp.json();
         if (d.company_brief) companyBrief = d.company_brief;
         if (d.jd_keywords?.length) { jdKeywords = d.jd_keywords; mentionedKeywords = new Set(); interviewerRaisedKeywords = new Set(); }
+        if (d.jd_location && !jdLocation) jdLocation = d.jd_location;
       }
     } catch { /* ignore */ }
     loadingCompanyBrief = false;
@@ -1161,20 +1186,35 @@
           const newIdx = suggestions.length;
           if (isFirst) { currentQuestionIdx = newIdx; jumpSignal = { idx: newIdx, key: Date.now() }; }
           const isCompound = isFirst && !!secondaryTag;
+          const qTag = tagQuestion(q);
+          const isSalary = isFirst && qTag === 'salary';
           suggestions = [...suggestions, {
             question: q,
-            suggestion: isFirst ? '' : '(Additional question — will generate suggestion when you navigate here)',
-            streaming: isFirst && !isCompound,    // primary starts streaming only for single-type
-            tag: tagQuestion(q),
+            suggestion: isSalary
+              ? (salaryTactics?.early_round ?? '')
+              : (isFirst ? '' : '(Additional question — will generate suggestion when you navigate here)'),
+            streaming: isFirst && !isCompound && !isSalary,
+            tag: qTag,
             secondaryTag: isFirst ? secondaryTag : undefined,
             compoundSuggestion: isCompound ? '' : undefined,
-            compoundStreaming: isCompound,          // compound streams first for compound questions
+            compoundStreaming: isCompound && !isSalary,
             secondarySuggestion: isCompound ? '' : undefined,
             secondaryStreaming: false,
             redFlag: detectRedFlag(q) ?? undefined,
             detectedAt: Date.now(),
             source: isSimulated ? 'simulated' : 'live',
           }];
+          // If salary tactics aren't loaded yet, fetch and backfill once ready
+          if (isSalary && !salaryTactics) {
+            const salaryIdx = newIdx;
+            fetchSalaryCoach().then(() => {
+              if (salaryTactics?.early_round) {
+                suggestions = suggestions.map((s, i) =>
+                  i === salaryIdx && !s.suggestion ? { ...s, suggestion: salaryTactics!.early_round, streaming: false } : s
+                );
+              }
+            });
+          }
         }
         resetAnswerTimer();
         // Answer moment nudge (item 5)
@@ -1692,7 +1732,7 @@
               {#if !collapsedCols.has('center')}
                 <div class="col-body col-split-body" bind:this={centerColBodyEl}>
                   <div class="col-body-scroll" style="zoom: {centerZoom/100}; padding: 0.25rem 0.5rem 0.5rem;">
-                    <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} {jumpSignal} {cueExpandSignal} onPinnedChange={(p) => (suggestionPinned = p)} />
+                    <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} {jumpSignal} {cueExpandSignal} onPinnedChange={(p) => (suggestionPinned = p)} {salaryTactics} />
                   </div>
                 </div>
               {/if}
@@ -1951,9 +1991,7 @@
                 {:else if sid === 'fillers'}
                   <!-- merged into stats section -->
                 {:else if sid === 'salary-coach'}
-                  {#if salaryTactics}
-                    <SalaryCoachPanel tactics={salaryTactics} onClose={() => salaryTactics = null} />
-                  {/if}
+                  <!-- salary tactics now shown inline in SuggestionPanel -->
                 {:else if sid === 'keywords'}
                   {#if jdKeywords.length > 0}
                     <div class="side-section">

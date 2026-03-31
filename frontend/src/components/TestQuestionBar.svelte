@@ -11,29 +11,48 @@
   });
 
   const PRESET_GROUPS: { label: string; tag: string; questions: string[] }[] = [
-    { label: 'Intro', tag: 'intro', questions: [
+    { label: 'Intro', tag: 'personal', questions: [
       'Tell me about yourself.',
       'Walk me through your background.',
     ]},
-    { label: 'Behavioral', tag: 'star', questions: [
+    { label: 'Motivation', tag: 'motivation', questions: [
+      'Why are you interested in this role?',
+      'What draws you to this company?',
+    ]},
+    { label: 'Future', tag: 'future', questions: [
+      'Where do you see yourself in five years?',
+      'What are your long-term career goals?',
+      'How does this role fit into your career path?',
+    ]},
+    { label: 'Strengths', tag: 'strengths', questions: [
+      'What are your strengths?',
+      'What would your colleagues say you do best?',
+    ]},
+    { label: 'Weakness', tag: 'weaknesses', questions: [
+      'What is your greatest weakness?',
+      'Tell me about an area you are working to improve.',
+    ]},
+    { label: 'Behavioral', tag: 'behavioral', questions: [
       'Tell me about a time you faced a difficult challenge.',
       'Tell me about a time you worked with a difficult stakeholder.',
       'How do you prioritize when everything is urgent?',
     ]},
-    { label: 'Strengths / Weakness', tag: 'strengths', questions: [
-      'What are your strengths?',
-      'What is your greatest weakness?',
+    { label: 'Situational', tag: 'situational', questions: [
+      'How would you handle a project with an unclear scope?',
+      'What would you do if you disagreed with your manager?',
     ]},
-    { label: 'Motivation', tag: 'motivation', questions: [
-      'Why are you interested in this role?',
-      'Where do you see yourself in five years?',
+    { label: 'Technical', tag: 'technical', questions: [
+      'Walk me through how you would design a scalable system.',
+      'How do you approach debugging a production issue?',
+      'How do you stay current with new technologies?',
+    ]},
+    { label: 'Culture', tag: 'culture', questions: [
       'How would you describe the culture you work best in?',
+      'How do you collaborate with cross-functional teams?',
+      'How do you handle disagreements within a team?',
     ]},
     { label: 'Salary', tag: 'salary', questions: [
       'What are your salary expectations?',
-    ]},
-    { label: 'Situational', tag: 'situational', questions: [
-      'How would you design a system to handle high traffic?',
     ]},
     { label: 'Closing', tag: 'closing', questions: [
       'Do you have any questions for us?',
@@ -41,8 +60,10 @@
   ];
 
   const TAG_COLOR: Record<string, string> = {
-    intro: '#60a5fa', star: '#a78bfa', strengths: '#34d399',
-    motivation: '#fb923c', salary: '#f59e0b', situational: '#38bdf8', closing: '#94a3b8',
+    personal: '#f472b6', motivation: '#fb923c', future: '#38bdf8',
+    strengths: '#4ade80', weaknesses: '#f87171', behavioral: '#a78bfa',
+    situational: '#a3e635', technical: '#60a5fa', culture: '#34d399',
+    salary: '#fbbf24', closing: '#94a3b8',
   };
 
   async function send(q: string) {
@@ -152,7 +173,7 @@
   .tqb-presets {
     display: flex;
     flex-direction: column;
-    gap: 0.15rem;
+    gap: 0;
   }
 
   .tqb-preset {
@@ -167,7 +188,7 @@
     white-space: normal;
     word-break: break-word;
     transition: all 0.12s;
-    line-height: 1.4;
+    line-height: 1.2;
     text-align: left;
   }
   .tqb-preset:hover:not(:disabled) {

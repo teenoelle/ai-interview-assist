@@ -11,6 +11,7 @@
     data: {
       companyName: string;
       roleName: string;
+      jobLocation: string;
       jobDescription: string;
       companyUrl: string;
       interviewers: string[];
@@ -33,6 +34,7 @@
 
   let companyName = $state(load('setup-company-name', ''));
   let roleName = $state(load('setup-role-name', ''));
+  let jobLocation = $state(load('setup-location', ''));
   let jobDescription = $state(load('setup-jd', ''));
   let companyUrl = $state(load('setup-company-url', ''));
   let interviewers = $state<string[]>(loadArr('setup-interviewers', ['']));
@@ -54,6 +56,7 @@
 
   $effect(() => { localStorage.setItem('setup-company-name', companyName); });
   $effect(() => { localStorage.setItem('setup-role-name', roleName); });
+  $effect(() => { localStorage.setItem('setup-location', jobLocation); });
   $effect(() => { localStorage.setItem('setup-jd', jobDescription); });
   $effect(() => { localStorage.setItem('setup-company-url', companyUrl); });
   $effect(() => { localStorage.setItem('setup-interviewers', JSON.stringify(interviewers)); });
@@ -72,7 +75,7 @@
 
   function currentData(): Preset['data'] {
     return {
-      companyName, roleName, jobDescription, companyUrl,
+      companyName, roleName, jobLocation, jobDescription, companyUrl,
       interviewers: [...interviewers], intervieweeLinkedin,
       portfolioUrls: [...portfolioUrls], extraExperience,
       cvText: cvText || undefined, cvFilename: cvFilename || undefined,
@@ -83,6 +86,7 @@
   function applyPreset(p: Preset) {
     companyName = p.data.companyName;
     roleName = p.data.roleName;
+    jobLocation = p.data.jobLocation ?? '';
     jobDescription = p.data.jobDescription;
     companyUrl = p.data.companyUrl;
     interviewers = p.data.interviewers.length ? [...p.data.interviewers] : [''];
@@ -148,6 +152,7 @@
     try {
       const formData = new FormData();
       formData.append('job_description', jobDescription);
+      formData.append('job_location', jobLocation);
       formData.append('company_url', companyUrl);
 
       // Join multiple interviewer profiles with a clear separator
@@ -253,7 +258,7 @@
     </button>
   </div>
 
-  <!-- Company and role name (used for preset naming) -->
+  <!-- Company, role, and location -->
   <div class="name-row">
     <div class="field name-field">
       <label for="company-name">Company Name</label>
@@ -262,6 +267,10 @@
     <div class="field name-field">
       <label for="role-name">Role / Position</label>
       <input id="role-name" type="text" bind:value={roleName} placeholder="Senior Product Manager" />
+    </div>
+    <div class="field name-field location-field">
+      <label for="job-location">Location</label>
+      <input id="job-location" type="text" bind:value={jobLocation} placeholder="San Francisco, CA" />
     </div>
   </div>
 
@@ -442,8 +451,9 @@
     transition: all 0.15s;
   }
   .preset-delete:hover { border-color: #ef4444; color: #ef4444; }
-  .name-row { display: flex; gap: 1rem; margin-bottom: 0; }
-  .name-field { flex: 1; }
+  .name-row { display: flex; gap: 1rem; margin-bottom: 0; flex-wrap: wrap; }
+  .name-field { flex: 1; min-width: 10rem; }
+  .location-field { flex: 0 1 14rem; }
   input[type='text'] {
     width: 100%; padding: 0.75rem;
     background: #1e293b; border: 1px solid #334155;

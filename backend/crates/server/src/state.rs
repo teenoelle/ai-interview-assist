@@ -15,6 +15,7 @@ pub struct AppState {
     pub company_url: Arc<RwLock<String>>,
     pub portfolio_url: Arc<RwLock<String>>,
     pub jd_text: Arc<RwLock<String>>,
+    pub jd_location: Arc<RwLock<String>>,
     pub transcript: Arc<RwLock<Vec<TranscriptSegment>>>,
     pub jd_keywords: Arc<RwLock<Vec<String>>>,
     pub audio_tx: mpsc::Sender<Vec<u8>>,

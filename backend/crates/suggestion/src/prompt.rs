@@ -142,6 +142,49 @@ const WEAKNESSES_TRIGGERS: &[&str] = &[
     "what do you find difficult professionally",
 ];
 
+const TECHNICAL_TRIGGERS: &[&str] = &[
+    "walk me through how you would design",
+    "how would you architect",
+    "design a system",
+    "how do you debug",
+    "how do you approach technical decisions",
+    "how do you evaluate technology",
+    "how do you stay current with",
+    "walk me through your technical",
+    "technical approach",
+    "technology stack",
+    "how do you make technical",
+    "how do you choose between",
+    "how do you scale",
+    "how do you handle technical debt",
+    "how do you ensure code quality",
+    "how do you approach testing",
+    "how do you approach system design",
+];
+
+const CULTURE_TRIGGERS: &[&str] = &[
+    "how do you collaborate",
+    "how do you work with cross-functional",
+    "describe your working style",
+    "how do you handle conflict",
+    "what kind of work environment",
+    "how do you approach feedback",
+    "how do you give feedback",
+    "how do you communicate with",
+    "how do you handle disagreement",
+    "what does collaboration look like",
+    "how do you build relationships",
+    "how do you manage up",
+    "how do you work across teams",
+    "how do you handle a difficult coworker",
+    "how do you handle a difficult team member",
+    "how do you handle working with someone you disagree with",
+    "what is your management style",
+    "how do you motivate",
+    "how do you onboard",
+    "how do you give and receive feedback",
+];
+
 const SITUATIONAL_TRIGGERS: &[&str] = &[
     "what would you do if",
     "how would you handle",
@@ -176,6 +219,8 @@ pub enum QuestionType {
     Weaknesses,
     Behavioral,
     Situational,
+    Technical,
+    Culture,
     Competency,
 }
 
@@ -194,6 +239,8 @@ pub fn classify_question(question: &str) -> (QuestionType, Option<QuestionType>)
         (score_triggers(WEAKNESSES_TRIGGERS,   &q), QuestionType::Weaknesses),
         (score_triggers(BEHAVIORAL_TRIGGERS,   &q), QuestionType::Behavioral),
         (score_triggers(SITUATIONAL_TRIGGERS,  &q), QuestionType::Situational),
+        (score_triggers(TECHNICAL_TRIGGERS,    &q), QuestionType::Technical),
+        (score_triggers(CULTURE_TRIGGERS,      &q), QuestionType::Culture),
     ];
 
     let max_score = candidates.iter().map(|(s, _)| *s).max().unwrap_or(0);
@@ -232,6 +279,8 @@ fn question_type_topic(qt: QuestionType) -> &'static str {
         QuestionType::Weaknesses   => "an area you are actively developing",
         QuestionType::Behavioral   => "a specific past behavioral example",
         QuestionType::Situational  => "how you would handle a hypothetical situation",
+        QuestionType::Technical    => "your technical approach and design thinking",
+        QuestionType::Culture      => "how you collaborate and work with others",
         QuestionType::Competency   => "your professional approach and methodology",
     }
 }
@@ -246,6 +295,8 @@ pub fn question_type_to_tag(qt: QuestionType) -> &'static str {
         QuestionType::Weaknesses   => "weaknesses",
         QuestionType::Behavioral   => "behavioral",
         QuestionType::Situational  => "situational",
+        QuestionType::Technical    => "technical",
+        QuestionType::Culture      => "culture",
         QuestionType::Competency   => "general",
     }
 }
@@ -285,6 +336,8 @@ fn dispatch_prompt(ctx_prefix: &str, question: &str, qtype: QuestionType) -> Str
         QuestionType::Weaknesses   => build_weaknesses_prompt(ctx_prefix, question),
         QuestionType::Behavioral   => build_behavioral_prompt(ctx_prefix, question),
         QuestionType::Situational  => build_situational_prompt(ctx_prefix, question),
+        QuestionType::Technical    => build_technical_prompt(ctx_prefix, question),
+        QuestionType::Culture      => build_culture_prompt(ctx_prefix, question),
         QuestionType::Competency   => build_competency_prompt(ctx_prefix, question),
     }
 }
@@ -517,6 +570,66 @@ Rules:\n\
 - Ask follow-up (3rd pipe segment): REQUIRED on every Ask line. 1 sentence the candidate says if the interviewer asks 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words. Must appear after the second pipe — never omit it.\n\
 - Ask lines come AFTER the --- separator only.\n\
 - NEVER name specific clients, employers, or companies. Refer to them by industry only (e.g. 'retail brand', 'tech startup', 'financial services firm').\n\
+- Use only background provided. No invented details.",
+        ctx_prefix, question
+    )
+}
+
+fn build_technical_prompt(ctx_prefix: &str, question: &str) -> String {
+    format!(
+        "{}The interviewer asked a technical question: '{}'\n\n\
+CRITICAL: This is a TECHNICAL question. Output ONLY the exact labeled lines below. No preamble.\n\n\
+Acknowledge: <One complete sentence naming the technical challenge or business stake behind the question — not the question itself. Opens with: 'It sounds like the challenge here is', 'From your question, the concern seems to be', or 'I can see the priority is'. Completes with the specific technical problem or constraint, drawn from the job description and company context. Max 20 words. Never starts with 'I'.>\n\
+Solve: <One sentence. Names the candidate's specific technical background most directly relevant to this question. Starts with 'I' or 'I\\'ve'. Max 12 words. Draws from candidate background in the system prompt — CV roles, LinkedIn, portfolio, extra experience notes. No invented details.>\n\
+Bridge: <One short sentence transitioning from Solve to the Answer. 5-8 words. Starts with 'I\\'d' or 'I'. Never a question. Never starts with 'We' or 'Here\\'s'.>\n\
+Answer: <Technical reasoning on this same line. Each strategy MUST begin with a [1-2 word keyword] immediately before its opening sentence — no space between ] and first word. For each strategy: (A) [keyword] + one outcome sentence naming the technical principle or decision. (B) 'I [action verb] [specific approach] because [technical reason].' (C) REQUIRED illustration — 'So if [specific technical scenario], I [specific action], which would [directional outcome].' Strategy 2 onward: outcome sentence opens with 'Beyond that,' or 'I also'. Last sentence names the overall technical or business outcome. 2-3 strategies. No adjectives. No invented metrics. Draws from candidate background.>\n\
+Close: <One sentence connecting the candidate\\'s technical approach to the employer\\'s specific challenge from the system prompt. Starts with 'That\\'s why', 'This is why', or 'I\\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
+---\n\
+Example: [1-2 word keyword] 3-5 word outcome title | <STAR story. 4 sentences max. All on ONE line. Each starts with 'I'. Situation + Action in first sentence. Technical outcome in last sentence. Draws only from candidate background. No invented metrics.>\n\
+Ask: <2-4 word noun phrase — the specific technical challenge or system named in the question> | <Question probing the technical depth of the problem — names the specific system, constraint, or scale involved. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — a different technical angle> | <A different question about tooling, architecture decisions, or technical tradeoffs the team faces. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
+Rules:\n\
+- Output ONLY these lines. No extra text.\n\
+- Acknowledge: one sentence naming the technical stake. Never starts with 'I'. Draws from system prompt context.\n\
+- Solve: one sentence starting with 'I'. Names specific technical experience. Max 12 words. No vague pronouns.\n\
+- Bridge: 5-8 words. Starts with 'I\\'d' or 'I'. Never a question.\n\
+- Answer text must be on the same line as 'Answer:'.\n\
+- Answer: [keyword] strategy format. Each strategy completes all 3 steps. Directional language only — never fabricate metrics.\n\
+- Close: one sentence. Max 20 words. References employer\\'s specific challenge. Never say 'this role'.\n\
+- Always use 'I' — never 'we' or 'our'.\n\
+- Acronyms: write in full on first use followed by abbreviation in parentheses.\n\
+- NEVER invent metrics, percentages, dollar figures, or timeframes not in the candidate background.\n\
+- NEVER name specific clients or companies — refer by industry only.\n\
+- Use only background provided. No invented details.",
+        ctx_prefix, question
+    )
+}
+
+fn build_culture_prompt(ctx_prefix: &str, question: &str) -> String {
+    format!(
+        "{}The interviewer asked a culture/collaboration question: '{}'\n\n\
+CRITICAL: This is a CULTURE question about working style and collaboration. Output ONLY the exact labeled lines below. No preamble.\n\n\
+Acknowledge: <One complete sentence naming the team dynamic or collaboration challenge behind the question — not the question itself. Opens with: 'It sounds like the team values', 'From your question, the priority seems to be', or 'I can see the focus here is on'. Completes with the specific collaboration need or team challenge drawn from the job description and company context. Max 20 words. Never starts with 'I'.>\n\
+Solve: <One sentence naming the candidate\\'s working style or approach that directly addresses the collaboration need from Acknowledge. Starts with 'I' or 'I\\'ve'. Max 12 words. Draws from candidate background in the system prompt. No invented details.>\n\
+Bridge: <One short sentence transitioning to the Answer. 5-8 words. Starts with 'I\\'d' or 'I'. Never a question.>\n\
+Answer: <Behavioral story on this same line. Short sentences starting with 'I'. Max 10 words per sentence. Structure: (1) Context — one sentence: 'In [brief context], I [role or responsibility].' (2) Action — 'I [specific action verb] [approach] to [collaboration outcome].' (3) REQUIRED illustration — 'So if [specific team scenario], I [specific action], which would [directional outcome].' (4) If a second dimension applies: 'I also [action].' then REQUIRED illustration. (5) Outcome — last sentence names the team or business result. No adjectives. No invented metrics. Draws from candidate background.>\n\
+Close: <One sentence connecting the candidate\\'s collaboration approach to the employer\\'s specific team challenge from the system prompt. Starts with 'That\\'s why', 'This is why', or 'I\\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
+---\n\
+Example: [1-2 word keyword] 3-5 word outcome title | <STAR story focused on collaboration or teamwork. 4 sentences max. All on ONE line. Each starts with 'I'. Situation + Action in first sentence. Team outcome in last sentence. Draws only from candidate background. No invented metrics.>\n\
+Ask: <2-4 word noun phrase — team collaboration dynamic or working norm> | <Question probing how the team collaborates or handles the specific dynamic the interviewer raised. Names the concrete process, cadence, or challenge. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — a different angle on team culture or feedback> | <A different question about how the team gives feedback, resolves disagreement, or works across functions. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
+Rules:\n\
+- Output ONLY these lines. No extra text.\n\
+- Acknowledge: one sentence naming the team or collaboration stake. Never starts with 'I'. Draws from system prompt.\n\
+- Solve: one sentence starting with 'I'. Names specific working style or approach. Max 12 words.\n\
+- Bridge: 5-8 words. Starts with 'I\\'d' or 'I'. Never a question.\n\
+- Answer text must be on the same line as 'Answer:'.\n\
+- Answer: behavioral story format. Every action claim followed immediately by inline illustration.\n\
+- Close: one sentence. Max 20 words. References employer\\'s specific challenge. Never say 'this role'.\n\
+- Always use 'I' — never 'we' or 'our'.\n\
+- Acronyms: write in full on first use.\n\
+- NEVER invent metrics, percentages, or timeframes not in the candidate background.\n\
+- NEVER name specific clients or companies — refer by industry only.\n\
 - Use only background provided. No invented details.",
         ctx_prefix, question
     )

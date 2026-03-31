@@ -5,6 +5,7 @@
   import PanelHeader from './PanelHeader.svelte';
   import { PracticeRecorder } from '../lib/practiceRecorder';
   import { authFetch } from '../lib/api';
+  import SalaryCoachPanel from './SalaryCoachPanel.svelte';
 
   // Expand-cue state: cue text → { sentence, loading }
   let expandedCues = $state<Record<string, { sentence: string; loading: boolean }>>({});
@@ -13,6 +14,11 @@
 
   function toggleCueOpen(key: string) {
     openCues = { ...openCues, [key]: !openCues[key] };
+  }
+
+  // For strategy blocks: undefined/true = open, false = closed
+  function toggleStratOpen(key: string) {
+    openCues = { ...openCues, [key]: openCues[key] !== false ? false : true };
   }
 
   async function expandCue(question: string, cue: string) {
@@ -30,13 +36,14 @@
     } catch { expandedCues = { ...expandedCues, [cue]: { sentence: cue, loading: false } }; }
   }
 
-  const { suggestions, onClear, teleprompter = false, jumpSignal = null, cueExpandSignal = null, onPinnedChange } = $props<{
+  const { suggestions, onClear, teleprompter = false, jumpSignal = null, cueExpandSignal = null, onPinnedChange, salaryTactics = null } = $props<{
     suggestions: SuggestionEntry[];
     onClear: () => void;
     teleprompter?: boolean;
     jumpSignal?: { idx: number; key: number } | null;
     cueExpandSignal?: { cueIdx: number; key: number } | null;
     onPinnedChange?: (pinned: boolean) => void;
+    salaryTactics?: { early_round: string; reveal: string; direct_ask: string; total_package: string; counter: string } | null;
   }>();
 
   // -1 = pinned to latest; >= 0 = viewing specific entry
@@ -78,10 +85,7 @@
   $effect(() => {
     if (!current || current.streaming) return;
     const parsed = parseSuggestion(current.suggestion);
-    // Auto-open all strategies
-    parsed.strategies.forEach((_, si) => {
-      openCues[`strat-${currentIndex}-${si}`] = true;
-    });
+    // Strategies are open by default (no write needed — see isStratOpen below)
     const cues = parseCues(parsed.body);
     for (const cue of cues) {
       expandCue(current.question, cue.text);
@@ -319,6 +323,9 @@
         </div>
       {/if}
 
+      {#if current.tag === 'salary' && salaryTactics}
+        <SalaryCoachPanel tactics={salaryTactics} onClose={() => {}} />
+      {:else}
       <div class="tp-card">
         {#if current.redFlag}
           <div class="tp-redflag">
@@ -472,35 +479,38 @@
           {@const _sayPi = bodyCues.some(c => c.label === 'Pivot' || c.typeTag === 'Pivot')}
           {@const _sayEx = bodyCues.some(c => c.label === 'Example' || c.typeTag === 'Example')}
           <div class="tp-sec tp-sec-say" class:tp-sec-say-example={_sayEx} class:tp-sec-say-pivot={_sayPi}>
-            <div class="tp-sec-header">
+            <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-say')}>
               <span class="cue-badge">{sl.answer}</span>
               {#if parsed.tell && !tpStreaming}
                 {@const secs = estimateSecs(parsed)}
                 <span class="tp-time-est">~{secs < 60 ? secs + 's' : Math.floor(secs/60) + 'm ' + (secs%60) + 's'}</span>
               {/if}
-            </div>
+              <span class="e-sec-chevron">{collapsedSecs['tp-say'] ? '▸' : '▾'}</span>
+            </button>
+            {#if !collapsedSecs['tp-say']}
             <div class="tp-tell">
               {#if tpStreaming && !parsed.body}
                 {parsed.tell}<span class="cursor">|</span>
               {:else if parsed.strategies.length > 1 || parsed.strategies[0]?.keyword}
-                {#each parsed.strategies as strategy, si}
-                  {@const stratKey = `strat-${currentIndex}-${si}`}
-                  {@const isStratOpen = !!openCues[stratKey]}
-                  <div class="tp-strat-block" class:tp-strat-open={isStratOpen}>
-                    <button class="tp-strat-toggle" onclick={() => toggleCueOpen(stratKey)}>
-                      {#if strategy.keyword}<span class="tp-strat-kw">{strategy.keyword}</span>{/if}
-                      <span class="tp-strat-preview">{strategy.text.split(/(?<=[.!?])\s+/)[0] ?? strategy.text}</span>
-                      <span class="tp-strat-chevron">{isStratOpen ? '▾' : '▸'}</span>
-                    </button>
-                    {#if isStratOpen}
-                      <div class="tp-strat-body">
-                        {#each strategy.text.split(/(?<=[.!?])\s+/).filter(Boolean) as s}
-                          <span class="tp-strat-sent">{s.trim()}</span>
-                        {/each}
-                      </div>
-                    {/if}
-                  </div>
-                {/each}
+                <div class="tp-strats-row">
+                  {#each parsed.strategies as strategy, si}
+                    {@const stratKey = `strat-${currentIndex}-${si}`}
+                    {@const isStratOpen = openCues[stratKey] !== false}
+                    <div class="tp-strat-block" class:tp-strat-open={isStratOpen} style={isStratOpen ? 'max-width:100%' : ''}>
+                      <button class="tp-strat-toggle" onclick={() => toggleStratOpen(stratKey)}>
+                        <span class="tp-strat-kw">{strategy.keyword || '·'}</span>
+                        <span class="tp-strat-chevron">{isStratOpen ? '▾' : '▸'}</span>
+                      </button>
+                      {#if isStratOpen}
+                        <div class="tp-strat-body">
+                          {#each strategy.text.split(/(?<=[.!?])\s+/).filter(Boolean) as s}
+                            <span class="tp-strat-sent">{s.trim()}</span>
+                          {/each}
+                        </div>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
               {:else}
                 {#each parsed.tell.split(/(?<=[.!?])\s+/).filter(Boolean) as s}
                   <span class="tp-tell-sent" class:tp-strategy-gap={/^(I also|Beyond that|On top of that)/i.test(s.trim())}>{s.trim()}</span>
@@ -550,6 +560,7 @@
                 </div>
               {/if}
             {/if}
+            {/if}<!-- end tp-say collapsed -->
           </div>
 
           <!-- CLOSE section (behavioral/competency) -->
@@ -622,13 +633,7 @@
           {/each}
         {/if}
       </div>
-      <span class="tp-hint">
-        {#if parsed.present || parsed.thread || parsed.past || parsed.future}Summary → Thread → Story → Next → Close
-        {:else if parsed.company || parsed.role || parsed.self}Company → Role → Self → Close
-        {:else if parsed.direction || parsed.alignment || parsed.contribution}Direction → Alignment → Contribution → Close
-        {:else if parsed.asks.length >= 3 && !parsed.acknowledge && !parsed.tell}Questions to ask the interviewer
-        {:else}Acknowledge → Answer → Close · Ask = follow-up{/if}
-      </span>
+      {#if ansType.label}<span class="tp-hint">{ansType.label}</span>{/if}
       {#if !tpStreaming && tpSuggestion && practiceRecorder.supported}
         {@const pState = practiceState[currentIndex]}
         {@const pResult = practiceResults[currentIndex]}
@@ -660,6 +665,7 @@
             </div>
           {/if}
         </div>
+      {/if}
       {/if}
     {:else}
       <div class="tp-empty">Waiting for a question...</div>
@@ -988,7 +994,7 @@
   .tp-active-q-text {
     color: #f87171;
     font-size: var(--fs-base);
-    line-height: 1.4;
+    line-height: 1.2;
     display: block;
     overflow-wrap: break-word;
     word-break: break-word;
@@ -1053,7 +1059,7 @@
   .tp-ack-text {
     color: #ffffff;
     font-size: var(--fs-lg);
-    line-height: 1.4;
+    line-height: 1.2;
     overflow-wrap: break-word;
     flex: 1;
   }
@@ -1062,7 +1068,7 @@
   .tp-solve-text {
     color: #ffffff;
     font-size: var(--fs-lg);
-    line-height: 1.4;
+    line-height: 1.2;
     overflow-wrap: break-word;
     flex: 1;
   }
@@ -1071,7 +1077,7 @@
   .tp-bridge-text {
     color: #d6d3d1;
     font-size: var(--fs-lg);
-    line-height: 1.4;
+    line-height: 1.2;
     overflow-wrap: break-word;
     flex: 1;
   }
@@ -1080,7 +1086,7 @@
   .tp-close-text {
     color: #ffffff;
     font-size: var(--fs-lg);
-    line-height: 1.4;
+    line-height: 1.2;
     overflow-wrap: break-word;
     flex: 1;
   }
@@ -1093,7 +1099,7 @@
   .e-sec-chevron { font-size: var(--fs-xs); color: #475569; }
   .tp-time-est {
     font-size: var(--fs-xs); color: #334155;
-    font-variant-numeric: tabular-nums; font-style: italic;
+    font-variant-numeric: tabular-nums; 
   }
 
   /* Ask inline list */
@@ -1101,8 +1107,8 @@
   .tp-ask-item { display: flex; align-items: flex-start; gap: 0.4rem; }
   .tp-ask-content { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; }
   .tp-ask-topic { font-size: var(--fs-sm); color: #f59e0b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
-  .tp-ask-question { font-size: var(--fs-lg); color: #fde68a; line-height: 1.4; overflow-wrap: break-word; }
-  .tp-ask-followup { font-size: var(--fs-sm); color: #a8956a; line-height: 1.4; overflow-wrap: break-word; font-style: italic; }
+  .tp-ask-question { font-size: var(--fs-lg); color: #e2e8f0; line-height: 1.2; overflow-wrap: break-word; }
+  .tp-ask-followup { font-size: var(--fs-sm); color: #94a3b8; line-height: 1.2; overflow-wrap: break-word;  }
 
   /* Breadcrumb: Q type · A framework */
   .tp-breadcrumb {
@@ -1117,13 +1123,13 @@
 
   /* Transition connector lines */
   .tp-transition {
-    font-size: var(--fs-sm); color: #475569; font-style: italic;
-    padding: 0.05rem 0 0.05rem 1.1rem; line-height: 1.4;
+    font-size: var(--fs-sm); color: #475569; 
+    padding: 0.05rem 0 0.05rem 1.1rem; line-height: 1.2;
     overflow-wrap: break-word;
   }
   .e-transition {
-    font-size: var(--fs-sm); color: #475569; font-style: italic;
-    padding: 0.1rem 0 0.1rem 0.75rem; line-height: 1.4;
+    font-size: var(--fs-sm); color: #475569; 
+    padding: 0.1rem 0 0.1rem 0.75rem; line-height: 1.2;
     overflow-wrap: break-word;
   }
 
@@ -1140,7 +1146,7 @@
   .tp-tell {
     color: #ffffff;
     font-size: var(--fs-lg);
-    line-height: 1.5;
+    line-height: 1.2;
     flex: 1;
     overflow-wrap: break-word;
     word-break: break-word;
@@ -1148,7 +1154,7 @@
     flex-direction: column;
     gap: 0.1rem;
   }
-  .tp-tell-sent { display: block; line-height: 1.5; }
+  .tp-tell-sent { display: block; line-height: 1.2; }
   .tp-strategy-gap { margin-top: 0.55rem; }
 
   /* Expand button (inside Say section for body text) */
@@ -1166,9 +1172,9 @@
   .tp-expand-btn:hover { border-color: #22543d; color: #4ade80; }
 
   .tp-body {
-    color: #7a9ab8;
+    color: #cbd5e1;
     font-size: var(--fs-base);
-    line-height: 1.8;
+    line-height: 1.2;
     white-space: pre-wrap;
     border-top: 1px solid #0d2010;
     padding-top: 0.5rem;
@@ -1202,7 +1208,7 @@
     padding: 0.05rem 0.35rem; border-radius: 0.2rem; flex-shrink: 0;
   }
   .tp-cue-preview {
-    flex: 1; font-size: var(--fs-lg); color: #3d8c52;
+    flex: 1; font-size: var(--fs-lg); color: #94a3b8;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .tp-cue-kw {
@@ -1218,11 +1224,11 @@
     padding: 0.3rem 0.4rem;
     background: #061209; border-left: 2px solid #22c55e;
     border-radius: 0 0.25rem 0.25rem 0; color: #f1f5f9;
-    font-size: var(--fs-lg); line-height: 1.5; font-weight: 400;
+    font-size: var(--fs-lg); line-height: 1.2; font-weight: 400;
     overflow-wrap: break-word;
   }
   .tp-cue-flat { display: flex; align-items: center; gap: 0.4rem; padding: 0.15rem 0.4rem; }
-  .tp-cue-flat-text { flex: 1; font-size: var(--fs-base); color: #3d8c52; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tp-cue-flat-text { flex: 1; font-size: var(--fs-base); color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tp-sec > .cue-badge, .e-sec > .cue-badge { align-self: flex-start; }
   .cue-badge.cue-toggle { appearance: none; border: none; cursor: pointer; font-family: inherit; font-size: inherit; font-weight: inherit; letter-spacing: inherit; user-select: none; }
   .cue-badge.cue-toggle:hover { filter: brightness(1.2); }
@@ -1236,7 +1242,7 @@
   /* Ask cue-block theming (amber) */
   .cue-label-ask { color: #fbbf24 !important; }
   .tp-ask-preview {
-    color: #7c4a1a !important;
+    color: #94a3b8 !important;
     white-space: normal !important;
     overflow: visible !important;
     text-overflow: unset !important;
@@ -1244,27 +1250,27 @@
   .ask-sentence {
     padding: 0.3rem 0.4rem; background: #060300; border-left: 2px solid #92400e;
     border-radius: 0 0.25rem 0.25rem 0; color: #f1f5f9;
-    font-size: var(--fs-lg); line-height: 1.5; font-weight: 400; overflow-wrap: break-word;
+    font-size: var(--fs-lg); line-height: 1.2; font-weight: 400; overflow-wrap: break-word;
   }
 
   .tp-hint {
     font-size: var(--fs-xs);
     color: #1e293b;
-    font-style: italic;
+    
     flex-shrink: 0;
     text-align: center;
   }
   .tp-loading {
-    color: #4d94d4; font-style: italic; font-size: var(--fs-base);
+    color: #4d94d4;  font-size: var(--fs-base);
   }
   .tp-raw-fallback { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.25rem 0; }
-  .tp-raw-line { font-size: var(--fs-sm); color: #94a3b8; line-height: 1.5; margin: 0; }
+  .tp-raw-line { font-size: var(--fs-sm); color: #94a3b8; line-height: 1.2; margin: 0; }
   .tp-loading-pending {
     color: #334155;
   }
   .tp-empty {
     flex: 1; display: flex; align-items: center; justify-content: center;
-    color: #1e293b; font-style: italic; font-size: var(--fs-base);
+    color: #1e293b;  font-size: var(--fs-base);
   }
 
   /* Question tag */
@@ -1301,7 +1307,7 @@
     font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
     letter-spacing: 0.07em; color: #f59e0b;
   }
-  .redflag-note { font-size: var(--fs-sm); color: #94a3b8; line-height: 1.4; font-style: italic; }
+  .redflag-note { font-size: var(--fs-sm); color: #94a3b8; line-height: 1.2;  }
 
   .cursor { animation: blink 1s step-end infinite; }
   @keyframes blink { 50% { opacity: 0; } }
@@ -1330,7 +1336,7 @@
   }
   .question-text {
     color: #f87171; font-size: var(--fs-base); margin: 0;
-    line-height: 1.4; overflow-wrap: break-word; word-break: break-word;
+    line-height: 1.2; overflow-wrap: break-word; word-break: break-word;
   }
   .entry-tag {
     display: inline-block; padding: 0.05rem 0.35rem; border-radius: 0.2rem;
@@ -1360,7 +1366,7 @@
   .e-sec-ask    { background: var(--bg-ask);    border-left-color: var(--border-ask); }
   .affirm-text, .tell-text {
     color: #f1f5f9; font-size: var(--fs-lg); font-weight: 400;
-    line-height: 1.5; overflow-wrap: break-word; word-break: break-word;
+    line-height: 1.2; overflow-wrap: break-word; word-break: break-word;
     margin-top: 0.15rem;
   }
 
@@ -1378,15 +1384,15 @@
   .expand-btn:hover { color: #4ade80; }
 
   .body-text {
-    color: #7a9ab8; line-height: 1.7; white-space: pre-wrap;
+    color: #7a9ab8; line-height: 1.2; white-space: pre-wrap;
     font-size: var(--fs-base); border-top: 1px solid #0d2010; padding-top: 0.4rem;
     overflow-wrap: break-word; word-break: break-word;
   }
   :global(.body-text strong) { color: #b8cce4; font-weight: 700; }
 
-  .loading { color: #60a5fa; font-style: italic; font-size: var(--fs-base); }
+  .loading { color: #60a5fa;  font-size: var(--fs-base); }
   .empty {
-    color: #475569; font-style: italic; font-size: var(--fs-base);
+    color: #475569;  font-size: var(--fs-base);
     text-align: center; padding: 2rem 1rem;
   }
 
@@ -1413,7 +1419,7 @@
   .tp-narrative-text {
     color: #f1f5f9;
     font-size: var(--fs-lg);
-    line-height: 1.45;
+    line-height: 1.2;
     overflow-wrap: break-word;
     flex: 1;
   }
@@ -1453,7 +1459,7 @@
     letter-spacing: 0.06em; color: #6495e4;
   }
   .tp-closing-question {
-    font-size: var(--fs-lg); color: #bfdbfe; line-height: 1.4; overflow-wrap: break-word;
+    font-size: var(--fs-lg); color: #e2e8f0; line-height: 1.2; overflow-wrap: break-word;
   }
 
   /* Standard panel equivalents for new types */
@@ -1469,14 +1475,20 @@
   .e-closing-wrap     { display: flex; flex-direction: column; gap: 0.4rem; }
 
   /* Strategy collapsible rows (inside tp-tell and tell-text) */
+  .tp-strats-row {
+    display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: flex-start;
+    min-width: 0;
+  }
   .tp-strat-block {
+    display: inline-flex; flex-direction: column;
     border-radius: 0.3rem; border: 1px solid #0d2010;
-    overflow: hidden; background: #040b06; flex-shrink: 0;
+    overflow: hidden; background: #040b06;
+    min-width: 0;
   }
   .tp-strat-block.tp-strat-open { border-color: #1e4a2a; }
   .tp-strat-toggle {
     display: flex; align-items: center; gap: 0.4rem;
-    width: 100%; padding: 0.3rem 0.5rem;
+    padding: 0.3rem 0.5rem;
     background: none; border: none; cursor: pointer; text-align: left;
   }
   .tp-strat-toggle:hover { background: #071a0f; }
@@ -1495,7 +1507,7 @@
     padding: 0.45rem 0.6rem; border-top: 1px solid #0d2010;
   }
   .tp-strat-sent {
-    color: #f1f5f9; font-size: var(--fs-lg); line-height: 1.5; display: block;
+    color: #f1f5f9; font-size: var(--fs-lg); line-height: 1.2; display: block;
   }
 
   /* === Mode tabs (compound / primary / secondary) === */
@@ -1591,7 +1603,7 @@
   .tp-peek-line > :last-child {
     color: #64748b;
     font-size: var(--fs-sm);
-    line-height: 1.4;
+    line-height: 1.2;
   }
   .tp-peek-switch {
     align-self: flex-start;
@@ -1609,7 +1621,7 @@
   .tp-peek-loading {
     padding: 0.3rem 0.6rem;
     color: #334155;
-    font-style: italic;
+    
     font-size: var(--fs-xs);
     border-top: 1px solid #0f1e30;
   }
@@ -1656,8 +1668,8 @@
     flex: 1;
     font-size: var(--fs-xs);
     color: #64748b;
-    font-style: italic;
-    line-height: 1.4;
+    
+    line-height: 1.2;
     overflow-wrap: break-word;
     word-break: break-word;
   }
@@ -1676,11 +1688,11 @@
   }
   .practice-stop-btn:hover { background: #450a0a; }
 
-  .practice-unsupported { font-size: var(--fs-xs); color: #334155; font-style: italic; }
+  .practice-unsupported { font-size: var(--fs-xs); color: #334155;  }
   .practice-scoring {
     font-size: var(--fs-xs);
     color: #475569;
-    font-style: italic;
+    
   }
 
   .practice-result {
@@ -1739,6 +1751,6 @@
   .pr-coaching {
     font-size: var(--fs-xs);
     color: #94a3b8;
-    line-height: 1.45;
+    line-height: 1.2;
   }
 </style>

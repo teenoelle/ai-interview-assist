@@ -701,18 +701,44 @@ pub async fn predict_next_questions(
     }
 }
 
-pub async fn generate_salary_tactics(role_context: &str, cfg: &AiConfig<'_>) -> SalaryTactics {
+pub async fn extract_jd_location(job_description: &str, cfg: &AiConfig<'_>) -> String {
+    if job_description.trim().is_empty() { return String::new(); }
+    let prompt = format!(
+        "Extract the job location from this job description. Return ONLY the location as a city, region, or 'Remote' — nothing else. If no location is mentioned, return an empty string.\n\nExamples of valid output: 'San Francisco, CA' | 'London, UK' | 'Remote' | 'New York, NY (Hybrid)'\n\n---\n{}",
+        trunc(job_description, 1500)
+    );
+    match call_ai(cfg, &prompt, 30).await {
+        Ok(text) => {
+            let loc = text.trim().to_string();
+            if loc.len() > 80 { String::new() } else { loc }
+        }
+        Err(_) => String::new(),
+    }
+}
+
+pub async fn generate_salary_tactics(role_context: &str, location: &str, jd_snippet: &str, cfg: &AiConfig<'_>) -> SalaryTactics {
+    let location_line = if location.is_empty() {
+        String::new()
+    } else {
+        format!("LOCATION: {} — use local market rates and the salary period convention for this location (e.g. annual in the US/UK, monthly in Israel/parts of Europe). Express all ranges using the correct period and local currency symbol.\n", location)
+    };
+    let jd_line = if jd_snippet.is_empty() {
+        String::new()
+    } else {
+        format!("JOB DESCRIPTION EXCERPT:\n{}\n\n", trunc(jd_snippet, 600))
+    };
     let prompt = format!(
         "Generate tactful salary alignment language for a candidate interviewing for this role. \
 The tone must be collaborative and confident — never evasive, never demanding, never telling the interviewer how to do their job.\n\n\
+{}{}\
 Respond in EXACTLY this format:\n\
 EARLY: [For early rounds when it's too soon to anchor. Warm and genuine, no specific number. Express focus on finding the right fit and openness to learning more about the full package. 1-2 sentences. Do NOT ask the interviewer to reveal their budget.]\n\
-REVEAL: [For when they press for a number but the candidate hasn't anchored yet — invite the interviewer to share their range first, framed as wanting alignment not deflection. 1 sentence. Collaborative tone — candidate has already expressed genuine interest, now invites the other side to share so both can find common ground.]\n\
-DIRECT: [For when they still want a number after the reveal attempt. Three beats: (1) acknowledge warmly, (2) give a confident market-researched range using a placeholder like '$X–$Y', (3) briefly invite dialogue about the full package. 2-3 sentences.]\n\
-PACKAGE: [To naturally redirect toward total compensation — not a dodge, a genuine expression of how they think about comp holistically. Mentions base, equity, and benefits as a package. 1-2 sentences.]\n\
-COUNTER: [If the initial offer comes in below expectations. Restate the expected range calmly, name the gap as something to work through together, never as an ultimatum. 2 sentences.]\n\n\
+REVEAL: [For when they press for a number but the candidate hasn't anchored yet. The candidate expresses, in their own words, where they are in their thinking — self-referential, not asking the interviewer to do anything. 1 sentence.]\n\
+DIRECT: [For when they still want a number. Three beats: (1) acknowledge warmly, (2) give a confident market-researched range using the correct salary period and currency for the location above — e.g. '₪X–₪Y per month' for Israel, '$X–$Y per year' for the US — use a placeholder for the numbers, (3) briefly invite dialogue about the full package. 2-3 sentences.]\n\
+PACKAGE: [A genuine expression of how the candidate thinks about comp holistically — base, equity, benefits together. Phrased as 'the way I think about it...' — self-referential, not redirecting the interviewer. 1-2 sentences.]\n\
+COUNTER: [If the initial offer comes in below expectations. Name the gap calmly as something to work through together, never an ultimatum. 2 sentences.]\n\n\
 ROLE CONTEXT:\n{}",
-        trunc(&role_context, 800)
+        location_line, jd_line, trunc(role_context, 400)
     );
     let text = call_ai(cfg, &prompt, 350).await.unwrap_or_default();
     let mut t = SalaryTactics {

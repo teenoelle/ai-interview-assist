@@ -500,7 +500,31 @@
                   <span class="cue-badge cue-solve">{sl.solve}</span>
                   <span class="e-sec-chevron">{collapsedSecs['tp-solve'] ? '▸' : '▾'}</span>
                 </button>
-                {#if !collapsedSecs['tp-solve']}<span class="tp-solve-text">{parsed.solve}</span>{/if}
+                {#if !collapsedSecs['tp-solve']}
+                  {#if parsed.solveStrategies.length > 1 || parsed.solveStrategies[0]?.keyword}
+                    <div class="tp-strats-row">
+                      {#each parsed.solveStrategies as strategy, si}
+                        {@const stratKey = `solve-strat-${currentIndex}-${si}`}
+                        {@const isStratOpen = openCues[stratKey] !== false}
+                        <div class="tp-strat-block" class:tp-strat-open={isStratOpen} style={isStratOpen ? 'max-width:100%' : ''}>
+                          <button class="tp-strat-toggle" onclick={() => toggleStratOpen(stratKey)}>
+                            <span class="tp-strat-kw">{strategy.keyword || '·'}</span>
+                            <span class="tp-strat-chevron">{isStratOpen ? '▾' : '▸'}</span>
+                          </button>
+                          {#if isStratOpen}
+                            <div class="tp-strat-body">
+                              {#each strategy.text.split(/(?<=[.!?])\s+/).filter(Boolean) as s}
+                                <span class="tp-strat-sent">{s.trim()}</span>
+                              {/each}
+                            </div>
+                          {/if}
+                        </div>
+                      {/each}
+                    </div>
+                  {:else}
+                    <span class="tp-solve-text">{parsed.solve}</span>
+                  {/if}
+                {/if}
               </div>
             {/if}
             {#if parsed.bridge}
@@ -516,6 +540,7 @@
           <!-- ANSWER section (includes cue points) -->
           {@const _sayPi = bodyCues.some(c => c.label === 'Pivot' || c.typeTag === 'Pivot')}
           {@const _sayEx = bodyCues.some(c => c.label === 'Example' || c.typeTag === 'Example')}
+          {#if parsed.tell || parsed.strategies.length > 1 || parsed.strategies[0]?.keyword || bodyCues.length > 0 || tpStreaming}
           <div class="tp-sec tp-sec-say" class:tp-sec-say-example={_sayEx} class:tp-sec-say-pivot={_sayPi}>
             <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-say')}>
               <span class="cue-badge">{sl.answer}</span>
@@ -600,6 +625,7 @@
             {/if}
             {/if}<!-- end tp-say collapsed -->
           </div>
+          {/if}<!-- end Answer section guard -->
 
           <!-- CLOSE section (behavioral/competency) -->
           {#if parsed.close}
@@ -879,7 +905,32 @@
                     <span class="cue-badge cue-solve">{esl.solve}</span>
                     <span class="e-sec-chevron">{collapsedSecs[`${i}-solve`] ? '▸' : '▾'}</span>
                   </button>
-                  {#if !collapsedSecs[`${i}-solve`]}<span class="affirm-text">{parsed.solve}</span>{/if}
+                  {#if !collapsedSecs[`${i}-solve`]}
+                    {#if parsed.solveStrategies.length > 1 || parsed.solveStrategies[0]?.keyword}
+                      <div class="tp-strats-row">
+                        {#each parsed.solveStrategies as strategy, si}
+                          {@const stratKey = `solve-strat-entry-${i}-${si}`}
+                          {@const isStratOpen = !!openCues[stratKey]}
+                          <div class="tp-strat-block" class:tp-strat-open={isStratOpen}>
+                            <button class="tp-strat-toggle" onclick={() => toggleCueOpen(stratKey)}>
+                              {#if strategy.keyword}<span class="tp-strat-kw">{strategy.keyword}</span>{/if}
+                              <span class="tp-strat-preview">{strategy.text.split(/(?<=[.!?])\s+/)[0] ?? strategy.text}</span>
+                              <span class="tp-strat-chevron">{isStratOpen ? '▾' : '▸'}</span>
+                            </button>
+                            {#if isStratOpen}
+                              <div class="tp-strat-body">
+                                {#each strategy.text.split(/(?<=[.!?])\s+/).filter(Boolean) as s}
+                                  <span class="tp-strat-sent">{s.trim()}</span>
+                                {/each}
+                              </div>
+                            {/if}
+                          </div>
+                        {/each}
+                      </div>
+                    {:else}
+                      <span class="affirm-text">{parsed.solve}</span>
+                    {/if}
+                  {/if}
                 </div>
               {/if}
               <!-- BRIDGE -->
@@ -895,6 +946,7 @@
               <!-- ANSWER -->
               {@const _eSayPi = bodyCues.some(c => c.label === 'Pivot' || c.typeTag === 'Pivot')}
               {@const _eSayEx = bodyCues.some(c => c.label === 'Example' || c.typeTag === 'Example')}
+              {#if parsed.tell || parsed.strategies.length > 1 || parsed.strategies[0]?.keyword || bodyCues.length > 0 || eModeStreaming}
               <div class="e-sec e-sec-say" class:e-sec-say-example={_eSayEx} class:e-sec-say-pivot={_eSayPi}>
                 <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-say`)}>
                   <span class="cue-badge" class:cue-say={parsed.cue !== 'Ask'} class:cue-ask={parsed.cue === 'Ask'}>{esl.answer}</span>
@@ -976,6 +1028,7 @@
                 {/if}
                 {/if}
               </div>
+              {/if}<!-- end Answer section guard -->
               <!-- CLOSE -->
               {#if parsed.close}
                 <div class="e-sec e-sec-close">

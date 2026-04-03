@@ -10,6 +10,7 @@ export interface ParsedSuggestion {
   cues: string[];  // unused — kept for compat
   asks: { topic: string; question: string; followUp?: string }[];
   strategies: { keyword: string; text: string }[];
+  solveStrategies: { keyword: string; text: string }[];
   // Introduction (Career Story framework)
   present: string;   // Summary: aggregate career statement
   thread: string;    // Thread: connecting throughline
@@ -227,10 +228,25 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
     }
   }
 
+  // Parse strategies from solve when it contains [keyword] markers (e.g. values questions)
+  const solveStrategies: { keyword: string; text: string }[] = [];
+  if (solve && /\[[^\]]+\]/.test(solve)) {
+    const solveParts = solve.split(/(?=\[[^\]]+\])/);
+    for (const part of solveParts) {
+      const m = part.match(/^\[([^\]]+)\]\s*/);
+      if (m) {
+        solveStrategies.push({ keyword: m[1], text: part.slice(m[0].length).trim() });
+      } else if (part.trim()) {
+        solveStrategies.push({ keyword: '', text: part.trim() });
+      }
+    }
+  }
+
   const sc = streaming ? (s: string) => s : stripClicheWords;
   return {
     acknowledge: sc(acknowledge), solve: sc(solve), bridge: sc(bridge), close: sc(close),
     affirm: sc(affirm), cue, tell: sc(tell), body, cues: [], asks, strategies,
+    solveStrategies: solveStrategies.map(s => ({ keyword: sc(s.keyword), text: sc(s.text) })),
     present: sc(present), thread: sc(thread), past: sc(past), future: sc(future),
     company: sc(company), role: sc(role), self: sc(self),
     direction: sc(direction), alignment: sc(alignment), contribution: sc(contribution),

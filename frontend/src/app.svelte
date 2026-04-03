@@ -1491,8 +1491,10 @@
           break;
       }
     }
+    function onMouseDown() { showPresetMenu = false; showPresetSave = false; presetNameInput = ''; }
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onMouseDown);
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('mousedown', onMouseDown); };
   });
 
   function onFocusMoveDown(e: MouseEvent) {
@@ -1665,40 +1667,46 @@
             {/if}
           </div>
 
-          <button class="history-btn" title="Reset all panel positions and zoom" onclick={() => {
-            Object.values(SK).forEach(k => localStorage.removeItem(k));
-            location.reload();
-          }}>Reset Layout</button>
+          <div class="layout-menu-wrap">
+            <button class="history-btn" onclick={() => { showPresetMenu = !showPresetMenu; if (!showPresetMenu) { showPresetSave = false; presetNameInput = ''; } }}>
+              Layout ▾
+            </button>
+            {#if showPresetMenu}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div class="layout-dropdown" onmousedown={(e) => e.stopPropagation()}>
 
-          <div class="preset-wrap">
-            {#if showPresetSave}
-              <input
-                class="preset-name-input"
-                bind:value={presetNameInput}
-                placeholder="Preset name…"
-                onkeydown={(e) => { if (e.key === 'Enter') savePreset(); if (e.key === 'Escape') { showPresetSave = false; presetNameInput = ''; } }}
-                autofocus
-              />
-              <button class="preset-confirm-btn" onclick={savePreset}>Save</button>
-              <button class="preset-cancel-btn" onclick={() => { showPresetSave = false; presetNameInput = ''; }}>✕</button>
-            {:else}
-              <button class="history-btn" onclick={() => { showPresetSave = true; showPresetMenu = false; }}>Save Layout</button>
-            {/if}
-            {#if layoutPresets.length > 0}
-              <div class="preset-menu-wrap">
-                <button class="history-btn preset-load-btn" onclick={() => showPresetMenu = !showPresetMenu}>
-                  Presets ▾
-                </button>
-                {#if showPresetMenu}
-                  <div class="preset-dropdown">
-                    {#each layoutPresets as name}
-                      <div class="preset-row">
-                        <button class="preset-restore-btn" onclick={() => restorePreset(name)}>{name}</button>
-                        <button class="preset-delete-btn" title="Delete preset" onclick={() => removePreset(name)}>✕</button>
-                      </div>
-                    {/each}
+                {#if showPresetSave}
+                  <div class="layout-save-row">
+                    <input
+                      class="preset-name-input"
+                      bind:value={presetNameInput}
+                      placeholder="Preset name…"
+                      onkeydown={(e) => { if (e.key === 'Enter') savePreset(); if (e.key === 'Escape') { showPresetSave = false; presetNameInput = ''; } }}
+                      autofocus
+                    />
+                    <button class="preset-confirm-btn" onclick={savePreset}>Save</button>
+                    <button class="preset-cancel-btn" onclick={() => { showPresetSave = false; presetNameInput = ''; }}>✕</button>
                   </div>
+                {:else}
+                  <button class="layout-menu-item" onclick={() => { showPresetSave = true; }}>Save current layout as…</button>
                 {/if}
+
+                {#if layoutPresets.length > 0}
+                  <div class="layout-divider"></div>
+                  {#each layoutPresets as name}
+                    <div class="preset-row">
+                      <button class="preset-restore-btn" onclick={() => restorePreset(name)}>{name}</button>
+                      <button class="preset-delete-btn" title="Delete preset" onclick={() => removePreset(name)}>✕</button>
+                    </div>
+                  {/each}
+                {/if}
+
+                <div class="layout-divider"></div>
+                <button class="layout-menu-item layout-menu-item-danger" onclick={() => {
+                  Object.values(SK).forEach(k => localStorage.removeItem(k));
+                  location.reload();
+                }}>Reset to default</button>
+
               </div>
             {/if}
           </div>
@@ -2664,31 +2672,40 @@
   }
   .history-btn:hover { border-color: #60a5fa; color: #60a5fa; }
 
-  .preset-wrap { display: flex; align-items: center; gap: 0.3rem; position: relative; }
+  .layout-menu-wrap { position: relative; }
+  .layout-dropdown {
+    position: absolute; top: calc(100% + 4px); right: 0; z-index: 200;
+    background: #0d1117; border: 1px solid #334155; border-radius: 0.5rem;
+    min-width: 14rem; padding: 0.3rem;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .layout-menu-item {
+    display: block; width: 100%; text-align: left; padding: 0.4rem 0.65rem;
+    background: transparent; border: none; color: #cbd5e1; font-size: var(--fs-base);
+    cursor: pointer; border-radius: 0.3rem;
+  }
+  .layout-menu-item:hover { background: #1e293b; color: #60a5fa; }
+  .layout-menu-item-danger { color: #64748b; }
+  .layout-menu-item-danger:hover { background: #1a0a0a; color: #f87171; }
+  .layout-divider { height: 1px; background: #1e293b; margin: 0.3rem 0; }
+  .layout-save-row { display: flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.3rem; }
   .preset-name-input {
-    padding: 0.25rem 0.5rem; background: #0d1117; border: 1px solid #334155;
-    border-radius: 0.375rem; color: #e2e8f0; font-size: var(--fs-base); width: 10rem;
+    flex: 1; padding: 0.25rem 0.5rem; background: #0d1117; border: 1px solid #334155;
+    border-radius: 0.375rem; color: #e2e8f0; font-size: var(--fs-base); min-width: 0;
   }
   .preset-name-input:focus { outline: none; border-color: #60a5fa; }
   .preset-confirm-btn {
     padding: 0.25rem 0.6rem; background: #1e3a5f; border: 1px solid #60a5fa;
-    border-radius: 0.375rem; color: #60a5fa; font-size: var(--fs-base); cursor: pointer;
+    border-radius: 0.375rem; color: #60a5fa; font-size: var(--fs-base); cursor: pointer; white-space: nowrap;
   }
   .preset-cancel-btn {
     padding: 0.25rem 0.5rem; background: transparent; border: 1px solid #334155;
     border-radius: 0.375rem; color: #64748b; font-size: var(--fs-base); cursor: pointer;
   }
-  .preset-menu-wrap { position: relative; }
-  .preset-dropdown {
-    position: absolute; top: calc(100% + 4px); right: 0; z-index: 200;
-    background: #0d1117; border: 1px solid #334155; border-radius: 0.5rem;
-    min-width: 12rem; padding: 0.3rem;
-  }
   .preset-row { display: flex; align-items: center; gap: 0.25rem; }
   .preset-restore-btn {
     flex: 1; text-align: left; padding: 0.35rem 0.6rem; background: transparent;
-    border: none; color: #cbd5e1; font-size: var(--fs-base); cursor: pointer;
-    border-radius: 0.3rem;
+    border: none; color: #cbd5e1; font-size: var(--fs-base); cursor: pointer; border-radius: 0.3rem;
   }
   .preset-restore-btn:hover { background: #1e293b; color: #60a5fa; }
   .preset-delete-btn {

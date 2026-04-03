@@ -302,7 +302,35 @@
 
   function restorePreset(name: string) {
     showPresetMenu = false;
-    if (loadLayoutPreset(name)) location.reload();
+    if (!loadLayoutPreset(name)) return;
+    // Apply all layout state directly — no page reload, phase is preserved
+    const n = (key: string, fallback: number) => Number(localStorage.getItem(key) ?? fallback);
+    const j = <T>(key: string, fallback: T): T => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
+    leftW          = n(SK.colLeft, 240);
+    histW          = n(SK.colHist, 180);
+    centerW        = n(SK.colCenter, 320);
+    rightW         = n(SK.colRight, 220);
+    leftZoom       = n(SK.zoomLeft, 100);
+    histZoom       = n(SK.zoomHist, 100);
+    centerZoom     = n(SK.zoomCenter, 100);
+    rightTopZoom   = n(SK.zoomRightTop, 100);
+    rightBottomZoom= n(SK.zoomRightBottom, 100);
+    kwZoom         = n(SK.zoomKw, 100);
+    rightSplitPct  = n(SK.rightSplitPct, 42);
+    leftSplitPct   = n(SK.leftSplitPct, 55);
+    histSplitPct   = n(SK.histSplitPct, 60);
+    centerSplitPct = n(SK.centerSplitPct, 60);
+    kwBarH         = n(SK.kwBarH, 60);
+    interviewerVidH= n(SK.interviewerVidH, 0);
+    selfviewH      = n(SK.selfviewW, 120);
+    colOrder       = j(SK.colOrder, ['left','hist','center','right','right2']);
+    rightPanelOrder= j(SK.rightPanelOrder, ['sentiment','coaching']);
+    sectionLayout  = loadSectionLayout(DEFAULT_SECTION_LAYOUT);
+    collapsedSections = new Set(j(SK.collapsedSections, []));
+    collapsedPanels   = new Set(j(SK.collapsedPanels, []));
+    collapsedCols     = new Set(j(SK.collapsedCols, []));
+    const cr = j<{x:number;y:number;w:number;h:number}|null>(SK.cropRect, null);
+    cropRect = cr;
   }
 
   function removePreset(name: string) {

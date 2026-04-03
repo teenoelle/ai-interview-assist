@@ -716,36 +716,81 @@ pub async fn extract_jd_location(job_description: &str, cfg: &AiConfig<'_>) -> S
     }
 }
 
-pub async fn generate_salary_tactics(role_context: &str, location: &str, jd_snippet: &str, cfg: &AiConfig<'_>) -> SalaryTactics {
+pub async fn generate_salary_tactics(role_context: &str, location: &str, jd_snippet: &str, candidate_context: &str, company_info: &str, cfg: &AiConfig<'_>) -> SalaryTactics {
+    // Determine salary period from location heuristic so the LLM gets an explicit instruction,
+    // not a vague example that small models misapply.
+    let (period_label, period_instruction) = if location.is_empty() {
+        ("per year", "Express the range as an annual figure.")
+    } else {
+        let loc = location.to_lowercase();
+        let monthly_markets = ["israel", "netherlands", "germany", "france", "spain", "italy",
+            "portugal", "belgium", "switzerland", "austria", "poland", "czech", "hungary",
+            "romania", "bulgaria", "croatia", "slovakia", "sweden", "norway", "denmark",
+            "finland", "japan", "korea", "china", "brazil", "argentina", "mexico",
+            "middle east", "dubai", "uae", "qatar", "saudi"];
+        if monthly_markets.iter().any(|m| loc.contains(m)) {
+            ("per month", "CRITICAL: This location uses MONTHLY salaries. Output a MONTHLY figure (e.g. ₪22,000–₪26,000 per month). Do NOT output an annual figure.")
+        } else {
+            ("per year", "CRITICAL: This location uses ANNUAL salaries. Output an ANNUAL figure (e.g. £45,000–£55,000 per year). Do NOT output a monthly figure.")
+        }
+    };
     let location_line = if location.is_empty() {
-        String::new()
+        format!("SALARY PERIOD: Annual. {}\n", period_instruction)
     } else {
-        format!("LOCATION: {} — use local market rates and the salary period convention for this location (e.g. annual in the US/UK, monthly in Israel/parts of Europe). Express all ranges using the correct period and local currency symbol.\n", location)
+        format!("LOCATION: {}. Local currency and market rates apply. SALARY PERIOD: {}. {}\n",
+            location, period_label, period_instruction)
     };
-    let jd_line = if jd_snippet.is_empty() {
-        String::new()
-    } else {
-        format!("JOB DESCRIPTION EXCERPT:\n{}\n\n", trunc(jd_snippet, 600))
-    };
-    let prompt = format!(
-        "Generate tactful salary alignment language for a candidate interviewing for this role. \
-The tone must be collaborative and confident — never evasive, never demanding, never telling the interviewer how to do their job.\n\n\
-{}{}\
-Respond in EXACTLY this format:\n\
-EARLY: [For early rounds when it's too soon to anchor. Warm and genuine, no specific number. Express focus on finding the right fit and openness to learning more about the full package. 1-2 sentences. Do NOT ask the interviewer to reveal their budget.]\n\
-REVEAL: [For when they press for a number but the candidate hasn't anchored yet. The candidate expresses, in their own words, where they are in their thinking — self-referential, not asking the interviewer to do anything. 1 sentence.]\n\
-DIRECT: [For when they still want a number. Three beats: (1) acknowledge warmly, (2) give a confident market-researched range using the correct salary period and currency for the location above — e.g. '₪X–₪Y per month' for Israel, '$X–$Y per year' for the US — use a placeholder for the numbers, (3) briefly invite dialogue about the full package. 2-3 sentences.]\n\
-PACKAGE: [A genuine expression of how the candidate thinks about comp holistically — base, equity, benefits together. Phrased as 'the way I think about it...' — self-referential, not redirecting the interviewer. 1-2 sentences.]\n\
-COUNTER: [If the initial offer comes in below expectations. Name the gap calmly as something to work through together, never an ultimatum. 2 sentences.]\n\n\
-ROLE CONTEXT:\n{}",
-        location_line, jd_line, trunc(role_context, 400)
+
+    // Quick call: conversational tactics only (no number needed — small context, fast)
+    let quick_prompt = format!(
+        "Generate tactful salary negotiation language. Tone: collaborative and confident, never evasive.\n\
+{}\
+ROLE: {}\n\n\
+Respond in EXACTLY this format (one line each):\n\
+EARLY: [Early rounds — too soon to anchor. Warm, no number. Focus on fit and openness to learning about the full package. 1-2 sentences.]\n\
+REVEAL: [They press for a number. Flip the ask — politely invite the interviewer to share their budgeted range first. Warm, not a refusal. 1-2 sentences.]\n\
+PACKAGE: [How the candidate thinks about comp holistically — base, equity, benefits. Phrased as 'the way I think about it...'. 1-2 sentences.]\n\
+COUNTER: [Offer came in below expectations. Name the gap calmly as something to work through together, never an ultimatum. 2 sentences.]",
+        location_line, trunc(role_context, 200)
     );
-    let text = call_ai(cfg, &prompt, 350).await.unwrap_or_default();
+
+    // Direct Ask call: needs calibrated range — full context
+    let jd_line = if jd_snippet.is_empty() { String::new() } else {
+        format!("JOB DESCRIPTION:\n{}\n\n", trunc(jd_snippet, 1500))
+    };
+    let candidate_line = if candidate_context.is_empty() { String::new() } else {
+        format!("CANDIDATE BACKGROUND (use to calibrate seniority and range — do not anchor above the candidate's actual level):\n{}\n\n", trunc(candidate_context, 2000))
+    };
+    let company_line = if company_info.is_empty() { String::new() } else {
+        format!("COMPANY INFO (infer stage and pay band — startup/scale-up/enterprise):\n{}\n\n", trunc(company_info, 800))
+    };
+    let direct_prompt = format!(
+        "Generate one salary negotiation line for when the interviewer insists on a number.\n\
+Tone: confident and collaborative.\n\n\
+CALIBRATION:\n\
+- Use the candidate's ACTUAL experience level from the CV — do not anchor to the role ceiling.\n\
+- Infer company stage (startup / scale-up / enterprise) from JD + company info and adjust range.\n\
+- If the JD lists a salary range or band, use that as the anchor.\n\
+- Output a REAL estimated range with actual numbers — no placeholders like X, Y, or [X]. Use correct currency and period for the location (e.g. £45,000–£55,000 per year; ₪22,000–₪26,000 per month).\n\n\
+{}{}{}{}\
+Output ONLY this single line, nothing before or after it:\n\
+DIRECT: [Warm acknowledgement. Then: 'Based on my research and the scope of this role, I'd expect something around [REAL RANGE].' Then invite dialogue on the full package. 2-3 sentences total.]",
+        location_line, jd_line, candidate_line, company_line
+    );
+
+    // Run both calls in parallel using the fast path (8b-instant on Groq, Ollama last not second)
+    let (quick_text, direct_text) = tokio::join!(
+        call_ai_fast(cfg, "You are a salary negotiation coach. Output only the exact labeled lines requested, no preamble.", &quick_prompt),
+        call_ai_fast(cfg, "You are a salary range estimator. Output only the single DIRECT: line requested, no preamble.", &direct_prompt),
+    );
+    let quick_text = quick_text.unwrap_or_default();
+    let direct_text = direct_text.unwrap_or_default();
+
     let mut t = SalaryTactics {
         early_round: String::new(), reveal: String::new(),
         direct_ask: String::new(), total_package: String::new(), counter: String::new(),
     };
-    for line in text.lines() {
+    for line in quick_text.lines().chain(direct_text.lines()) {
         if let Some(v) = line.strip_prefix("EARLY:")        { t.early_round   = v.trim().to_string(); }
         else if let Some(v) = line.strip_prefix("REVEAL:")  { t.reveal        = v.trim().to_string(); }
         else if let Some(v) = line.strip_prefix("DIRECT:")  { t.direct_ask    = v.trim().to_string(); }
@@ -753,9 +798,9 @@ ROLE CONTEXT:\n{}",
         else if let Some(v) = line.strip_prefix("COUNTER:") { t.counter       = v.trim().to_string(); }
     }
     if t.early_round.is_empty()   { t.early_round   = "I'm focused on finding the right fit — I'm open to learning more about the full package as things progress.".to_string(); }
-    if t.reveal.is_empty()        { t.reveal        = "I've shared where I'm anchored in my thinking — I'd love to understand the range you have in mind so we can make sure we're aligned.".to_string(); }
-    if t.direct_ask.is_empty()    { t.direct_ask    = "I've researched the market and based on the scope of the role, I'd expect something in the range of $X–$Y. I'm also thinking about the full picture, so I'd love to understand the complete package.".to_string(); }
-    if t.total_package.is_empty() { t.total_package = "I think about compensation holistically — base, equity, and benefits together. I'd welcome understanding the full package before landing on a specific number.".to_string(); }
+    if t.reveal.is_empty()        { t.reveal        = "Before I give you a number, could you share the range you have budgeted for this role? That way we can make sure we're starting from the same place.".to_string(); }
+    if t.direct_ask.is_empty()    { t.direct_ask    = "I've researched the market for this kind of role and have a figure in mind based on the scope and my experience — I'd love to share that once I understand the full package, including bonus and equity.".to_string(); }
+    if t.total_package.is_empty() { t.total_package = "The way I think about it, compensation is the whole package — base, equity, and benefits together. I'd love to understand the full offer before focusing on any single number.".to_string(); }
     if t.counter.is_empty()       { t.counter       = "I appreciate the offer — it's a bit below the range I'd anticipated based on the scope and market. I'd love to find a way to bridge that gap together.".to_string(); }
     t
 }

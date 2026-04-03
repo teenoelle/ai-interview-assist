@@ -101,12 +101,12 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Config::from_env()?;
 
-    // Optionally start the local Whisper / Ollama process, then wait until ready
+    // Optionally start the local Whisper / Ollama process (non-blocking — server binds immediately)
     if let Some(ref cmd) = config.whisper_spawn_cmd {
         spawn_detached(cmd, &config.whisper_spawn_args);
     }
-    if let Some(ref url) = config.whisper_url {
-        wait_for_whisper(url).await;
+    if let Some(url) = config.whisper_url.clone() {
+        tokio::spawn(async move { wait_for_whisper(&url).await });
     }
 
     let (audio_tx, audio_rx) = mpsc::channel::<Vec<u8>>(256);

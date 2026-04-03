@@ -23,7 +23,7 @@
   import { analyzeAudioTone, type AudioFeatures } from './lib/audioTone';
   import { splitMultiQuestions, fmtTime, fmtAgo } from './lib/utils';
   import { computeConfidence } from './lib/confidence';
-  import { SK, loadSectionLayout } from './lib/storageKeys';
+  import { SK, loadSectionLayout, saveLayoutPreset, loadLayoutPreset, deleteLayoutPreset, listLayoutPresets } from './lib/storageKeys';
   import { applyDrop, moveToPanel } from './lib/dragLayout';
   import { EventWebSocket } from './lib/websocket';
   import { countFillers, totalFillers } from './lib/filler';
@@ -166,8 +166,7 @@
   let capturePaused = $state(false);
 
   // Async capture-before-transition state
-  let transitioning = $state(false);
-  let captureError = $state('');
+
 
   // Rolling exponential moving average of system audio energy (RMS)
   let sysEnergyEma = $state(0);
@@ -286,6 +285,31 @@
   let leftColBodyEl = $state<HTMLElement | undefined>();
   let kwBarH = $state(Number(localStorage.getItem(SK.kwBarH) ?? 60));
 
+  // Layout presets
+  let layoutPresets = $state<string[]>(listLayoutPresets());
+  let presetNameInput = $state('');
+  let showPresetSave = $state(false);
+  let showPresetMenu = $state(false);
+
+  function savePreset() {
+    const name = presetNameInput.trim();
+    if (!name) return;
+    saveLayoutPreset(name);
+    layoutPresets = listLayoutPresets();
+    presetNameInput = '';
+    showPresetSave = false;
+  }
+
+  function restorePreset(name: string) {
+    showPresetMenu = false;
+    if (loadLayoutPreset(name)) location.reload();
+  }
+
+  function removePreset(name: string) {
+    deleteLayoutPreset(name);
+    layoutPresets = listLayoutPresets();
+  }
+
   // Collapse state (persisted)
   let modelUsageExpanded = $state(localStorage.getItem('model-usage-expanded') !== 'false');
   let collapsedSections = $state<Set<string>>(new Set(JSON.parse(localStorage.getItem(SK.collapsedSections) ?? '[]')));
@@ -396,6 +420,8 @@
 
   // Jump signal for SuggestionPanel cross-navigation from QuestionsHistoryPanel
   let jumpSignal = $state<{ idx: number; key: number } | null>(null);
+  // Arrow-key navigation signal for both teleprompter and focus panels
+  let suggestionNavSignal = $state<{ dir: 'prev' | 'next' | 'latest'; key: number } | null>(null);
 
   // New question notification
   let suggestionPinned = $state(true);
@@ -949,6 +975,8 @@
   let loadingCompanyBrief = $state(false);
 
   async function fetchBackgroundSetup() {
+    // Pre-warm salary tactics so they're ready before the question comes up
+    void fetchSalaryCoach();
     // Auto-fetch JD keywords for live transcript highlighting; company brief loads on demand
     try {
       const resp = await fetch('/api/enrich', { method: 'POST' });
@@ -1055,30 +1083,7 @@
     loadingPredict = false;
   }
 
-  async function startCaptureAndTransition() {
-    if (transitioning) return;
-    transitioning = true;
-    captureError = '';
-    const cap = new MediaCapture();
-    cap.onLevel((mic, sys) => { captureMicLevel = mic; captureSystemLevel = sys; updateSysEnergy(sys); });
-    cap.onStreamsReady((screen, webcam) => { screenStream = screen; webcamStream = webcam; });
-    cap.onRecording(url => { recordingUrl = url; });
-    try {
-      await cap.start();
-      captureInst = cap;
-      capturing = true;
-      ttsEnabled = true;
-      ttsClient.getAudioOutputs().then(o => { ttsOutputDevices = o; });
-      if (!cap.hasSystemAudio) captureError = 'No system audio captured — interviewer audio won\'t be transcribed. Stop, reshare your screen, and tick "Share system audio".';
-    } catch (e: unknown) {
-      const msg = String(e);
-      captureError = msg.includes('Permission denied') || msg.includes('NotAllowedError')
-        ? 'Screen share permission denied. Select Entire Screen and check "Share system audio".'
-        : msg.includes('NotFoundError') ? 'No screen or microphone found. Check your devices and try again.' : msg;
-      transitioning = false;
-      return;
-    }
-    transitioning = false;
+  function transitionToInterview() {
     // Build stubs immediately from localStorage (no API calls) so names show right away
     interviewerSummaries = buildInterviewerStubs();
     loadingProfileIndices = [];
@@ -1091,7 +1096,7 @@
   }
 
   function handleSetupComplete() {
-    void startCaptureAndTransition();
+    transitionToInterview();
   }
 
   function connectWs() {
@@ -1472,6 +1477,18 @@
         case '1': cueExpandSignal = { cueIdx: 0, key: Date.now() }; break;
         case '2': cueExpandSignal = { cueIdx: 1, key: Date.now() }; break;
         case '3': cueExpandSignal = { cueIdx: 2, key: Date.now() }; break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          suggestionNavSignal = { dir: 'prev', key: Date.now() };
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          suggestionNavSignal = { dir: 'next', key: Date.now() };
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          suggestionNavSignal = { dir: 'latest', key: Date.now() };
+          break;
       }
     }
     window.addEventListener('keydown', onKey);
@@ -1536,15 +1553,7 @@
         </div>
       </header>
       <SetupForm onSetupComplete={handleSetupComplete} />
-      {#if transitioning}
-        <div class="setup-transitioning">
-          <span class="setup-spinner"></span>
-          Waiting for screen share permissions…
-        </div>
-      {/if}
-      {#if captureError}
-        <div class="setup-capture-error">{captureError} <button onclick={() => captureError = ''}>✕</button></div>
-      {/if}
+
       <div class="setup-review-row">
         <button class="setup-review-btn" onclick={() => showPastInterviews = true}>
           Reports
@@ -1565,7 +1574,7 @@
   {:else if phase === 'practice'}
     <PracticePanel
       questions={predictedQuestions}
-      onStartInterview={() => { void startCaptureAndTransition(); }}
+      onStartInterview={() => { transitionToInterview(); }}
       onBackToSetup={() => { phase = 'setup'; }}
       onAnswer={(a) => { practiceAnswers = [...practiceAnswers, a]; }}
     />
@@ -1660,6 +1669,39 @@
             Object.values(SK).forEach(k => localStorage.removeItem(k));
             location.reload();
           }}>Reset Layout</button>
+
+          <div class="preset-wrap">
+            {#if showPresetSave}
+              <input
+                class="preset-name-input"
+                bind:value={presetNameInput}
+                placeholder="Preset name…"
+                onkeydown={(e) => { if (e.key === 'Enter') savePreset(); if (e.key === 'Escape') { showPresetSave = false; presetNameInput = ''; } }}
+                autofocus
+              />
+              <button class="preset-confirm-btn" onclick={savePreset}>Save</button>
+              <button class="preset-cancel-btn" onclick={() => { showPresetSave = false; presetNameInput = ''; }}>✕</button>
+            {:else}
+              <button class="history-btn" onclick={() => { showPresetSave = true; showPresetMenu = false; }}>Save Layout</button>
+            {/if}
+            {#if layoutPresets.length > 0}
+              <div class="preset-menu-wrap">
+                <button class="history-btn preset-load-btn" onclick={() => showPresetMenu = !showPresetMenu}>
+                  Presets ▾
+                </button>
+                {#if showPresetMenu}
+                  <div class="preset-dropdown">
+                    {#each layoutPresets as name}
+                      <div class="preset-row">
+                        <button class="preset-restore-btn" onclick={() => restorePreset(name)}>{name}</button>
+                        <button class="preset-delete-btn" title="Delete preset" onclick={() => removePreset(name)}>✕</button>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          </div>
           <button class="end-main-btn"
             onclick={() => {
               reviewInitialTab = 'ai-review'; reviewIsLive = true; showReviewPanel = true;
@@ -1851,7 +1893,7 @@
               {#if !collapsedCols.has('center')}
                 <div class="col-body col-split-body" bind:this={centerColBodyEl}>
                   <div class="col-body-scroll" style="zoom: {centerZoom/100}; padding: 0.25rem 0.5rem 0.5rem; {fontCenter ? `font-family: ${panelFontStack(fontCenter)};` : ''}">
-                    <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} {jumpSignal} {cueExpandSignal} onPinnedChange={(p) => (suggestionPinned = p)} {salaryTactics} />
+                    <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} lockOnNew={true} {jumpSignal} navSignal={suggestionNavSignal} {cueExpandSignal} onPinnedChange={(p) => (suggestionPinned = p)} {salaryTactics} />
                   </div>
                 </div>
               {/if}
@@ -2330,52 +2372,8 @@
               <button class="focus-fs-btn" onclick={() => focusFsAdj(+10)}>+</button>
             </div>
           </div>
-          <div style="zoom:{focusCardFs/100}">
-          {#if latestSuggestion}
-            {@const fp = parseSuggestion(latestSuggestion.suggestion ?? '')}
-            {@const fcues = parseCues(fp.body)}
-            <div class="focus-question">"{latestSuggestion.question}"</div>
-            {#if latestSuggestion.suggestion}
-              {#if fp.acknowledge}
-                <div class="focus-section">
-                  <span class="focus-badge focus-badge-ack">Acknowledge</span>
-                  <span class="focus-ack">{fp.acknowledge}</span>
-                </div>
-              {/if}
-              {#if fp.tell}
-                <div class="focus-section">
-                  <span class="focus-badge">Answer</span>
-                  <span class="focus-tell">{@html renderBold(fp.tell)}</span>
-                  {#if latestSuggestion.streaming && !fp.body}<span class="focus-cursor">|</span>{/if}
-                </div>
-              {/if}
-              {#if fcues.length > 0}
-                <div class="focus-cues">
-                  {#each fcues as cue}
-                    <div class="focus-cue">
-                      <span class="focus-cue-label">{cue.typeTag || (cue.label === 'General' ? 'Point' : cue.label)}</span>
-                      <span class="focus-cue-text">{@html renderBold(cue.text)}</span>
-                    </div>
-                  {/each}
-                  {#if latestSuggestion.streaming}<span class="focus-cursor">|</span>{/if}
-                </div>
-              {/if}
-              {#if fp.asks.length > 0}
-                <div class="focus-section">
-                  <span class="focus-badge focus-badge-ask">Ask</span>
-                  <div class="focus-asks">
-                    {#each fp.asks as ask}
-                      <span class="focus-ask-item">{ask.question}</span>
-                    {/each}
-                  </div>
-                </div>
-              {/if}
-            {:else if latestSuggestion.streaming}
-              <span class="focus-loading">Generating...</span>
-            {/if}
-          {:else}
-            <div class="focus-empty">Waiting for a question...</div>
-          {/if}
+          <div class="focus-panel-wrap" style="zoom:{focusCardFs/100}">
+            <SuggestionPanel {suggestions} onClear={() => {}} teleprompter={true} lockOnNew={true} navSignal={suggestionNavSignal} {salaryTactics} />
           </div>
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="focus-resize-handle" onmousedown={onFocusResizeDown}></div>
@@ -2665,6 +2663,39 @@
     color: #64748b; font-size: var(--fs-base); cursor: pointer; white-space: nowrap;
   }
   .history-btn:hover { border-color: #60a5fa; color: #60a5fa; }
+
+  .preset-wrap { display: flex; align-items: center; gap: 0.3rem; position: relative; }
+  .preset-name-input {
+    padding: 0.25rem 0.5rem; background: #0d1117; border: 1px solid #334155;
+    border-radius: 0.375rem; color: #e2e8f0; font-size: var(--fs-base); width: 10rem;
+  }
+  .preset-name-input:focus { outline: none; border-color: #60a5fa; }
+  .preset-confirm-btn {
+    padding: 0.25rem 0.6rem; background: #1e3a5f; border: 1px solid #60a5fa;
+    border-radius: 0.375rem; color: #60a5fa; font-size: var(--fs-base); cursor: pointer;
+  }
+  .preset-cancel-btn {
+    padding: 0.25rem 0.5rem; background: transparent; border: 1px solid #334155;
+    border-radius: 0.375rem; color: #64748b; font-size: var(--fs-base); cursor: pointer;
+  }
+  .preset-menu-wrap { position: relative; }
+  .preset-dropdown {
+    position: absolute; top: calc(100% + 4px); right: 0; z-index: 200;
+    background: #0d1117; border: 1px solid #334155; border-radius: 0.5rem;
+    min-width: 12rem; padding: 0.3rem;
+  }
+  .preset-row { display: flex; align-items: center; gap: 0.25rem; }
+  .preset-restore-btn {
+    flex: 1; text-align: left; padding: 0.35rem 0.6rem; background: transparent;
+    border: none; color: #cbd5e1; font-size: var(--fs-base); cursor: pointer;
+    border-radius: 0.3rem;
+  }
+  .preset-restore-btn:hover { background: #1e293b; color: #60a5fa; }
+  .preset-delete-btn {
+    padding: 0.2rem 0.4rem; background: transparent; border: none;
+    color: #475569; font-size: 0.75rem; cursor: pointer; border-radius: 0.3rem;
+  }
+  .preset-delete-btn:hover { color: #f87171; }
 
   .end-main-btn {
     padding: 0.3rem 0.8rem; background: transparent;
@@ -3564,12 +3595,12 @@
   .focus-crop-shell { width: 100%; }
   .focus-card {
     background: #07101e; position: relative;
-    border: 1px solid #1e3a5f; border-radius: 1rem; padding: 0 2rem 1.75rem;
+    border: 1px solid #1e3a5f; border-radius: 1rem; padding: 0 0 0.5rem;
     cursor: default; box-shadow: 0 0 60px rgba(59,130,246,0.08);
     display: flex; flex-direction: column; gap: 0; max-width: 95vw;
-    flex-shrink: 0;
+    flex-shrink: 0; overflow: hidden;
   }
-  .focus-card > div[style*="zoom"] { display: flex; flex-direction: column; gap: 1rem; padding-top: 0.75rem; }
+  .focus-panel-wrap { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow-y: auto; }
   .focus-drag-bar {
     display: flex; align-items: center; justify-content: space-between;
     padding: 0.4rem 0; margin: 0 -2rem; padding: 0.4rem 0.75rem;
@@ -3592,35 +3623,6 @@
     cursor: ew-resize; border-radius: 0 0.5rem 0.5rem 0; z-index: 1;
   }
   .focus-resize-handle:hover, .focus-resize-handle:active { background: rgba(59,130,246,0.25); }
-  .focus-question {
-    color: #60a5fa; font-style: italic; font-size: 0.95rem; line-height: 1.5;
-    padding-bottom: 1rem; border-bottom: 1px solid #1e293b;
-  }
-  .focus-section { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
-  .focus-badge {
-    font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
-    padding: 0.15rem 0.5rem; border-radius: 0.25rem; flex-shrink: 0;
-    background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid #1e293b;
-  }
-  .focus-badge-ack { background: rgba(59,130,246,0.12); color: #60a5fa; border-color: rgba(59,130,246,0.25); }
-  .focus-badge-ask { background: rgba(167,139,250,0.12); color: #a78bfa; border-color: rgba(167,139,250,0.25); }
-  .focus-ack { color: #93c5fd; font-size: var(--fs-lg); line-height: 1.7; }
-  .focus-tell { color: #e2e8f0; font-size: var(--fs-lg); line-height: 1.7; }
-  :global(.focus-tell strong) { color: #fff; font-size: 1.2rem; font-weight: 800; }
-  .focus-cues { display: flex; flex-direction: column; gap: 0.55rem; margin-top: 0.2rem; }
-  .focus-cue { display: flex; align-items: baseline; gap: 0.55rem; }
-  .focus-cue-label {
-    font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
-    color: #475569; flex-shrink: 0; padding-top: 0.15rem;
-  }
-  .focus-cue-text { color: #cbd5e1; font-size: 1rem; line-height: 1.6; }
-  :global(.focus-cue-text strong) { color: #fff; font-size: 1.15rem; font-weight: 800; }
-  .focus-asks { display: flex; flex-direction: column; gap: 0.3rem; }
-  .focus-ask-item { color: #c4b5fd; font-size: 0.95rem; line-height: 1.5; }
-  .focus-cursor { animation: blink 1s step-end infinite; color: #60a5fa; }
-  @keyframes blink { 50% { opacity: 0; } }
-  .focus-loading { color: #60a5fa; font-style: italic; }
-  .focus-empty { color: #334155; font-style: italic; font-size: 1rem; text-align: center; padding: 3rem 0; }
   .focus-hint { margin-top: 0.75rem; font-size: var(--fs-sm); color: #1e293b; }
 
 

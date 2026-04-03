@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { SuggestionEntry, VocalSentiment } from '../lib/types';
+  import { untrack } from 'svelte';
   import { TAG_CONFIG } from '../lib/questionTagger';
   import { parseSuggestion, parseCues, getAnswerType, getSectionLabels } from '../lib/parseSuggestion';
   import PanelHeader from './PanelHeader.svelte';
@@ -36,11 +37,13 @@
     } catch { expandedCues = { ...expandedCues, [cue]: { sentence: cue, loading: false } }; }
   }
 
-  const { suggestions, onClear, teleprompter = false, jumpSignal = null, cueExpandSignal = null, onPinnedChange, salaryTactics = null } = $props<{
+  const { suggestions, onClear, teleprompter = false, lockOnNew = false, jumpSignal = null, navSignal = null, cueExpandSignal = null, onPinnedChange, salaryTactics = null } = $props<{
     suggestions: SuggestionEntry[];
     onClear: () => void;
     teleprompter?: boolean;
+    lockOnNew?: boolean;
     jumpSignal?: { idx: number; key: number } | null;
+    navSignal?: { dir: 'prev' | 'next' | 'latest'; key: number } | null;
     cueExpandSignal?: { cueIdx: number; key: number } | null;
     onPinnedChange?: (pinned: boolean) => void;
     salaryTactics?: { early_round: string; reveal: string; direct_ask: string; total_package: string; counter: string } | null;
@@ -154,6 +157,41 @@
     historyIndex = -1;
     lastSeenCount = totalCount;
   }
+
+  function navPrev() {
+    const idx = currentIndex;
+    if (idx > 0) jumpTo(idx - 1);
+  }
+
+  function navNext() {
+    const idx = currentIndex;
+    if (idx < totalCount - 1) jumpTo(idx + 1);
+  }
+
+  // When lockOnNew=true, freeze on the current question when a new one arrives.
+  // The user must press Down (navLatest) to advance to the new question.
+  let lockCount = $state(0);
+  $effect(() => {
+    const count = suggestions.length;
+    if (lockOnNew) {
+      untrack(() => {
+        if (historyIndex === -1 && count > lockCount && lockCount > 0) {
+          historyIndex = lockCount - 1;
+        }
+        lockCount = count;
+      });
+    }
+  });
+
+  // React to parent-driven navigation signals (arrow keys from app.svelte)
+  $effect(() => {
+    if (!navSignal) return;
+    untrack(() => {
+      if (navSignal.dir === 'prev') navPrev();
+      else if (navSignal.dir === 'next') navNext();
+      else jumpToLatest();
+    });
+  });
 
   function toggleExpand(i: number) {
     expanded = expanded.map((v, j) => j === i ? !v : v);
@@ -566,7 +604,7 @@
           <!-- CLOSE section (behavioral/competency) -->
           {#if parsed.close}
             <div class="tp-sec tp-sec-close">
-              <span class="cue-badge cue-close">Close</span>
+              <span class="cue-badge cue-close">{sl.close}</span>
               <span class="tp-close-text">{parsed.close}</span>
             </div>
           {/if}
@@ -941,7 +979,7 @@
               <!-- CLOSE -->
               {#if parsed.close}
                 <div class="e-sec e-sec-close">
-                  <span class="cue-badge cue-close">Close</span>
+                  <span class="cue-badge cue-close">{esl.close}</span>
                   <span class="affirm-text">{parsed.close}</span>
                 </div>
               {/if}

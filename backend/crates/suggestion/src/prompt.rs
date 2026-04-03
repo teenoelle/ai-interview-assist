@@ -176,12 +176,13 @@ const TECHNICAL_TRIGGERS: &[&str] = &[
     "how do you approach system design",
 ];
 
+// Culture = "How do you work?" — behavioural, outward-facing working style questions.
+// Expects a STAR story proving the style claim. NOT for preference/requirement questions.
 const CULTURE_TRIGGERS: &[&str] = &[
     "how do you collaborate",
     "how do you work with cross-functional",
     "describe your working style",
     "how do you handle conflict",
-    "what kind of work environment",
     "how do you approach feedback",
     "how do you give feedback",
     "how do you communicate with",
@@ -193,10 +194,32 @@ const CULTURE_TRIGGERS: &[&str] = &[
     "how do you handle a difficult coworker",
     "how do you handle a difficult team member",
     "how do you handle working with someone you disagree with",
-    "what is your management style",
     "how do you motivate",
     "how do you onboard",
     "how do you give and receive feedback",
+];
+
+const VALUES_TRIGGERS: &[&str] = &[
+    "what do you look for in a company",
+    "what do you look for in a manager",
+    "what do you look for in a team",
+    "what do you look for in a role",
+    "what are you looking for in",
+    "what matters most to you in",
+    "what is important to you in",
+    "what do you need from a manager",
+    "what do you need from a company",
+    "what do you value in a workplace",
+    "what do you value in a manager",
+    "what kind of manager do you work best with",
+    "what kind of leadership style",
+    "what kind of environment do you thrive in",
+    "what does your ideal",
+    "what would your ideal company",
+    "what would your ideal manager",
+    "what would your ideal role",
+    "what are you looking for in your next",
+    "what are you looking for in a new",
 ];
 
 const SITUATIONAL_TRIGGERS: &[&str] = &[
@@ -260,6 +283,7 @@ pub enum QuestionType {
     Technical,
     Culture,
     Character,
+    Values,
     Competency,
 }
 
@@ -282,6 +306,7 @@ pub fn classify_question(question: &str) -> (QuestionType, Option<QuestionType>)
         (score_triggers(TECHNICAL_TRIGGERS,    &q), QuestionType::Technical),
         (score_triggers(CULTURE_TRIGGERS,      &q), QuestionType::Culture),
         (score_triggers(CHARACTER_TRIGGERS,    &q), QuestionType::Character),
+        (score_triggers(VALUES_TRIGGERS,       &q), QuestionType::Values),
     ];
 
     let max_score = candidates.iter().map(|(s, _)| *s).max().unwrap_or(0);
@@ -324,6 +349,7 @@ fn question_type_topic(qt: QuestionType) -> &'static str {
         QuestionType::Technical    => "your technical approach and design thinking",
         QuestionType::Culture      => "how you collaborate and work with others",
         QuestionType::Character    => "your personal qualities and how others perceive you",
+        QuestionType::Values       => "what you look for in a company, manager, or role",
         QuestionType::Competency   => "your professional approach and methodology",
     }
 }
@@ -342,6 +368,7 @@ pub fn question_type_to_tag(qt: QuestionType) -> &'static str {
         QuestionType::Technical    => "technical",
         QuestionType::Culture      => "culture",
         QuestionType::Character    => "character",
+        QuestionType::Values       => "values",
         QuestionType::Competency   => "general",
     }
 }
@@ -398,6 +425,7 @@ fn dispatch_prompt(ctx_prefix: &str, question: &str, qtype: QuestionType) -> Str
         QuestionType::Technical    => build_technical_prompt(ctx_prefix, question),
         QuestionType::Culture      => build_culture_prompt(ctx_prefix, question),
         QuestionType::Character    => build_character_prompt(ctx_prefix, question),
+        QuestionType::Values       => build_values_prompt(ctx_prefix, question),
         QuestionType::Competency   => build_competency_prompt(ctx_prefix, question),
     }
 }
@@ -468,7 +496,7 @@ fn build_future_prompt(ctx_prefix: &str, question: &str) -> String {
         "{}The interviewer asked a future/growth question: '{}'\n\n\
 CRITICAL: This is a FUTURE/GROWTH question. Output ONLY the five labeled lines below.\n\
 DO NOT output Acknowledge:, Solve:, Bridge:, or Answer: — those labels do not exist here.\n\n\
-Direction: <1-2 sentences. Each starts with 'I'. Max 10 words each. Where you are professionally headed. Names the specific intersection of skills or domain you are building toward. Never 'dream job' or 'passionate'.>\n\
+Direction: <1-2 sentences. Each starts with 'I'. Max 10 words each. Describes a QUALITATIVE shift in ownership, scope, or influence — not 'doing more of what I already do'. Examples of the right kind of shift: execution → commercial strategy, specialist → cross-channel architect, individual contributor → team or portfolio lead, tactical delivery → owning business outcomes. Read the CV in the system prompt to understand current level, then write the next genuine level up. Never 'dream job' or 'passionate'. Never name specific tools, platforms, or ad networks — say 'paid channels', 'performance media', 'social platforms' instead.>\n\
 Transition1: <1 sentence connecting Direction to Alignment. Starts with 'That path leads directly to' or 'Which is why this employer' or 'And this role sits on that path because'. Max 10 words.>\n\
 Alignment: <1-2 sentences. Each starts with 'I'. Max 10 words each. How this specific role and employer sit directly on that path. Names the employer's challenge or growth area from the system prompt.>\n\
 Transition2: <1 sentence connecting Alignment to Contribution. Starts with 'Concretely,' or 'In practical terms,' or 'What I would bring here is'. Max 10 words.>\n\
@@ -481,9 +509,10 @@ Ask: <2-4 word noun phrase — a different angle, still related to the interview
 Rules:\n\
 - Output ONLY: Direction:, Transition1:, Alignment:, Transition2:, Contribution:, Transition3:, Close:, then two Ask: lines. No other labels. No preamble.\n\
 - Direction: specific but not rigid. Never 'dream' or 'passionate'. Facts and direction only.\n\
+- CRITICAL — Direction must build ON TOP OF the candidate's current documented experience. If the CV already shows the candidate working across multiple clients, managing large budgets, leading teams, etc., do NOT describe those as future goals — they are present-state facts. Direction must describe the NEXT level above where the candidate already is.\n\
 - Alignment names the employer's actual challenge from the system prompt.\n\
 - NEVER invent metrics, percentages, dollar figures, headcount, or timeframes. If no specific figure exists in the candidate background, use directional language only (e.g. 'improved', 'reduced', 'grew') — never fabricate a number.\n\
-- NEVER name specific companies, clients, or employers — refer by industry only (e.g. 'a retail brand', 'a tech startup').\n\
+- NEVER name specific companies, clients, employers, tools, or platforms (e.g. never 'Google', 'Meta', 'LinkedIn', 'Salesforce') — refer by category (e.g. 'a paid search channel', 'a retail brand', 'a CRM platform').\n\
 - Ask topics: 2-4 word noun phrases naming the specific thing being asked about. Must directly relate to what the interviewer asked — not generic role questions. If the recent conversation includes specific words or concerns the interviewer mentioned, prioritise those for Ask topics.\n\
 - No adjectives or adverbs. No 'passionate', 'excited', 'dedicated', 'driven'. Facts and direction only.",
         ctx_prefix, question
@@ -589,6 +618,37 @@ Rules:\n\
 - NEVER name specific clients, employers, or companies. Refer to them by industry only (e.g. 'retail brand', 'tech startup', 'financial services firm').\n\
 - Read the system prompt carefully to understand the employer's business model. If the employer is an agency, consultancy, or services firm that works with multiple clients, frame all answers in terms of client work across accounts — NEVER describe it as owning one company's strategy long-term.\n\
 - Use only background provided. No invented details.",
+        ctx_prefix, question
+    )
+}
+
+fn build_values_prompt(ctx_prefix: &str, question: &str) -> String {
+    format!(
+        "{}The interviewer asked a values/preferences question: '{}'\n\n\
+CRITICAL: This question asks what the candidate looks for or needs — in a company, manager, team, or role. \
+Draw ONLY from the candidate's uploaded experience notes, CV, and LinkedIn in the system prompt. \
+Do NOT invent preferences. Output ONLY the exact labeled lines below. No preamble.\n\n\
+Acknowledge: <One sentence naming the underlying fit dimension the interviewer is probing — e.g. leadership style, culture, growth environment. \
+Opens with 'It sounds like', 'From your question, the priority seems to be', or 'I can see the focus here is on'. Max 20 words. Never starts with 'I'.>\n\
+Solve: <2-3 concrete preferences the candidate genuinely holds, each drawn from their uploaded background. \
+Structure each as: [1-2 word keyword] followed by one sentence explaining what the candidate looks for and why it matters to them, \
+grounded in a real experience or pattern from their background. All on ONE line. Max 12 words per sentence. No invented details.>\n\
+Bridge: <One sentence connecting the candidate's preferences to this specific employer. 5-8 words. Starts with 'I\\'d' or 'I'. Never a question.>\n\
+Close: <One sentence. States why this employer or team specifically fits what the candidate looks for, drawn from the company context in the system prompt. \
+Starts with 'That\\'s why', 'This is why', or 'I\\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
+---\n\
+Ask: <2-4 word noun phrase — specific aspect of the thing the interviewer asked about (company/manager/team)> | \
+<Question asking the interviewer to describe that specific dimension of the company or team. Ends with '?'.> | \
+<1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — a different aspect> | \
+<A different question probing another dimension relevant to the candidate\\'s stated preferences. Ends with '?'.> | \
+<1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
+Rules:\n\
+- Draw ONLY from the candidate background in the system prompt — especially the 'Early Career & Additional Context' and 'Candidate CV' sections which contain stated preferences.\n\
+- Never invent preferences, values, or experiences not documented in the background.\n\
+- Solve: all content on the same line as 'Solve:'. No adjectives like 'passionate' or 'dedicated'.\n\
+- Close: references the employer\\'s specific environment or challenge from the system prompt.\n\
+- Always use 'I' — never 'we' or 'our'.",
         ctx_prefix, question
     )
 }

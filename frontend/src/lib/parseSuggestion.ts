@@ -288,6 +288,7 @@ export function getAnswerType(
   if (tag === 'technical')   return { framework: 'A: Technical',   label: 'Problem → Experience → Method → Design' };
   if (tag === 'culture')     return { framework: 'A: Culture',     label: 'Context → Style → Example → Impact' };
   if (tag === 'character')   return { framework: 'A: Character',   label: 'Acknowledge → Trait → Context → Relevance' };
+  if (tag === 'values')      return { framework: 'A: Values',      label: 'Context → Preferences → Bridge → Connect' };
 
   if (parsed.present || parsed.thread || parsed.past || parsed.future)
     return { framework: 'A: Intro', label: 'Summary → Story → Next' };
@@ -313,14 +314,15 @@ function extractTypeTag(text: string): string {
   return m ? m[1] : '';
 }
 
-export function getSectionLabels(tag?: string): { ack: string; solve: string; bridge: string; answer: string } {
-  if (tag === 'weaknesses')  return { ack: 'Real',      solve: 'Growth',    bridge: 'Evidence', answer: 'Redirect' };
-  if (tag === 'situational') return { ack: 'Stakes',    solve: 'Approach',  bridge: 'Reasoning',answer: 'Answer'   };
-  if (tag === 'strengths')   return { ack: 'Acknowledge',solve: 'Solve',    bridge: 'Bridge',   answer: 'Strengths'};
-  if (tag === 'technical')   return { ack: 'Problem',     solve: 'Experience', bridge: 'Method',   answer: 'Design'    };
-  if (tag === 'culture')     return { ack: 'Context',     solve: 'Style',      bridge: 'Example',  answer: 'Impact'    };
-  if (tag === 'character')   return { ack: 'Acknowledge', solve: 'Trait',      bridge: 'Context',  answer: 'Relevance' };
-  return { ack: 'Acknowledge', solve: 'Solve', bridge: 'Bridge', answer: 'Answer' };
+export function getSectionLabels(tag?: string): { ack: string; solve: string; bridge: string; answer: string; close: string } {
+  if (tag === 'weaknesses')  return { ack: 'Real',        solve: 'Growth',      bridge: 'Evidence',  answer: 'Redirect',  close: 'Close'   };
+  if (tag === 'situational') return { ack: 'Stakes',      solve: 'Approach',    bridge: 'Reasoning', answer: 'Answer',    close: 'Close'   };
+  if (tag === 'strengths')   return { ack: 'Acknowledge', solve: 'Solve',       bridge: 'Bridge',    answer: 'Strengths', close: 'Close'   };
+  if (tag === 'technical')   return { ack: 'Problem',     solve: 'Experience',  bridge: 'Method',    answer: 'Design',    close: 'Close'   };
+  if (tag === 'culture')     return { ack: 'Context',     solve: 'Style',       bridge: 'Example',   answer: 'Impact',    close: 'Close'   };
+  if (tag === 'character')   return { ack: 'Acknowledge', solve: 'Trait',       bridge: 'Context',   answer: 'Relevance', close: 'Close'   };
+  if (tag === 'values')      return { ack: 'Context',     solve: 'Preferences', bridge: 'Bridge',    answer: 'Connect',   close: 'Connect' };
+  return { ack: 'Acknowledge', solve: 'Solve', bridge: 'Bridge', answer: 'Answer', close: 'Close' };
 }
 
 export function parseCues(body: string | null | undefined): { label: string; text: string; typeTag: string; title: string }[] {

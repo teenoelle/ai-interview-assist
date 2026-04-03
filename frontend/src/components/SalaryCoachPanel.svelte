@@ -5,8 +5,8 @@
   }>();
 
   const cards = $derived(tactics ? [
-    { id: 'early',   label: 'Early Round',   sub: 'Too soon to anchor',          text: tactics.early_round,   style: 'muted'     },
-    { id: 'reveal',  label: 'Reveal',        sub: 'Invite their range first',    text: tactics.reveal,        style: 'negotiate' },
+    { id: 'early',   label: 'Early Round',   sub: 'Deflect warmly, no number',   text: tactics.early_round,   style: 'muted'     },
+    { id: 'reveal',  label: 'Flip the Ask',  sub: 'Ask their range before yours', text: tactics.reveal,        style: 'negotiate' },
     { id: 'direct',  label: 'Direct Ask',    sub: 'They still want your number', text: tactics.direct_ask,    style: 'confident' },
     { id: 'package', label: 'Total Package', sub: 'Redirect to full comp',       text: tactics.total_package, style: 'neutral'   },
     { id: 'counter', label: 'Counter',       sub: 'Offer came in below range',   text: tactics.counter,       style: 'careful'   },
@@ -91,32 +91,27 @@
   }
 
   .card-text {
-    font-size: var(--fs-sm); line-height: 1.45; margin: 0;
-     padding: 0 0.55rem 0.45rem;
+    font-size: var(--fs-lg); line-height: 1.2; margin: 0;
+    padding: 0 0.55rem 0.45rem; color: #e2e8f0; overflow-wrap: break-word;
   }
 
   /* Muted — early round */
   .card-muted { background: #0a0e1a; border-left-color: #334155; }
   .card-muted .card-label { color: #475569; }
-  .card-muted .card-text  { color: #94a3b8; }
 
   /* Negotiate — reveal */
   .card-negotiate { background: #0d1020; border-left-color: #4f46e5; }
   .card-negotiate .card-label { color: #a5b4fc; }
-  .card-negotiate .card-text  { color: #c7d2fe; }
 
   /* Confident — direct ask */
   .card-confident { background: #0a1a0d; border-left-color: #166534; }
   .card-confident .card-label { color: #4ade80; }
-  .card-confident .card-text  { color: #bbf7d0; }
 
   /* Neutral — total package */
   .card-neutral { background: #0d0f1a; border-left-color: #1e3a5f; }
   .card-neutral .card-label { color: #60a5fa; }
-  .card-neutral .card-text  { color: #bfdbfe; }
 
   /* Careful — counter */
   .card-careful { background: #150e00; border-left-color: #78350f; }
   .card-careful .card-label { color: #f59e0b; }
-  .card-careful .card-text  { color: #fde68a; }
 </style>

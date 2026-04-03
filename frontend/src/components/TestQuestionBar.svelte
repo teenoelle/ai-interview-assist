@@ -59,9 +59,18 @@
       'How do you stay current with new technologies?',
     ]},
     { label: 'Culture', tag: 'culture', questions: [
-      'How would you describe the culture you work best in?',
       'How do you collaborate with cross-functional teams?',
       'How do you handle disagreements within a team?',
+      'How do you typically approach working across departments?',
+    ]},
+    { label: 'Values', tag: 'values', questions: [
+      'What do you look for in a company?',
+      'What do you look for in a manager?',
+      'What do you look for in a team?',
+      'What kind of environment do you thrive in?',
+      'What does your ideal manager look like?',
+      'What are you looking for in your next role?',
+      'What kind of work environment do you do your best in?',
     ]},
     { label: 'Salary', tag: 'salary', questions: [
       'What are your salary expectations?',
@@ -76,7 +85,7 @@
     personal: '#f472b6', motivation: '#fb923c', future: '#38bdf8',
     strengths: '#4ade80', character: '#e879f9', weaknesses: '#f87171', behavioral: '#a78bfa',
     situational: '#a3e635', technical: '#60a5fa', culture: '#34d399',
-    salary: '#fbbf24', closing: '#94a3b8',
+    values: '#f0abfc', salary: '#fbbf24', closing: '#94a3b8',
   };
 
   async function send(q: string) {

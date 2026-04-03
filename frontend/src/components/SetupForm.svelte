@@ -230,9 +230,26 @@
 
   function clearCv() { cvFile = null; cvText = ''; cvFilename = ''; }
   function clearExtraFile() { extraFile = null; extraFileText = ''; extraFilename = ''; }
+
+  function persistHeight(el: HTMLTextAreaElement, key: string) {
+    const stored = localStorage.getItem(`ta-h:${key}`);
+    if (stored) el.style.height = stored;
+    function save() { if (el.style.height) localStorage.setItem(`ta-h:${key}`, el.style.height); }
+    el.addEventListener('mouseup', save);
+    return { destroy() { el.removeEventListener('mouseup', save); } };
+  }
+
+  let hasData = $derived(!!(
+    jobDescription.trim() || cvText.trim() || intervieweeLinkedin.trim() ||
+    extraExperience.trim() || interviewers.some(t => t.trim())
+  ));
+
+  let contextLabel = $derived(
+    [roleName.trim(), companyName.trim()].filter(Boolean).join(' at ') || 'Ready to start'
+  );
 </script>
 
-<div class="setup-form" bind:this={formEl}>
+<div class="setup-form" class:has-sticky={hasData} bind:this={formEl}>
   <h2>Interview Setup</h2>
   <p class="subtitle">Fill in your context before the interview begins</p>
 
@@ -282,6 +299,7 @@
       <label for="job-desc">Job Description</label>
       <textarea
         id="job-desc"
+        use:persistHeight={'job-desc'}
         bind:value={jobDescription}
         rows={4}
         placeholder="Paste the full job description here..."
@@ -312,6 +330,7 @@
           <div class="interviewer-row">
             <textarea
               rows={3}
+              use:persistHeight={`interviewer-${i}`}
               value={text}
               oninput={(e) => updateInterviewer(i, (e.target as HTMLTextAreaElement).value)}
               placeholder="Start with their full name on the first line, then paste the rest of their LinkedIn profile..."
@@ -357,6 +376,7 @@
       <label for="interviewee-linkedin">Your LinkedIn Profile</label>
       <textarea
         id="interviewee-linkedin"
+        use:persistHeight={'interviewee-linkedin'}
         bind:value={intervieweeLinkedin}
         rows={3}
         placeholder="Paste your own LinkedIn profile text here so the AI knows your background in depth..."
@@ -390,6 +410,7 @@
       <label for="extra">Additional Experience / Notes</label>
       <textarea
         id="extra"
+        use:persistHeight={'extra-experience'}
         bind:value={extraExperience}
         rows={3}
         placeholder="Add any extra context, achievements, or talking points..."
@@ -427,8 +448,49 @@
     {/if}
 </div>
 
+{#if hasData}
+  <div class="sticky-start-bar">
+    <div class="sticky-start-inner">
+      <span class="sticky-context"><strong>{contextLabel}</strong></span>
+      <button onclick={handleSubmit} disabled={loading} class="btn-sticky-start">
+        {loading ? (loadingStep || 'Processing…') : 'Start Interview →'}
+      </button>
+    </div>
+  </div>
+{/if}
+
 <style>
   .setup-form { max-width: 720px; margin: 0 auto; padding: 1rem 2rem 2rem; scroll-margin-top: 1rem; }
+  .setup-form.has-sticky { padding-bottom: 5rem; }
+
+  .sticky-start-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    display: flex; justify-content: center;
+    padding: 1.25rem 1rem 1rem;
+    background: linear-gradient(to top, #060d18 50%, transparent);
+    pointer-events: none;
+    animation: sticky-in 0.2s ease;
+  }
+  @keyframes sticky-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .sticky-start-inner {
+    pointer-events: all; max-width: 720px; width: 100%;
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    background: #0d1829; border: 1px solid #1e3a5f; border-radius: 0.75rem;
+    padding: 0.65rem 0.75rem 0.65rem 1rem;
+    box-shadow: 0 -4px 32px rgba(0,0,0,0.6);
+  }
+  .sticky-context {
+    font-size: var(--fs-base); color: #64748b;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+  }
+  .sticky-context strong { color: #94a3b8; }
+  .btn-sticky-start {
+    flex-shrink: 0; padding: 0.55rem 1.4rem; background: #3b82f6; color: white;
+    border: none; border-radius: 0.5rem; font-size: var(--fs-base);
+    cursor: pointer; font-weight: 600; white-space: nowrap; transition: background 0.2s;
+  }
+  .btn-sticky-start:hover:not(:disabled) { background: #2563eb; }
+  .btn-sticky-start:disabled { background: #1e3a5f; color: #475569; cursor: not-allowed; }
   .preset-bar {
     display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem;
     padding: 0.6rem 0.75rem; background: #0f172a; border: 1px solid #1e293b;

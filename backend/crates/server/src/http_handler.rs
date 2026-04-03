@@ -379,7 +379,20 @@ pub async fn handle_salary_coach(
         let stored = state.jd_text.read().await.clone();
         if !stored.is_empty() { stored } else { req.jd_snippet.unwrap_or_default() }
     };
-    let tactics = context::ai_helper::generate_salary_tactics(&req.role_context, &location, &jd_snippet, &cfg).await;
+    // Extract the CV section from the system prompt so the LLM gets actual experience data,
+    // not the rules/instructions that occupy the first ~2000 chars of the full system prompt.
+    let system_prompt_text = state.system_prompt.read().await.clone();
+    let candidate_context = {
+        let marker = "## Candidate CV";
+        if let Some(pos) = system_prompt_text.find(marker) {
+            system_prompt_text[pos..].to_string()
+        } else {
+            // Fallback: skip the first 500 chars of boilerplate and take the rest
+            system_prompt_text.chars().skip(500).collect()
+        }
+    };
+    let company_info = state.company_info.read().await.clone();
+    let tactics = context::ai_helper::generate_salary_tactics(&req.role_context, &location, &jd_snippet, &candidate_context, &company_info, &cfg).await;
     Ok(Json(tactics))
 }
 

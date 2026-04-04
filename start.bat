@@ -9,8 +9,9 @@ start "Diarization Server" /min cmd /c "python diarize_server.py"
 REM Start local Whisper server (optional — falls back to Groq/Gemini if unavailable)
 start "Whisper Server" /min cmd /c "start_whisper.bat"
 
-REM Start backend
-start "AI Interview Backend" /min cmd /c "cd backend && target\release\server.exe"
+REM Start backend (logs to backend\logs\server.log)
+if not exist backend\logs mkdir backend\logs
+start "AI Interview Backend" /min cmd /c "cd backend && target\release\server.exe >> logs\server.log 2>&1"
 
 REM Wait for backend to bind
 timeout /t 3 /nobreak >nul

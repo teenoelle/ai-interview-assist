@@ -14,6 +14,10 @@ frontend/dist/
 # Large model files (too big for GitHub)
 piper/voices/
 
+# Logs
+backend/logs/
+*.log
+
 # Editor / OS
 .claude/
 *.DS_Store

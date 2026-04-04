@@ -42,7 +42,8 @@ function getAudioCtx(): AudioContext {
 // --- Voice loading ---
 
 export async function loadAllVoices(): Promise<CombinedVoice[]> {
-  return fetchBackendVoices();
+  const [backend, browser] = await Promise.all([fetchBackendVoices(), waitForBrowserVoices()]);
+  return [...backend, ...browser];
 }
 
 async function fetchBackendVoices(): Promise<CombinedVoice[]> {

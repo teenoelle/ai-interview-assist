@@ -718,6 +718,7 @@
   let ttsOutputDeviceId = $state(localStorage.getItem('tts-output-device') ?? '');
   let ttsOutputDevices = $state<{ deviceId: string; label: string }[]>([]);
   let showVoiceMenu = $state(false);
+  let showVoiceSettings = $state(false);
   // Silence gating: track last time anyone spoke
   let lastSpeechAt = 0; // ms timestamp
   const TTS_SILENCE_GAP_MS = 2500;
@@ -1634,65 +1635,72 @@
             >{ttsEnabled ? '🔊' : '🔇'} Voice</button>
 
             {#if ttsEnabled}
-              <label class="rate-label" title="Speech speed">
-                <span class="rate-val">{ttsRate.toFixed(1)}×</span>
-                <input type="range" min="0.7" max="4.0" step="0.1" bind:value={ttsRate} class="rate-slider" />
-              </label>
-              <label class="rate-label" title="Voice volume">
-                <span class="rate-val">{Math.round(ttsVolume * 100)}%</span>
-                <input type="range" min="0.1" max="4" step="0.05" bind:value={ttsVolume} class="rate-slider vol-slider"
-                  oninput={(e) => { const v = Number((e.target as HTMLInputElement).value); if (Math.abs(v - 1) < 0.08) ttsVolume = 1; }} />
-              </label>
-              <button class="voice-pick-btn" onclick={() => showVoiceMenu = !showVoiceMenu} title="Choose voice">▾</button>
-              <button
-                class="voice-test-inline-btn"
-                title="Test current voice"
-                onclick={() => ttsClient.speak("Hi, I'm excited to be here today.", ttsVoiceId, ttsRate, ttsVolume)}
-              >▶ Test</button>
-              {#if ttsOutputDevices.length > 1}
-                <select
-                  class="font-select"
-                  title="Audio output — pick headphones so only you hear it"
-                  bind:value={ttsOutputDeviceId}
-                >
-                  <option value="">Default output</option>
-                  {#each ttsOutputDevices as d}
-                    <option value={d.deviceId}>{d.label}</option>
-                  {/each}
-                </select>
-              {/if}
+              <div class="voice-settings-wrap">
+                <button class="voice-settings-btn" onclick={() => { showVoiceSettings = !showVoiceSettings; showVoiceMenu = false; }} title="Voice settings">⚙</button>
+                {#if showVoiceSettings}
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <div class="voice-settings-panel" onmouseleave={() => { showVoiceSettings = false; showVoiceMenu = false; }}>
+                    <div class="vs-row">
+                      <span class="vs-label">Speed</span>
+                      <span class="rate-val">{ttsRate.toFixed(1)}×</span>
+                      <input type="range" min="0.7" max="4.0" step="0.1" bind:value={ttsRate} class="rate-slider" />
+                    </div>
+                    <div class="vs-row">
+                      <span class="vs-label">Volume</span>
+                      <span class="rate-val">{Math.round(ttsVolume * 100)}%</span>
+                      <input type="range" min="0.1" max="4" step="0.05" bind:value={ttsVolume} class="rate-slider vol-slider"
+                        oninput={(e) => { const v = Number((e.target as HTMLInputElement).value); if (Math.abs(v - 1) < 0.08) ttsVolume = 1; }} />
+                    </div>
+                    <div class="vs-row">
+                      <span class="vs-label">Voice</span>
+                      <button class="voice-pick-btn" onclick={(e) => { e.stopPropagation(); showVoiceMenu = !showVoiceMenu; }} title="Choose voice">
+                        {ttsVoices.find(v => v.id === ttsVoiceId)?.name ?? 'Select…'} ▾
+                      </button>
+                    </div>
+                    {#if ttsOutputDevices.length > 1}
+                      <div class="vs-row">
+                        <span class="vs-label">Output</span>
+                        <select class="font-select" title="Audio output device" bind:value={ttsOutputDeviceId}>
+                          <option value="">Default</option>
+                          {#each ttsOutputDevices as d}
+                            <option value={d.deviceId}>{d.label}</option>
+                          {/each}
+                        </select>
+                      </div>
+                    {/if}
+                    <div class="vs-row">
+                      <button class="voice-test-inline-btn" onclick={() => ttsClient.speak("Hi, I'm excited to be here today.", ttsVoiceId, ttsRate, ttsVolume)}>▶ Test</button>
+                    </div>
+                    {#if showVoiceMenu}
+                      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                      <div class="voice-menu" role="menu">
+                        {#each ['piper', 'os', 'browser'] as src}
+                          {@const group = ttsVoices.filter(v => v.source === src)}
+                          {#if group.length > 0}
+                            <div class="voice-group-label">{src === 'piper' ? 'Piper (Neural)' : src === 'os' ? 'Windows (SAPI)' : 'Browser'}</div>
+                            {#each group as v}
+                              <div class="voice-row" class:selected={v.id === ttsVoiceId}>
+                                <button class="voice-option" class:selected={v.id === ttsVoiceId}
+                                  onclick={() => { ttsVoiceId = v.id; showVoiceMenu = false; }}
+                                >{v.name}</button>
+                                <button class="voice-test-btn" title="Preview"
+                                  onclick={(e) => { e.stopPropagation(); ttsClient.speak("Hi, I'm excited to be here today.", v.id, ttsRate, ttsVolume); }}
+                                >▶</button>
+                              </div>
+                            {/each}
+                          {/if}
+                        {/each}
+                      </div>
+                    {/if}
+                  </div>
+                {/if}
+              </div>
             {/if}
             <select class="font-select" bind:value={appFont} title="App font">
               {#each FONTS as f}
                 <option value={f.id}>{f.label}</option>
               {/each}
             </select>
-
-            {#if showVoiceMenu}
-              <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-              <div class="voice-menu" role="menu" onmouseleave={() => showVoiceMenu = false}>
-                {#each ['piper', 'os', 'browser'] as src}
-                  {@const group = ttsVoices.filter(v => v.source === src)}
-                  {#if group.length > 0}
-                    <div class="voice-group-label">{src === 'piper' ? 'Piper (Neural)' : src === 'os' ? 'Windows (SAPI)' : 'Browser'}</div>
-                    {#each group as v}
-                      <div class="voice-row" class:selected={v.id === ttsVoiceId}>
-                        <button
-                          class="voice-option"
-                          class:selected={v.id === ttsVoiceId}
-                          onclick={() => { ttsVoiceId = v.id; showVoiceMenu = false; }}
-                        >{v.name}</button>
-                        <button
-                          class="voice-test-btn"
-                          title="Preview this voice"
-                          onclick={(e) => { e.stopPropagation(); ttsClient.speak("Hi, I'm excited to be here today.", v.id, ttsRate, ttsVolume); }}
-                        >▶</button>
-                      </div>
-                    {/each}
-                  {/if}
-                {/each}
-              </div>
-            {/if}
           </div>
 
           <div class="layout-menu-wrap">
@@ -2687,8 +2695,6 @@
   .interview-layout.capturing .interview-header { padding: 0.2rem 1rem; }
   .interview-layout.capturing .shortcuts-hint { display: none; }
   .interview-layout.capturing .interview-header h1 { font-size: var(--fs-base); }
-  .interview-layout.capturing .rate-label { display: none; }
-  .interview-layout.capturing .voice-test-inline-btn { display: none; }
   .header-back-btn { background: none; border: none; color: #60a5fa; font-size: var(--fs-base); font-weight: 600; cursor: pointer; padding: 0 0.5rem 0 0; white-space: nowrap; }
   .header-back-btn:hover { color: #93c5fd; }
   .interview-header h1 {
@@ -2800,23 +2806,38 @@
     color: #64748b; font-size: var(--fs-base); cursor: pointer; white-space: nowrap;
   }
   .tts-btn.tts-on { border-color: #22c55e; color: #22c55e; }
-  .rate-label {
-    display: flex; align-items: center; gap: 0.25rem;
-    font-size: var(--fs-base); color: #64748b;
-  }
-  .rate-val { min-width: 2rem; text-align: right; font-variant-numeric: tabular-nums; }
-  .rate-slider { width: 56px; accent-color: #22c55e; cursor: pointer; }
+  .rate-val { min-width: 2rem; text-align: right; font-variant-numeric: tabular-nums; font-size: var(--fs-sm); color: #64748b; }
+  .rate-slider { width: 80px; accent-color: #22c55e; cursor: pointer; }
   .vol-slider { accent-color: #60a5fa; }
-  .voice-pick-btn {
-    padding: 0.2rem 0.35rem; background: transparent;
+
+  /* Voice settings popover */
+  .voice-settings-wrap { position: relative; }
+  .voice-settings-btn {
+    padding: 0.2rem 0.4rem; background: transparent;
     border: 1px solid #334155; border-radius: 0.25rem;
     color: #64748b; font-size: var(--fs-base); cursor: pointer;
   }
+  .voice-settings-btn:hover { border-color: #22c55e; color: #22c55e; }
+  .voice-settings-panel {
+    position: absolute; top: calc(100% + 4px); right: 0; z-index: 300;
+    background: #0d1117; border: 1px solid #334155; border-radius: 0.5rem;
+    padding: 0.5rem 0.65rem; display: flex; flex-direction: column; gap: 0.4rem;
+    min-width: 220px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .vs-row { display: flex; align-items: center; gap: 0.4rem; }
+  .vs-label { font-size: var(--fs-xs); color: #475569; width: 3.5rem; flex-shrink: 0; }
+  .voice-pick-btn {
+    padding: 0.2rem 0.35rem; background: transparent; flex: 1;
+    border: 1px solid #334155; border-radius: 0.25rem;
+    color: #94a3b8; font-size: var(--fs-sm); cursor: pointer;
+    text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
   .voice-menu {
-    position: absolute; top: calc(100% + 4px); right: 0; z-index: 200;
+    position: static; z-index: 200;
     background: #1e293b; border: 1px solid #334155; border-radius: 0.375rem;
-    min-width: 200px; max-height: 250px; overflow-y: auto;
+    max-height: 220px; overflow-y: auto;
     display: flex; flex-direction: column;
+    margin-top: 0.25rem;
   }
   .font-select {
     background: #0f172a;

@@ -97,6 +97,11 @@ async fn main() -> anyhow::Result<()> {
                 .add_directive("server=debug".parse()?)
                 .add_directive("suggestion=info".parse()?),
         )
+        .with_ansi(false)
+        .with_timer(tracing_subscriber::fmt::time::LocalTime::new(
+            time::macros::format_description!("[hour]:[minute]:[second]"),
+        ))
+        .compact()
         .init();
 
     let config = Config::from_env()?;

@@ -23,6 +23,7 @@ dotenvy = { workspace = true }
 tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+time = { version = "0.3", features = ["macros"] }
 bytes = { workspace = true }
 futures = { workspace = true }
 tokio-stream = { workspace = true }

@@ -23,7 +23,6 @@ export class MediaCapture {
   private systemWorklet: AudioWorkletNode | null = null;
   private micWorklet: AudioWorkletNode | null = null;
   private faceDetector: FaceEmotionDetector | null = null;
-  private _paused = false;
   private _micLevel = 0;
   private _systemLevel = 0;
   private _levelCallback: LevelCallback | null = null;
@@ -48,11 +47,6 @@ export class MediaCapture {
   onAudioFeatures(cb: AudioFeaturesCallback) { this._audioFeaturesCallback = cb; }
   onLiveEmotion(cb: LiveEmotionCallback) { this._liveEmotionCallback = cb; }
   onRecording(cb: RecordingCallback) { this._recordingCallback = cb; }
-
-  get paused() { return this._paused; }
-  pause()  { this._paused = true;  }
-  resume() { this._paused = false; }
-  togglePause() { this._paused = !this._paused; return this._paused; }
 
   async start(): Promise<void> {
     this.systemStream = await navigator.mediaDevices.getDisplayMedia({
@@ -108,7 +102,7 @@ export class MediaCapture {
     this.systemWorklet = new AudioWorkletNode(this.systemAudioCtx, 'pcm-processor');
     this.systemWorklet.port.onmessage = (e: MessageEvent) => {
       if (e.data instanceof Int16Array) {
-        if (!this._paused) this.systemAudioWs.send(e.data.buffer);
+        this.systemAudioWs.send(e.data.buffer);
       } else if (e.data?.type === 'level') {
         this._systemLevel = e.data.rms;
         this._levelCallback?.(this._micLevel, this._systemLevel);
@@ -157,7 +151,7 @@ export class MediaCapture {
     this.micWorklet = new AudioWorkletNode(this.micAudioCtx, 'pcm-processor');
     this.micWorklet.port.onmessage = (e: MessageEvent) => {
       if (e.data instanceof Int16Array) {
-        if (!this._paused) this.micAudioWs.send(e.data.buffer);
+        this.micAudioWs.send(e.data.buffer);
       } else if (e.data?.type === 'level') {
         this._micLevel = e.data.rms;
         this._levelCallback?.(this._micLevel, this._systemLevel);
@@ -275,7 +269,6 @@ export class MediaCapture {
     this.micStream = null;
     this.webcamStream = null;
     this.micActive = false;
-    this._paused = false;
     // Finalise screen recording — onstop handler assembles blob and fires _recordingCallback
     if (this.screenRecorder && this.screenRecorder.state !== 'inactive') {
       this.screenRecorder.stop();

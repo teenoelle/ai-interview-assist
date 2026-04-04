@@ -1,12 +1,11 @@
 <script lang="ts">
   import { MediaCapture } from '../lib/capture';
   type StreamsReadyCallback = (screen: MediaStream, webcam: MediaStream | null) => void;
-  const { onCapture, onStreams, onReady, onLevel: onLevelProp, onPause, onRecording, initialCapture = null } = $props<{
+  const { onCapture, onStreams, onReady, onLevel: onLevelProp, onRecording, initialCapture = null } = $props<{
     onCapture: (active: boolean) => void;
     onStreams?: StreamsReadyCallback;
     onReady?: (cap: MediaCapture) => void;
     onLevel?: (mic: number, sys: number) => void;
-    onPause?: (paused: boolean) => void;
     onRecording?: (url: string) => void;
     initialCapture?: MediaCapture | null;
   }>();
@@ -14,7 +13,6 @@
   let capture: MediaCapture | null = $state(null);
   let starting = $state(false); // true only during the async start() call
   let active = $derived(capture !== null || starting);
-  let paused = $state(false);
   let error = $state('');
   let micLevel = $state(0);
   let systemLevel = $state(0);
@@ -31,7 +29,6 @@
     if (capture) {
       capture.stop();
       capture = null;
-      paused = false;
       micLevel = 0;
       systemLevel = 0;
       onCapture(false);
@@ -64,32 +61,18 @@
       }
     }
   }
-
-  function togglePause() {
-    if (!capture) return;
-    paused = capture.togglePause();
-    onPause?.(paused);
-  }
 </script>
 
 <div class="capture-btn-container">
   {#if error}<div class="capture-error">{error}</div>{/if}
-  <div class="controls">
-    <button onclick={toggle} class="capture-btn" class:active>
-      <span class="dot"></span>
-      {starting ? 'Starting…' : capture ? 'Stop' : 'Capture Meeting'}
-    </button>
-    {#if active}
-      <button onclick={togglePause} class="pause-btn" class:paused title="Pause/resume audio (P)">
-        {paused ? '▶' : '⏸'}
-      </button>
-    {/if}
-  </div>
+  <button onclick={toggle} class="capture-btn" class:active>
+    <span class="dot"></span>
+    {starting ? 'Starting…' : capture ? 'Stop' : 'Capture Meeting'}
+  </button>
 </div>
 
 <style>
   .capture-btn-container { display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; }
-  .controls { display: flex; align-items: center; gap: 0.5rem; }
   .capture-btn {
     display: inline-flex; align-items: center; gap: 0.5rem;
     padding: 0.5rem 1.25rem; font-size: var(--fs-base); font-weight: 600;
@@ -100,13 +83,6 @@
   .capture-btn:hover { background: #3b82f6; }
   .capture-btn.active { background: #0f172a; border-color: #ef4444; color: #ef4444; }
   .capture-btn.active:hover { background: #ef4444; color: white; }
-  .pause-btn {
-    width: 2rem; height: 2rem; display: flex; align-items: center; justify-content: center;
-    background: #1e293b; border: 1px solid #334155; border-radius: 50%;
-    color: #94a3b8; cursor: pointer; font-size: var(--fs-base); transition: all 0.15s;
-  }
-  .pause-btn:hover { border-color: #f59e0b; color: #f59e0b; }
-  .pause-btn.paused { border-color: #f59e0b; color: #f59e0b; background: #1a1500; }
   .dot {
     width: 8px; height: 8px; border-radius: 50%;
     background: #3b82f6; transition: background 0.2s;

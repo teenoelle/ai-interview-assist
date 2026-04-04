@@ -163,7 +163,6 @@
   // Audio meter levels (lifted from CaptureButton for display in stats panel)
   let captureMicLevel = $state(0);
   let captureSystemLevel = $state(0);
-  let capturePaused = $state(false);
 
   // Async capture-before-transition state
 
@@ -1755,11 +1754,10 @@
           <button class="history-btn" onclick={() => showPastInterviews = true}>Reports</button>
           <CaptureButton
             initialCapture={captureInst}
-            onCapture={(v) => { capturing = v; if (v) { ttsEnabled = true; ttsClient.getAudioOutputs().then(o => { ttsOutputDevices = o; }); } if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); captureMicLevel = 0; captureSystemLevel = 0; capturePaused = false; } }}
+            onCapture={(v) => { capturing = v; if (v) { ttsEnabled = true; ttsClient.getAudioOutputs().then(o => { ttsOutputDevices = o; }); } if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); captureMicLevel = 0; captureSystemLevel = 0; } }}
             onStreams={(screen, webcam) => { screenStream = screen; webcamStream = webcam; }}
             onReady={(cap) => { captureInst = cap; }}
             onLevel={(mic, sys) => { captureMicLevel = mic; captureSystemLevel = sys; updateSysEnergy(sys); }}
-            onPause={(p) => { capturePaused = p; }}
             onRecording={(url) => { recordingUrl = url; }}
           />
         </div>
@@ -2213,7 +2211,7 @@
                 {:else if sid === 'stats'}
                   {#if capturing}
                     <div class="stats-audio-meter">
-                      <AudioMeter micLevel={captureMicLevel} systemLevel={captureSystemLevel} paused={capturePaused} capturing={capturing} />
+                      <AudioMeter micLevel={captureMicLevel} systemLevel={captureSystemLevel} capturing={capturing} />
                     </div>
                   {/if}
                   <div class="side-stats">

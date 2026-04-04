@@ -72,32 +72,72 @@ export class EventWebSocket {
 export class AudioWebSocket {
   private ws: WebSocket | null = null;
   private path: string;
+  private stopped = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private attempt = 0;
 
   constructor(path = '/ws/audio') { this.path = path; }
 
   connect() {
+    this.stopped = false;
+    this._connect();
+  }
+
+  private _connect() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     this.ws = new WebSocket(`${protocol}//${location.host}${withToken(this.path)}`);
+    this.ws.onopen = () => { this.attempt = 0; };
+    this.ws.onclose = () => {
+      if (this.stopped) return;
+      this.attempt++;
+      const delay = Math.min(1000 * Math.pow(2, this.attempt - 1), 10000);
+      this.reconnectTimer = setTimeout(() => this._connect(), delay);
+    };
+    this.ws.onerror = () => { this.ws?.close(); };
   }
 
   send(data: ArrayBuffer) {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(data);
   }
 
-  disconnect() { this.ws?.close(); }
+  disconnect() {
+    this.stopped = true;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.ws?.close();
+  }
 }
 
 export class VideoWebSocket {
   private ws: WebSocket | null = null;
+  private stopped = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private attempt = 0;
 
   connect() {
+    this.stopped = false;
+    this._connect();
+  }
+
+  private _connect() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     this.ws = new WebSocket(`${protocol}//${location.host}${withToken('/ws/video')}`);
+    this.ws.onopen = () => { this.attempt = 0; };
+    this.ws.onclose = () => {
+      if (this.stopped) return;
+      this.attempt++;
+      const delay = Math.min(1000 * Math.pow(2, this.attempt - 1), 10000);
+      this.reconnectTimer = setTimeout(() => this._connect(), delay);
+    };
+    this.ws.onerror = () => { this.ws?.close(); };
   }
 
   send(data: ArrayBuffer) {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(data);
   }
 
-  disconnect() { this.ws?.close(); }
+  disconnect() {
+    this.stopped = true;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.ws?.close();
+  }
 }

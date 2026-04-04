@@ -641,7 +641,8 @@ Solve: <All on this same line. Short sentences. Max 10 words per sentence. Outpu
 Reframe each preference as what helps the candidate contribute, not what the company must provide. e.g. instead of 'I need consistent leadership', say 'I do my best work when direction is clear'. \
 Each preference MUST begin with a [1-2 word keyword] immediately before its first sentence — no space between ] and the first word. The keyword is a short noun phrase, never a transition phrase like 'Beyond that'. \
 Each preference follows this exact 3-part pattern: (A) [keyword] + one sentence on what conditions help the candidate contribute most. \
-(B) 'I [verb] [approach] because [why — reference the most specific documented experience from the background, naming the role or context where this showed up. Max 20 words. Prefer a specific project or situation over a general pattern.]' \
+(B) 'I [verb] [approach] because [why — reference the most specific documented experience from the background. Max 20 words. Prefer a specific project or situation over a general pattern. \
+COMPANY NAMING RULE: only name a company when the reference is positive (e.g. growth, achievement, skill built). If the experience is negative or explains a gap (e.g. inconsistent management, lack of support), write 'in a previous role' or 'at a previous employer' — never name the company.]' \
 (C) 'So if [this company/team has X or does Y], I [would/can do Z], which would [positive outcome for both].' — CRITICAL: the outcome in (C) must make sense for the CURRENT ROLE being interviewed for (use the job description in the system prompt). Do NOT carry over outcomes from previous roles — e.g. do not mention 'campaign rejections' if the current role is performance marketing, not content review. The outcome should reflect what success looks like in this specific role.\
 Preferences 2 and 3: the (A) sentence opens with 'Beyond that,' or 'I also find that' — placed AFTER the [keyword] marker, not before it. e.g. '[ownership]Beyond that, clear ownership reduces decision lag.' No adjectives. No adverbs. No invented details.>\n\
 Bridge: <One sentence connecting the candidate's preferences to this specific employer. 5-8 words. Starts with 'I\\'d' or 'I'. Never a question.>\n\
@@ -663,6 +664,7 @@ Rules:\n\
 - Solve (C) outcome: MUST reflect the current role being interviewed for — check the job description. Do NOT use outcomes from past roles that don't apply here (e.g. don't mention content rejection outcomes if the role is performance marketing). The outcome should describe what the candidate would deliver in this specific role context.\n\
 - Solve: preferences 2 and 3: the (A) sentence MUST open with 'Beyond that,' or 'I also find that' — these come AFTER the [keyword]. NEVER before. e.g. '[keyword]Beyond that, sentence.' not 'Beyond that, [keyword]sentence.' No adjectives or adverbs. No invented details.\n\
 - Close: references the employer\\'s specific environment or challenge from the system prompt.\n\
+- Company naming: only name a past employer when the reference is positive (achievement, growth, skill built). If the experience illustrates a gap, difficult situation, or reason the candidate developed a preference, refer to it as 'a previous role' or 'a previous employer' — never name the company. This protects the candidate's professional reputation.\n\
 - Always use 'I' — never 'we' or 'our'.",
         ctx_prefix, question
     )

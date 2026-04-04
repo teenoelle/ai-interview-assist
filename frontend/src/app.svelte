@@ -1612,7 +1612,7 @@
     />
 
   {:else}
-    <div class="interview-layout">
+    <div class="interview-layout" class:capturing>
       <header class="interview-header">
         <div class="header-title-row">
           <button class="header-back-btn" onclick={() => { phase = 'setup'; }} title="Back to overview">← Overview</button>
@@ -2686,6 +2686,10 @@
     display: flex; align-items: center; justify-content: space-between;
     padding: 0.4rem 1rem; background: #0f172a; border-bottom: 1px solid #1e293b; flex-shrink: 0;
   }
+  /* Shrink header when capturing so the sharing bar doesn't eat into content area */
+  .interview-layout.capturing .interview-header { padding: 0.2rem 1rem; }
+  .interview-layout.capturing .shortcuts-hint { display: none; }
+  .interview-layout.capturing .interview-header h1 { font-size: var(--fs-base); }
   .header-back-btn { background: none; border: none; color: #60a5fa; font-size: var(--fs-base); font-weight: 600; cursor: pointer; padding: 0 0.5rem 0 0; white-space: nowrap; }
   .header-back-btn:hover { color: #93c5fd; }
   .interview-header h1 {

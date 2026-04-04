@@ -113,6 +113,7 @@ pub async fn stream_openai_compat(
         }
     }
 
+    tracing::debug!(provider = %provider, model = %model, chars = %full_text.len(), response = %full_text, "suggestion complete");
     let _ = event_tx.send(WsEvent::SuggestionComplete { full_text, mode });
     Ok(())
 }

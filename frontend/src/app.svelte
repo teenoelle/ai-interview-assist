@@ -1381,6 +1381,8 @@
         } else {
           suggestions = suggestions.map(s => {
             if (!s.streaming) return s;
+            // If full_text is empty the provider sent nothing — keep streaming state so panel shows a retry-able spinner
+            if (!event.full_text.trim()) return s;
             // If compound question: after primary completes, prepare secondary slot
             const next = s.secondaryTag ? { ...s, suggestion: event.full_text, streaming: false, secondaryStreaming: true } : { ...s, suggestion: event.full_text, streaming: false };
             return next;

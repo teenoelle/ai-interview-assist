@@ -214,6 +214,9 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
     tell = first.length > 80 ? first.slice(0, 80) + '…' : first;
   }
 
+  // Transition phrases the LLM sometimes bleeds into keyword labels — strip and move to text
+  const TRANSITION_PREFIXES = /^(Beyond that,?\s*|I also find that,?\s*)/i;
+
   // Parse strategies from tell by splitting on embedded [keyword] markers
   const strategies: { keyword: string; text: string }[] = [];
   if (tell) {
@@ -221,7 +224,14 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
     for (const part of parts) {
       const m = part.match(/^\[([^\]]+)\]\s*/);
       if (m) {
-        strategies.push({ keyword: m[1], text: part.slice(m[0].length).trim() });
+        let keyword = m[1].trim();
+        let text = part.slice(m[0].length).trim();
+        const kwTransition = keyword.match(TRANSITION_PREFIXES);
+        if (kwTransition) {
+          keyword = keyword.slice(kwTransition[0].length).trim();
+          text = kwTransition[0].trim() + (text ? ' ' + text : '');
+        }
+        strategies.push({ keyword, text });
       } else if (part.trim()) {
         strategies.push({ keyword: '', text: part.trim() });
       }
@@ -235,7 +245,15 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
     for (const part of solveParts) {
       const m = part.match(/^\[([^\]]+)\]\s*/);
       if (m) {
-        solveStrategies.push({ keyword: m[1], text: part.slice(m[0].length).trim() });
+        let keyword = m[1].trim();
+        let text = part.slice(m[0].length).trim();
+        // If LLM put transition phrase in keyword, move it to start of text
+        const kwTransition = keyword.match(TRANSITION_PREFIXES);
+        if (kwTransition) {
+          keyword = keyword.slice(kwTransition[0].length).trim();
+          text = kwTransition[0].trim() + (text ? ' ' + text : '');
+        }
+        solveStrategies.push({ keyword, text });
       } else if (part.trim()) {
         solveStrategies.push({ keyword: '', text: part.trim() });
       }

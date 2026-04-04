@@ -631,11 +631,11 @@ Do NOT invent preferences. Output ONLY the exact labeled lines below. No preambl
 Acknowledge: <One sentence naming the underlying fit dimension the interviewer is probing — e.g. leadership style, culture, growth environment. \
 Opens with 'It sounds like', 'From your question, the priority seems to be', or 'I can see the focus here is on'. Max 20 words. Never starts with 'I'.>\n\
 Solve: <The spoken answer on this same line. Short sentences. Max 10 words per sentence. 2-3 concrete preferences the candidate genuinely holds, each drawn from their uploaded background. \
-Each preference MUST begin with a [1-2 word keyword] immediately before its first sentence — no space between ] and the first word. \
+Each preference MUST begin with a [1-2 word keyword] immediately before its first sentence — no space between ] and the first word. The keyword is a short noun phrase, never a transition phrase like 'Beyond that'. \
 Each preference follows this 3-part pattern: (A) [keyword] + one sentence stating what the candidate genuinely looks for or needs. \
 (B) 'I [verb] [approach] because [why this preference matters, grounded in a real experience or pattern from their background].' \
 (C) 'So if [this company/team has X], I [would/can do Y], which would [positive outcome].' \
-Preference 2 onward: first sentence opens with 'Beyond that,' or 'I also find that'. No adjectives. No adverbs. No invented details.>\n\
+Preference 2 onward: the (A) sentence opens with 'Beyond that,' or 'I also find that' — placed AFTER the [keyword] marker, not before it. e.g. '[ownership]Beyond that, clear ownership reduces decision lag.' No adjectives. No adverbs. No invented details.>\n\
 Bridge: <One sentence connecting the candidate's preferences to this specific employer. 5-8 words. Starts with 'I\\'d' or 'I'. Never a question.>\n\
 Close: <One sentence. States why this employer or team specifically fits what the candidate looks for, drawn from the company context in the system prompt. \
 Starts with 'That\\'s why', 'This is why', or 'I\\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
@@ -651,7 +651,7 @@ Rules:\n\
 - Never invent preferences, values, or experiences not documented in the background.\n\
 - Solve: all content on the same line as 'Solve:'. Each preference MUST begin with [1-2 word keyword] immediately before its first sentence. No space between ] and first word.\n\
 - Solve: each preference follows this exact 3-step sequence — (A) [keyword] + what the candidate looks for; (B) 'I [verb] [approach] because [why]'; (C) 'So if [company/team has X], I [would/can do Y], which would [outcome].' DO NOT skip step C.\n\
-- Solve: preference 2 onward: first sentence opens with 'Beyond that,' or 'I also find that'. No adjectives or adverbs. No invented details.\n\
+- Solve: preference 2 onward: the (A) sentence MUST start with 'Beyond that,' or 'I also find that' — but these words come AFTER the [keyword] marker. NEVER place them before the [keyword]. e.g. '[keyword]Beyond that, sentence.' not 'Beyond that, [keyword]sentence.' No adjectives or adverbs. No invented details.\n\
 - Close: references the employer\\'s specific environment or challenge from the system prompt.\n\
 - Always use 'I' — never 'we' or 'our'.",
         ctx_prefix, question

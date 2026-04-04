@@ -1117,7 +1117,6 @@
     predictedQuestions = [];
     companyBrief = null; // clear so fresh data loads on next expand
     loadingCompanyBrief = false;
-    connectWs();
     void fetchBackgroundSetup();
     phase = 'interview';
   }
@@ -1754,7 +1753,7 @@
           <button class="history-btn" onclick={() => showPastInterviews = true}>Reports</button>
           <CaptureButton
             initialCapture={captureInst}
-            onCapture={(v) => { capturing = v; if (v) { ttsEnabled = true; ttsClient.getAudioOutputs().then(o => { ttsOutputDevices = o; }); } if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); captureMicLevel = 0; captureSystemLevel = 0; } }}
+            onCapture={(v) => { capturing = v; if (v) { connectWs(); ttsEnabled = true; ttsClient.getAudioOutputs().then(o => { ttsOutputDevices = o; }); } if (!v) { eventWs?.disconnect(); wsStatus = 'disconnected'; webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); captureMicLevel = 0; captureSystemLevel = 0; } }}
             onStreams={(screen, webcam) => { screenStream = screen; webcamStream = webcam; }}
             onReady={(cap) => { captureInst = cap; }}
             onLevel={(mic, sys) => { captureMicLevel = mic; captureSystemLevel = sys; updateSysEnergy(sys); }}

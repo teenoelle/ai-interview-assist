@@ -2696,7 +2696,7 @@
     background: linear-gradient(135deg, #60a5fa, #a78bfa);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   }
-  .header-right { display: flex; align-items: center; gap: 0.75rem; overflow: hidden; min-width: 0; }
+  .header-right { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
   .shortcuts-hint { font-size: var(--fs-sm); color: #334155; white-space: nowrap; }
   .history-btn {
     padding: 0.3rem 0.8rem; background: transparent;

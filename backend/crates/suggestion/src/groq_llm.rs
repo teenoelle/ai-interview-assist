@@ -20,7 +20,7 @@ pub async fn stream_suggestions(
     stream_openai_compat(
         api_key,
         "https://api.groq.com/openai/v1/chat/completions",
-        "llama-3.1-8b-instant",
+        "llama-3.3-70b-versatile",
         "Groq",
         system_prompt,
         user_prompt,

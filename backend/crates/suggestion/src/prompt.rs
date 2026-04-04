@@ -626,12 +626,14 @@ fn build_values_prompt(ctx_prefix: &str, question: &str) -> String {
     format!(
         "{}The interviewer asked a values/preferences question: '{}'\n\n\
 CRITICAL: This question asks what environment helps the candidate do their best work. \
-Draw ONLY from the candidate's uploaded experience notes, CV, and LinkedIn in the system prompt. \
-Do NOT invent preferences. Output ONLY the exact labeled lines below. No preamble.\n\n\
-IMPORTANT FRAMING RULE: Frame every preference as a condition that enables the candidate's contribution — never as a requirement the company must meet. \
-NEVER quote or echo the raw phrasing from the candidate's background notes. Translate each preference into its underlying need: \
-'stable leadership' or 'consistent leadership' → 'clear direction from leadership' (direction can come from tenured managers OR strong internal promotion); \
-'no micromanagement' → 'autonomy to execute'; 'flat hierarchy' → 'direct access to decision-makers'. \
+Draw ONLY from themes explicitly stated in the candidate's uploaded experience notes, CV, and LinkedIn in the system prompt. \
+Do NOT invent preferences that are not in the background. Do NOT substitute generic preferences like 'ownership' or 'direction' unless the background specifically mentions them. \
+Output ONLY the exact labeled lines below. No preamble.\n\n\
+STEP 1 — IDENTIFY: Before writing, mentally list the 3 preference themes that appear most clearly in the candidate's uploaded background notes. \
+Use the actual words and themes the candidate used — e.g. if they wrote 'growth', 'innovation', 'collaborative', use those, not substitutes.\n\n\
+STEP 2 — REFRAME: Translate each identified preference into a contribution condition — how that environment helps the candidate deliver their best work. \
+NEVER quote raw phrases like 'consistent leadership' or 'stable leadership' — reframe as 'clear direction from leadership'. \
+'no micromanagement' → 'autonomy to execute'; 'flat hierarchy' → 'direct access to decision-makers'; 'work-life balance' → 'sustainable pace'. \
 Never imply a gap or deficiency in the company. Always leave room for the company to meet the need in their own way.\n\n\
 Acknowledge: <One sentence naming the underlying fit dimension the interviewer is probing — e.g. leadership style, culture, growth environment. \
 Opens with 'It sounds like', 'From your question, the priority seems to be', or 'I can see the focus here is on'. Max 20 words. Never starts with 'I'.>\n\
@@ -653,9 +655,9 @@ Ask: <2-4 word noun phrase — a different aspect> | \
 <A different question probing another dimension relevant to the candidate\\'s stated preferences. Ends with '?'.> | \
 <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
 Rules:\n\
-- Draw ONLY from the candidate background in the system prompt — especially the 'Early Career & Additional Context' and 'Candidate CV' sections which contain stated preferences.\n\
+- Draw ONLY from themes in the candidate's uploaded background. Use their actual stated themes (e.g. 'growth', 'innovation', 'collaboration') — do NOT replace with generic workplace preferences not mentioned.\n\
 - Never invent preferences, values, or experiences not documented in the background.\n\
-- Reframe preferences around the underlying need, not the surface symptom. NEVER use the raw phrasing from the candidate's background notes — always translate it. Examples: 'consistent leadership' or 'stable leadership' or 'leadership stability' → 'clear direction from leadership'; 'no micromanagement' → 'autonomy to execute'; 'flat hierarchy' → 'direct access to decision-makers'; 'good culture' → 'shared standards'; 'work-life balance' → 'sustainable pace'. This makes answers tactful and positive in any company context.\n\
+- Reframe the language around each theme, not the theme itself. Keep the candidate's actual topics but express them as contribution conditions. Examples: 'consistent/stable leadership' → 'clear direction from leadership'; 'professional development' → 'room to grow skills'; 'innovation' → 'space to test ideas'; 'collaboration' → 'working alongside people with high standards'; 'feel supported/empowered' → 'autonomy with support'.\n\
 - Solve: output 3 preferences. All content on the same line as 'Solve:'. Each preference MUST begin with [1-2 word keyword] immediately before its first sentence. No space between ] and first word.\n\
 - Solve: each preference follows this exact 3-step sequence — (A) [keyword] + what conditions help the candidate contribute; (B) 'I [verb] [approach] because [why]'; (C) 'So if [company/team has X or does Y], I [would/can do Z], which would [outcome].' DO NOT skip step C. Frame (C) as an open invitation.\n\
 - Solve: preferences 2 and 3: the (A) sentence MUST open with 'Beyond that,' or 'I also find that' — these come AFTER the [keyword]. NEVER before. e.g. '[keyword]Beyond that, sentence.' not 'Beyond that, [keyword]sentence.' No adjectives or adverbs. No invented details.\n\

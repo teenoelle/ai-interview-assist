@@ -625,16 +625,20 @@ Rules:\n\
 fn build_values_prompt(ctx_prefix: &str, question: &str) -> String {
     format!(
         "{}The interviewer asked a values/preferences question: '{}'\n\n\
-CRITICAL: This question asks what the candidate looks for or needs — in a company, manager, team, or role. \
+CRITICAL: This question asks what environment helps the candidate do their best work. \
 Draw ONLY from the candidate's uploaded experience notes, CV, and LinkedIn in the system prompt. \
 Do NOT invent preferences. Output ONLY the exact labeled lines below. No preamble.\n\n\
+IMPORTANT FRAMING RULE: Frame every preference as a condition that enables the candidate's contribution — never as a requirement the company must meet. \
+Reframe raw preferences into the underlying need: e.g. 'consistent leadership' → 'clarity on direction' (which can come from tenured managers OR strong internal development). \
+Never imply a gap or deficiency in the company. Always leave room for the company to meet the need in their own way.\n\n\
 Acknowledge: <One sentence naming the underlying fit dimension the interviewer is probing — e.g. leadership style, culture, growth environment. \
 Opens with 'It sounds like', 'From your question, the priority seems to be', or 'I can see the focus here is on'. Max 20 words. Never starts with 'I'.>\n\
 Solve: <The spoken answer on this same line. Short sentences. Max 10 words per sentence. 2-3 concrete preferences the candidate genuinely holds, each drawn from their uploaded background. \
+Reframe each preference as what helps the candidate contribute, not what the company must provide. e.g. instead of 'I need consistent leadership', say 'I do my best work when direction is clear'. \
 Each preference MUST begin with a [1-2 word keyword] immediately before its first sentence — no space between ] and the first word. The keyword is a short noun phrase, never a transition phrase like 'Beyond that'. \
-Each preference follows this 3-part pattern: (A) [keyword] + one sentence stating what the candidate genuinely looks for or needs. \
-(B) 'I [verb] [approach] because [why this preference matters, grounded in a real experience or pattern from their background].' \
-(C) 'So if [this company/team has X], I [would/can do Y], which would [positive outcome].' \
+Each preference follows this 3-part pattern: (A) [keyword] + one sentence on what conditions help the candidate contribute most. \
+(B) 'I [verb] [approach] because [why this condition matters, grounded in a real experience or pattern from their background].' \
+(C) 'So if [this company/team has X or does Y], I [would/can do Z], which would [positive outcome for both].' — frame (C) as an open invitation, not a test. \
 Preference 2 onward: the (A) sentence opens with 'Beyond that,' or 'I also find that' — placed AFTER the [keyword] marker, not before it. e.g. '[ownership]Beyond that, clear ownership reduces decision lag.' No adjectives. No adverbs. No invented details.>\n\
 Bridge: <One sentence connecting the candidate's preferences to this specific employer. 5-8 words. Starts with 'I\\'d' or 'I'. Never a question.>\n\
 Close: <One sentence. States why this employer or team specifically fits what the candidate looks for, drawn from the company context in the system prompt. \
@@ -649,8 +653,9 @@ Ask: <2-4 word noun phrase — a different aspect> | \
 Rules:\n\
 - Draw ONLY from the candidate background in the system prompt — especially the 'Early Career & Additional Context' and 'Candidate CV' sections which contain stated preferences.\n\
 - Never invent preferences, values, or experiences not documented in the background.\n\
+- Reframe preferences around the underlying need, not the surface symptom. 'consistent leadership' → 'clear direction'; 'no micromanagement' → 'autonomy to execute'; 'flat hierarchy' → 'direct access to decision-makers'. This makes answers tactful and positive in any company context.\n\
 - Solve: all content on the same line as 'Solve:'. Each preference MUST begin with [1-2 word keyword] immediately before its first sentence. No space between ] and first word.\n\
-- Solve: each preference follows this exact 3-step sequence — (A) [keyword] + what the candidate looks for; (B) 'I [verb] [approach] because [why]'; (C) 'So if [company/team has X], I [would/can do Y], which would [outcome].' DO NOT skip step C.\n\
+- Solve: each preference follows this exact 3-step sequence — (A) [keyword] + what conditions help the candidate contribute; (B) 'I [verb] [approach] because [why]'; (C) 'So if [company/team has X or does Y], I [would/can do Z], which would [outcome].' DO NOT skip step C. Frame (C) as an open invitation.\n\
 - Solve: preference 2 onward: the (A) sentence MUST start with 'Beyond that,' or 'I also find that' — but these words come AFTER the [keyword] marker. NEVER place them before the [keyword]. e.g. '[keyword]Beyond that, sentence.' not 'Beyond that, [keyword]sentence.' No adjectives or adverbs. No invented details.\n\
 - Close: references the employer\\'s specific environment or challenge from the system prompt.\n\
 - Always use 'I' — never 'we' or 'our'.",

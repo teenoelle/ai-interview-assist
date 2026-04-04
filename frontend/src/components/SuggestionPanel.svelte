@@ -1578,7 +1578,7 @@
   }
   .tp-strat-block.tp-strat-open { border-color: #1e4a2a; }
   .tp-strat-toggle {
-    display: flex; align-items: center; gap: 0.4rem;
+    display: flex; align-items: flex-start; gap: 0.4rem;
     padding: 0.3rem 0.5rem;
     background: none; border: none; cursor: pointer; text-align: left;
   }
@@ -1586,7 +1586,8 @@
   .tp-strat-kw {
     font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
     letter-spacing: 0.06em; color: #4ade80; background: #14532d;
-    padding: 0.05rem 0.35rem; border-radius: 0.2rem; flex-shrink: 0;
+    padding: 0.05rem 0.35rem; border-radius: 0.2rem;
+    white-space: normal; word-break: break-word; flex-shrink: 1; min-width: 0;
   }
   .tp-strat-preview {
     flex: 1; font-size: var(--fs-lg); color: #94a3b8;

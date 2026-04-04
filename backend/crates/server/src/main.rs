@@ -10,7 +10,8 @@ use axum::{
 };
 use tower_http::{cors::CorsLayer, services::ServeDir};
 use axum::extract::DefaultBodyLimit;
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_appender::non_blocking::WorkerGuard;
 use common::config::Config;
 use common::messages::WsEvent;
 use common::rate_limiter::RateLimiter;
@@ -91,17 +92,36 @@ async fn wait_for_whisper(url: &str) {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::from_default_env()
-                .add_directive("server=debug".parse()?)
-                .add_directive("suggestion=info".parse()?),
-        )
+    // Write logs to both stdout and backend/logs/server.log (created relative to the exe's dir).
+    let log_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("logs")))
+        .unwrap_or_else(|| std::path::PathBuf::from("logs"));
+    std::fs::create_dir_all(&log_dir).ok();
+    let file_appender = tracing_appender::rolling::never(&log_dir, "server.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    // Keep _guard alive for the duration of main so the background writer flushes on exit.
+    let _log_guard: WorkerGuard = _guard;
+
+    let timer = tracing_subscriber::fmt::time::LocalTime::new(
+        time::macros::format_description!("[year]-[month]-[day] [hour]:[minute]:[second]"),
+    );
+    let env_filter = EnvFilter::from_default_env()
+        .add_directive("server=debug".parse()?)
+        .add_directive("suggestion=info".parse()?);
+    let file_layer = tracing_subscriber::fmt::layer()
         .with_ansi(false)
-        .with_timer(tracing_subscriber::fmt::time::LocalTime::new(
-            time::macros::format_description!("[year]-[month]-[day] [hour]:[minute]:[second]"),
-        ))
+        .with_timer(timer.clone())
         .compact()
+        .with_writer(non_blocking);
+    let stdout_layer = tracing_subscriber::fmt::layer()
+        .with_ansi(false)
+        .with_timer(timer)
+        .compact();
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(file_layer)
+        .with(stdout_layer)
         .init();
 
     let config = Config::from_env()?;

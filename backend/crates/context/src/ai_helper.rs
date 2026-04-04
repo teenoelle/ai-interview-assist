@@ -785,11 +785,11 @@ COUNTER: [Offer came in below expectations. Name the gap calmly as something to 
     let direct_prompt = format!(
         "Generate one salary negotiation line for when the interviewer insists on a number.\n\
 Tone: confident and collaborative.\n\n\
-CALIBRATION:\n\
-- Use the candidate's ACTUAL experience level from the CV — do not anchor to the role ceiling.\n\
-- Infer company stage (startup / scale-up / enterprise) from JD + company info and adjust range.\n\
-- If the JD lists a salary range or band, use that as the anchor.\n\
-- Output a REAL estimated range with actual numbers — no placeholders like X, Y, or [X]. Use correct currency and period for the location (e.g. £45,000–£55,000 per year; ₪22,000–₪26,000 per month).\n\n\
+CALIBRATION RULES (follow in order):\n\
+1. SENIORITY: Count years of relevant experience from the candidate background. < 2 yrs = junior · 2–5 yrs = mid · 5+ yrs = senior. Pick ONLY that one tier from the market range table — do NOT blend tiers or anchor at the top of a higher tier.\n\
+2. COMPANY TYPE: Agencies, SMEs, and non-tech companies pay 20–30% less than pure-tech firms for equivalent roles. Adjust down if the company is an agency or marketing firm.\n\
+3. JD BAND: If the JD lists a salary range or band, use that as the primary anchor and ignore the market table.\n\
+4. OUTPUT: A narrow 2-number range (width ≤ ₪5,000 / €2,000 / £3,000). No placeholders — real currency + real numbers only.\n\n\
 {}{}{}{}\
 Output ONLY this single line, nothing before or after it:\n\
 DIRECT: [Warm acknowledgement. Then: 'Based on my research and the scope of this role, I'd expect something around [REAL RANGE].' Then invite dialogue on the full package. 2-3 sentences total.]",

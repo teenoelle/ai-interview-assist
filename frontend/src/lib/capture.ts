@@ -90,32 +90,7 @@ export class MediaCapture {
       console.warn('Face detection unavailable:', e);
       this.faceDetector = null;
     });
-    // Start app screen recording (second getDisplayMedia — preferCurrentTab pre-selects this tab in Chrome)
-    // Silently skipped if user cancels or browser doesn't support it
-    try {
-      this.screenRecordStream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: true,
-        preferCurrentTab: true,
-      } as DisplayMediaStreamOptions);
-      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-        ? 'video/webm;codecs=vp9'
-        : 'video/webm';
-      this.screenChunks = [];
-      this.screenRecorder = new MediaRecorder(this.screenRecordStream, { mimeType });
-      this.screenRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) this.screenChunks.push(e.data);
-      };
-      this.screenRecorder.onstop = () => {
-        const blob = new Blob(this.screenChunks, { type: mimeType });
-        this._recordingCallback?.(URL.createObjectURL(blob));
-        this.screenRecordStream?.getTracks().forEach((t) => t.stop());
-        this.screenRecordStream = null;
-      };
-      this.screenRecorder.start(5000);
-    } catch {
-      console.info('App screen recording not started (cancelled or unsupported).');
-    }
+    // Screen recording is opt-in — call startScreenRecording() explicitly if needed.
 
     // Notify caller with both streams for display
     if (this._streamsCallback) {
@@ -204,6 +179,29 @@ export class MediaCapture {
   /** Enable or disable sending video frames to the backend (saves API credits). */
   public setSentimentEnabled(enabled: boolean) {
     this._sentimentEnabled = enabled;
+  }
+
+  /** Start opt-in screen recording of this tab. Triggers a second getDisplayMedia prompt. */
+  public async startScreenRecording(): Promise<void> {
+    if (this.screenRecorder) return; // already recording
+    try {
+      this.screenRecordStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true, audio: true, preferCurrentTab: true,
+      } as DisplayMediaStreamOptions);
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+      this.screenChunks = [];
+      this.screenRecorder = new MediaRecorder(this.screenRecordStream, { mimeType });
+      this.screenRecorder.ondataavailable = (e) => { if (e.data.size > 0) this.screenChunks.push(e.data); };
+      this.screenRecorder.onstop = () => {
+        const blob = new Blob(this.screenChunks, { type: mimeType });
+        this._recordingCallback?.(URL.createObjectURL(blob));
+        this.screenRecordStream?.getTracks().forEach((t) => t.stop());
+        this.screenRecordStream = null;
+      };
+      this.screenRecorder.start(5000);
+    } catch {
+      console.info('Screen recording not started (cancelled or unsupported).');
+    }
   }
 
   /** Trigger an immediate sentiment frame capture (e.g. when interviewer starts talking). */

@@ -2690,6 +2690,8 @@
   .interview-layout.capturing .interview-header { padding: 0.2rem 1rem; }
   .interview-layout.capturing .shortcuts-hint { display: none; }
   .interview-layout.capturing .interview-header h1 { font-size: var(--fs-base); }
+  .interview-layout.capturing .rate-label { display: none; }
+  .interview-layout.capturing .voice-test-inline-btn { display: none; }
   .header-back-btn { background: none; border: none; color: #60a5fa; font-size: var(--fs-base); font-weight: 600; cursor: pointer; padding: 0 0.5rem 0 0; white-space: nowrap; }
   .header-back-btn:hover { color: #93c5fd; }
   .interview-header h1 {
@@ -2697,7 +2699,7 @@
     background: linear-gradient(135deg, #60a5fa, #a78bfa);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   }
-  .header-right { display: flex; align-items: center; gap: 0.75rem; }
+  .header-right { display: flex; align-items: center; gap: 0.75rem; overflow: hidden; min-width: 0; }
   .shortcuts-hint { font-size: var(--fs-sm); color: #334155; white-space: nowrap; }
   .history-btn {
     padding: 0.3rem 0.8rem; background: transparent;
@@ -2828,6 +2830,10 @@
     padding: 0.15rem 0.3rem;
     cursor: pointer;
     height: 1.6rem;
+    max-width: 9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .font-select:hover { border-color: #334155; color: #cbd5e1; }
 
@@ -2875,7 +2881,7 @@
   .status-banner { padding: 0.2rem 1rem; background: #1e3a5f; color: #93c5fd; font-size: var(--fs-base); flex-shrink: 0; }
 
   /* Header title + WS dot */
-  .header-title-row { display: flex; align-items: center; gap: 0.4rem; }
+  .header-title-row { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
   .ws-header-dot {
     font-size: var(--fs-xs); color: #334155; flex-shrink: 0;
     font-variant-numeric: tabular-nums; cursor: default;

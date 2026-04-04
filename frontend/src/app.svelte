@@ -2413,6 +2413,12 @@
               <button class="focus-fs-btn" onclick={() => focusFsAdj(-10)}>−</button>
               <span class="focus-fs-val">{focusCardFs}%</span>
               <button class="focus-fs-btn" onclick={() => focusFsAdj(+10)}>+</button>
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <select class="focus-font-select" bind:value={appFont} onmousedown={(e) => e.stopPropagation()} title="Font">
+                {#each FONTS as f}
+                  <option value={f.id}>{f.label}</option>
+                {/each}
+              </select>
             </div>
           </div>
           <div class="focus-panel-wrap" style="zoom:{focusCardFs/100}">
@@ -2693,7 +2699,7 @@
   }
   /* Shrink header when capturing so the sharing bar doesn't eat into content area */
   .interview-layout.capturing .interview-header { padding: 0.2rem 1rem; }
-  .interview-layout.capturing .shortcuts-hint { display: none; }
+  .interview-layout.capturing .shortcuts-hint { font-size: var(--fs-xs); }
   .interview-layout.capturing .interview-header h1 { font-size: var(--fs-base); }
   .header-back-btn { background: none; border: none; color: #60a5fa; font-size: var(--fs-base); font-weight: 600; cursor: pointer; padding: 0 0.5rem 0 0; white-space: nowrap; }
   .header-back-btn:hover { color: #93c5fd; }
@@ -3659,6 +3665,7 @@
     position: fixed; inset: 0; background: rgba(0,0,0,0.93);
     z-index: 1000; display: flex; flex-direction: column;
     align-items: center; padding: 1.5rem 2rem 2rem; cursor: pointer;
+    overflow-y: auto;
     gap: 0.75rem; overflow-y: auto;
   }
   .focus-video-wrap {
@@ -3675,7 +3682,7 @@
     display: flex; flex-direction: column; gap: 0; max-width: 95vw;
     flex-shrink: 0; overflow: hidden;
   }
-  .focus-panel-wrap { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow-y: auto; }
+  .focus-panel-wrap { display: flex; flex-direction: column; }
   .focus-drag-bar {
     display: flex; align-items: center; justify-content: space-between;
     padding: 0.4rem 0; margin: 0 -2rem; padding: 0.4rem 0.75rem;
@@ -3684,7 +3691,13 @@
   }
   .focus-drag-bar:active { cursor: grabbing; }
   .focus-drag-dots { color: #1e3a5f; font-size: 1.1rem; letter-spacing: 0.15em; user-select: none; }
-  .focus-fs-btns { display: flex; align-items: center; gap: 0.3rem; }
+  .focus-fs-btns { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
+  .focus-font-select {
+    background: #07101e; color: #475569; border: 1px solid #1e3a5f;
+    border-radius: 0.25rem; font-size: 0.65rem; padding: 0.1rem 0.2rem;
+    cursor: pointer; height: 1.4rem; max-width: 6rem;
+  }
+  .focus-font-select:hover { border-color: #60a5fa; color: #94a3b8; }
   .focus-fs-btn {
     background: none; border: 1px solid #1e3a5f; color: #475569;
     width: 1.4rem; height: 1.4rem; border-radius: 0.25rem;

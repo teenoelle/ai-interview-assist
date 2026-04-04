@@ -717,21 +717,39 @@ pub async fn extract_jd_location(job_description: &str, cfg: &AiConfig<'_>) -> S
 }
 
 pub async fn generate_salary_tactics(role_context: &str, location: &str, jd_snippet: &str, candidate_context: &str, company_info: &str, cfg: &AiConfig<'_>) -> SalaryTactics {
-    // Determine salary period from location heuristic so the LLM gets an explicit instruction,
-    // not a vague example that small models misapply.
+    // Determine salary period AND market anchor so the LLM has a realistic reference range.
+    // Small models hallucinate without a concrete anchor — these figures are conservative midpoints.
     let (period_label, period_instruction) = if location.is_empty() {
-        ("per year", "Express the range as an annual figure.")
+        ("per year".to_string(), "Express the range as an annual figure. Typical mid-level range: $70,000–$100,000 per year. Adjust for seniority and company stage.".to_string())
     } else {
         let loc = location.to_lowercase();
-        let monthly_markets = ["israel", "netherlands", "germany", "france", "spain", "italy",
-            "portugal", "belgium", "switzerland", "austria", "poland", "czech", "hungary",
-            "romania", "bulgaria", "croatia", "slovakia", "sweden", "norway", "denmark",
-            "finland", "japan", "korea", "china", "brazil", "argentina", "mexico",
-            "middle east", "dubai", "uae", "qatar", "saudi"];
-        if monthly_markets.iter().any(|m| loc.contains(m)) {
-            ("per month", "CRITICAL: This location uses MONTHLY salaries. Output a MONTHLY figure (e.g. ₪22,000–₪26,000 per month). Do NOT output an annual figure.")
+        // Market-specific anchors: (match string, period, instruction with realistic range)
+        let market_anchors: &[(&str, &str, &str)] = &[
+            ("israel",      "per month", "CRITICAL: MONTHLY salaries. Typical ranges (ILS/month): junior ₪15,000–₪20,000 · mid ₪20,000–₪35,000 · senior ₪30,000–₪50,000. Do NOT output an annual figure or exceed these realistic ceilings."),
+            ("tel aviv",    "per month", "CRITICAL: MONTHLY salaries. Typical ranges (ILS/month): junior ₪15,000–₪20,000 · mid ₪22,000–₪38,000 · senior ₪35,000–₪55,000 (tech premium). Do NOT output an annual figure."),
+            ("netherlands", "per month", "CRITICAL: MONTHLY salaries. Typical ranges (EUR/month): junior €2,500–€3,500 · mid €3,500–€5,500 · senior €5,000–€8,000. Do NOT output an annual figure."),
+            ("germany",     "per month", "CRITICAL: MONTHLY salaries. Typical ranges (EUR/month): junior €2,800–€3,800 · mid €3,800–€5,500 · senior €5,000–€7,500. Do NOT output an annual figure."),
+            ("france",      "per month", "CRITICAL: MONTHLY salaries. Typical ranges (EUR/month): junior €2,300–€3,200 · mid €3,200–€4,800 · senior €4,500–€6,500. Do NOT output an annual figure."),
+            ("spain",       "per month", "CRITICAL: MONTHLY salaries. Typical ranges (EUR/month): junior €1,800–€2,500 · mid €2,500–€3,800 · senior €3,500–€5,500. Do NOT output an annual figure."),
+            ("dubai",       "per month", "CRITICAL: MONTHLY salaries (tax-free). Typical ranges (AED/month): junior AED 8,000–12,000 · mid AED 12,000–22,000 · senior AED 20,000–35,000. Do NOT output an annual figure."),
+            ("uae",         "per month", "CRITICAL: MONTHLY salaries (tax-free). Typical ranges (AED/month): junior AED 8,000–12,000 · mid AED 12,000–22,000 · senior AED 20,000–35,000. Do NOT output an annual figure."),
+            ("qatar",       "per month", "CRITICAL: MONTHLY salaries (tax-free). Typical ranges (QAR/month): junior QAR 8,000–14,000 · mid QAR 14,000–25,000 · senior QAR 22,000–40,000. Do NOT output an annual figure."),
+            ("saudi",       "per month", "CRITICAL: MONTHLY salaries. Typical ranges (SAR/month): junior SAR 8,000–14,000 · mid SAR 14,000–25,000 · senior SAR 22,000–38,000. Do NOT output an annual figure."),
+            ("japan",       "per month", "CRITICAL: MONTHLY salaries. Typical ranges (JPY/month): junior ¥250,000–¥350,000 · mid ¥350,000–¥550,000 · senior ¥500,000–¥800,000. Do NOT output an annual figure."),
+            ("australia",   "per year",  "CRITICAL: ANNUAL salaries. Typical ranges (AUD/year): junior A$55,000–A$75,000 · mid A$75,000–A$110,000 · senior A$100,000–A$150,000. Do NOT output a monthly figure."),
+            ("canada",      "per year",  "CRITICAL: ANNUAL salaries. Typical ranges (CAD/year): junior C$50,000–C$70,000 · mid C$70,000–C$100,000 · senior C$95,000–C$140,000. Do NOT output a monthly figure."),
+            ("united kingdom", "per year", "CRITICAL: ANNUAL salaries. Typical ranges (GBP/year): junior £28,000–£38,000 · mid £38,000–£60,000 · senior £55,000–£85,000. Do NOT output a monthly figure."),
+            ("london",      "per year",  "CRITICAL: ANNUAL salaries. Typical ranges (GBP/year): junior £32,000–£45,000 · mid £45,000–£70,000 · senior £65,000–£100,000 (London premium). Do NOT output a monthly figure."),
+        ];
+        let monthly_fallback_markets = ["switzerland", "austria", "poland", "czech", "hungary",
+            "romania", "sweden", "norway", "denmark", "finland", "korea", "china",
+            "brazil", "argentina", "mexico", "belgium", "portugal", "croatia", "slovakia", "italy"];
+        if let Some((_, period, instr)) = market_anchors.iter().find(|(m, _, _)| loc.contains(m)) {
+            (period.to_string(), instr.to_string())
+        } else if monthly_fallback_markets.iter().any(|m| loc.contains(m)) {
+            ("per month".to_string(), "CRITICAL: This location uses MONTHLY salaries. Output a realistic MONTHLY figure in local currency. Do NOT output an annual figure.".to_string())
         } else {
-            ("per year", "CRITICAL: This location uses ANNUAL salaries. Output an ANNUAL figure (e.g. £45,000–£55,000 per year). Do NOT output a monthly figure.")
+            ("per year".to_string(), "CRITICAL: This location uses ANNUAL salaries. Output a realistic ANNUAL figure in local currency (e.g. £45,000–£55,000 per year). Do NOT output a monthly figure.".to_string())
         }
     };
     let location_line = if location.is_empty() {

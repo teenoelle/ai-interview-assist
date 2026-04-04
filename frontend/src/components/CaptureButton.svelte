@@ -12,7 +12,8 @@
   }>();
 
   let capture: MediaCapture | null = $state(null);
-  let active = $state(false);
+  let starting = $state(false); // true only during the async start() call
+  let active = $derived(capture !== null || starting);
   let paused = $state(false);
   let error = $state('');
   let micLevel = $state(0);
@@ -22,32 +23,31 @@
   $effect(() => {
     if (initialCapture && !capture) {
       capture = initialCapture;
-      active = true;
     }
   });
 
   async function toggle() {
     error = '';
-    if (active && capture) {
+    if (capture) {
       capture.stop();
       capture = null;
-      active = false;
       paused = false;
       micLevel = 0;
       systemLevel = 0;
       onCapture(false);
-    } else {
+    } else if (!starting) {
+      starting = true;
       try {
-        capture = new MediaCapture();
-        capture.onLevel((mic, sys) => { micLevel = mic; systemLevel = sys; onLevelProp?.(mic, sys); });
-        if (onStreams) capture.onStreamsReady(onStreams);
-        if (onRecording) capture.onRecording(onRecording);
-        await capture.start();
-        active = true;
+        const cap = new MediaCapture();
+        cap.onLevel((mic, sys) => { micLevel = mic; systemLevel = sys; onLevelProp?.(mic, sys); });
+        if (onStreams) cap.onStreamsReady(onStreams);
+        if (onRecording) cap.onRecording(onRecording);
+        await cap.start();
+        capture = cap;
         onCapture(true);
-        onReady?.(capture);
+        onReady?.(cap);
         // Warn if no system audio was captured (user didn't tick the checkbox)
-        if (!capture.hasSystemAudio) {
+        if (!cap.hasSystemAudio) {
           error = 'No system audio captured — interviewer audio won\'t be transcribed. Stop, reshare your screen, and tick "Share system audio" in the browser dialog. For Zoom/Teams desktop, share your Entire Screen.';
         }
       } catch (e: unknown) {
@@ -59,7 +59,8 @@
         } else {
           error = msg;
         }
-        capture = null;
+      } finally {
+        starting = false;
       }
     }
   }
@@ -76,7 +77,7 @@
   <div class="controls">
     <button onclick={toggle} class="capture-btn" class:active>
       <span class="dot"></span>
-      {active ? 'Stop' : 'Capture Meeting'}
+      {starting ? 'Starting…' : capture ? 'Stop' : 'Capture Meeting'}
     </button>
     {#if active}
       <button onclick={togglePause} class="pause-btn" class:paused title="Pause/resume audio (P)">

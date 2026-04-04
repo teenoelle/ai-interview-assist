@@ -99,7 +99,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_ansi(false)
         .with_timer(tracing_subscriber::fmt::time::LocalTime::new(
-            time::macros::format_description!("[hour]:[minute]:[second]"),
+            time::macros::format_description!("[year]-[month]-[day] [hour]:[minute]:[second]"),
         ))
         .compact()
         .init();

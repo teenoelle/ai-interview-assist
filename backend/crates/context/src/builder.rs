@@ -72,7 +72,7 @@ pub fn build_system_prompt(
 
     if !payload.extra_experience.is_empty() {
         prompt.push_str("## Early Career & Additional Context\n");
-        prompt.push_str("This section contains early career history, pre-CV roles, volunteering, education context, or other background the candidate wants to draw on — especially for career story and throughline questions.\n");
+        prompt.push_str("This section contains early career history, pre-CV roles, volunteering, education context, or other background the candidate wants to draw on. IMPORTANT: this section also contains the candidate's explicitly stated preferences — what they look for in a company, manager, team, or role (e.g. culture, growth, management style, values). Use these stated preferences directly when answering values/preferences questions.\n");
         prompt.push_str(&payload.extra_experience);
         prompt.push_str("\n\n");
     }

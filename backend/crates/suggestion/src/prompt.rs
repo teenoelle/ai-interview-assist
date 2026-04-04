@@ -629,8 +629,8 @@ CRITICAL: This question asks what environment helps the candidate do their best 
 Draw ONLY from themes explicitly stated in the candidate's uploaded experience notes, CV, and LinkedIn in the system prompt. \
 Do NOT invent preferences that are not in the background. Do NOT substitute generic preferences like 'ownership' or 'direction' unless the background specifically mentions them. \
 Output ONLY the exact labeled lines below. No preamble.\n\n\
-STEP 1 — IDENTIFY: Before writing, mentally list the 3 preference themes that appear most clearly in the candidate's uploaded background notes. \
-Use the actual words and themes the candidate used — e.g. if they wrote 'growth', 'innovation', 'collaborative', use those, not substitutes.\n\n\
+STEP 1 — IDENTIFY: Read the '## Early Career & Additional Context' section in the system prompt. That section contains the candidate's explicitly stated preferences. \
+List the 3 preference themes that appear most clearly there — use the candidate's actual words (e.g. if they wrote 'growth', 'innovation', 'collaborative environment', use those exact themes, not substitutes like 'ownership' or 'direction').\n\n\
 STEP 2 — REFRAME: Translate each identified preference into a contribution condition — how that environment helps the candidate deliver their best work. \
 NEVER quote raw phrases like 'consistent leadership' or 'stable leadership' — reframe as 'clear direction from leadership'. \
 'no micromanagement' → 'autonomy to execute'; 'flat hierarchy' → 'direct access to decision-makers'; 'work-life balance' → 'sustainable pace'. \

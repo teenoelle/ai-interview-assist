@@ -40,6 +40,7 @@ async fn transcribe_with_fallback(
         match groq::transcribe_openai_asr(&endpoint, "", whisper_model, pcm).await {
             Ok(text) => {
                 inc(call_counts, "Whisper (local)");
+                tracing::info!("transcription ✓ Whisper (local) — {} chars", text.len());
                 let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Whisper (local)".to_string(), local: true });
                 return Ok(text);
             }
@@ -52,6 +53,7 @@ async fn transcribe_with_fallback(
         match groq::transcribe(key, pcm).await {
             Ok(text) => {
                 inc(call_counts, "Groq Whisper");
+                tracing::info!("transcription ✓ Groq Whisper — {} chars", text.len());
                 let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Groq Whisper".to_string(), local: false });
                 return Ok(text);
             }
@@ -67,6 +69,7 @@ async fn transcribe_with_fallback(
         match groq::transcribe(key, pcm).await {
             Ok(text) => {
                 inc(call_counts, "Groq Whisper #2");
+                tracing::info!("transcription ✓ Groq Whisper #2 — {} chars", text.len());
                 let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Groq Whisper #2".to_string(), local: false });
                 return Ok(text);
             }
@@ -88,6 +91,7 @@ async fn transcribe_with_fallback(
     match result {
         Ok(text) => {
             inc(call_counts, "Gemini Transcription");
+            tracing::info!("transcription ✓ Gemini — {} chars", text.len());
             let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Gemini".to_string(), local: false });
             return Ok(text);
         }

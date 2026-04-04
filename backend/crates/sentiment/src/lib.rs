@@ -32,6 +32,7 @@ pub async fn run_agent(
                     if let Some(key) = &akey {
                         match claude_vision::analyze_sentiment(key, &jpeg_bytes).await {
                             Ok(result) => {
+                                tracing::info!("sentiment ✓ Claude");
                                 let _ = etx.send(WsEvent::Sentiment { emotion: result.emotion, reason: result.reason, coaching: result.coaching, coaching_why: result.coaching_why });
                                 let _ = etx.send(WsEvent::ProviderUsed { service: "sentiment".to_string(), provider: "Claude".to_string(), local: false });
                                 // Broadcast rate limit info so the frontend can display it
@@ -62,6 +63,7 @@ pub async fn run_agent(
                     // 2. Ollama vision (llava) — local free fallback, silently skip if not running
                     match ollama_vision::analyze_sentiment(&ourl, &ovmodel, &jpeg_bytes).await {
                         Ok(result) => {
+                            tracing::info!("sentiment ✓ Ollama ({})", ovmodel);
                             let _ = etx.send(WsEvent::Sentiment { emotion: result.emotion, reason: result.reason, coaching: result.coaching, coaching_why: result.coaching_why });
                             let _ = etx.send(WsEvent::ProviderUsed { service: "sentiment".to_string(), provider: format!("Ollama ({})", ovmodel), local: true });
                             return;
@@ -74,6 +76,7 @@ pub async fn run_agent(
                     rl.acquire().await;
                     match gemini_vision::analyze_sentiment(&gkey, &jpeg_bytes).await {
                         Ok(result) => {
+                            tracing::info!("sentiment ✓ Gemini Vision");
                             let _ = etx.send(WsEvent::Sentiment { emotion: result.emotion, reason: result.reason, coaching: result.coaching, coaching_why: result.coaching_why });
                             let _ = etx.send(WsEvent::ProviderUsed { service: "sentiment".to_string(), provider: "Gemini Vision".to_string(), local: false });
                         }

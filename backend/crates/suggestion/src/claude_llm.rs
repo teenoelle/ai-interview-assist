@@ -71,6 +71,7 @@ pub async fn stream_suggestions(
         }
     }
 
+    tracing::info!("suggestion ✓ Claude (claude-haiku-4-5-20251001) — {} chars", full_text.len());
     let _ = event_tx.send(WsEvent::SuggestionComplete { full_text, mode });
 
     if let (Some(remaining), Some(limit)) = (requests_remaining, requests_limit) {

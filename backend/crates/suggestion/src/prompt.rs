@@ -635,13 +635,13 @@ NEVER quote or echo the raw phrasing from the candidate's background notes. Tran
 Never imply a gap or deficiency in the company. Always leave room for the company to meet the need in their own way.\n\n\
 Acknowledge: <One sentence naming the underlying fit dimension the interviewer is probing — e.g. leadership style, culture, growth environment. \
 Opens with 'It sounds like', 'From your question, the priority seems to be', or 'I can see the focus here is on'. Max 20 words. Never starts with 'I'.>\n\
-Solve: <MUST contain EXACTLY 3 preferences — no more, no fewer. All on this same line. Short sentences. Max 10 words per sentence. Each preference drawn from the candidate's uploaded background. \
+Solve: <All on this same line. Short sentences. Max 10 words per sentence. Output 3 concrete preferences drawn from the candidate's uploaded background. \
 Reframe each preference as what helps the candidate contribute, not what the company must provide. e.g. instead of 'I need consistent leadership', say 'I do my best work when direction is clear'. \
 Each preference MUST begin with a [1-2 word keyword] immediately before its first sentence — no space between ] and the first word. The keyword is a short noun phrase, never a transition phrase like 'Beyond that'. \
 Each preference follows this exact 3-part pattern: (A) [keyword] + one sentence on what conditions help the candidate contribute most. \
 (B) 'I [verb] [approach] because [why this condition matters, grounded in a real experience or pattern from their background].' \
 (C) 'So if [this company/team has X or does Y], I [would/can do Z], which would [positive outcome for both].' — frame (C) as an open invitation, not a test. \
-Preference 2: the (A) sentence opens with 'Beyond that,' AFTER the [keyword]. Preference 3: the (A) sentence opens with 'I also find that' AFTER the [keyword]. NEVER place these phrases before the [keyword]. No adjectives. No adverbs. No invented details.>\n\
+Preferences 2 and 3: the (A) sentence opens with 'Beyond that,' or 'I also find that' — placed AFTER the [keyword] marker, not before it. e.g. '[ownership]Beyond that, clear ownership reduces decision lag.' No adjectives. No adverbs. No invented details.>\n\
 Bridge: <One sentence connecting the candidate's preferences to this specific employer. 5-8 words. Starts with 'I\\'d' or 'I'. Never a question.>\n\
 Close: <One sentence. States why this employer or team specifically fits what the candidate looks for, drawn from the company context in the system prompt. \
 Starts with 'That\\'s why', 'This is why', or 'I\\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
@@ -656,9 +656,9 @@ Rules:\n\
 - Draw ONLY from the candidate background in the system prompt — especially the 'Early Career & Additional Context' and 'Candidate CV' sections which contain stated preferences.\n\
 - Never invent preferences, values, or experiences not documented in the background.\n\
 - Reframe preferences around the underlying need, not the surface symptom. NEVER use the raw phrasing from the candidate's background notes — always translate it. Examples: 'consistent leadership' or 'stable leadership' or 'leadership stability' → 'clear direction from leadership'; 'no micromanagement' → 'autonomy to execute'; 'flat hierarchy' → 'direct access to decision-makers'; 'good culture' → 'shared standards'; 'work-life balance' → 'sustainable pace'. This makes answers tactful and positive in any company context.\n\
-- Solve: MUST contain exactly 3 preferences. All content on the same line as 'Solve:'. Each preference MUST begin with [1-2 word keyword] immediately before its first sentence. No space between ] and first word.\n\
+- Solve: output 3 preferences. All content on the same line as 'Solve:'. Each preference MUST begin with [1-2 word keyword] immediately before its first sentence. No space between ] and first word.\n\
 - Solve: each preference follows this exact 3-step sequence — (A) [keyword] + what conditions help the candidate contribute; (B) 'I [verb] [approach] because [why]'; (C) 'So if [company/team has X or does Y], I [would/can do Z], which would [outcome].' DO NOT skip step C. Frame (C) as an open invitation.\n\
-- Solve: preference 2 MUST start with '[keyword]Beyond that,'. Preference 3 MUST start with '[keyword]I also find that'. These phrases come AFTER the [keyword] — NEVER before. e.g. '[keyword]Beyond that, sentence.' not 'Beyond that, [keyword]sentence.' No adjectives or adverbs. No invented details.\n\
+- Solve: preferences 2 and 3: the (A) sentence MUST open with 'Beyond that,' or 'I also find that' — these come AFTER the [keyword]. NEVER before. e.g. '[keyword]Beyond that, sentence.' not 'Beyond that, [keyword]sentence.' No adjectives or adverbs. No invented details.\n\
 - Close: references the employer\\'s specific environment or challenge from the system prompt.\n\
 - Always use 'I' — never 'we' or 'our'.",
         ctx_prefix, question

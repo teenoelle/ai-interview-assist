@@ -25,6 +25,10 @@
     { label: 'Motivation', tag: 'motivation', questions: [
       'Why are you interested in this role?',
       'What draws you to this company?',
+      'Why are you applying for a junior position?',
+      'You seem overqualified — why this role?',
+      'Why are you looking to step back from your current level?',
+      'Your background is strong — why a more entry-level position?',
     ]},
     { label: 'Future', tag: 'future', questions: [
       'Where do you see yourself in five years?',

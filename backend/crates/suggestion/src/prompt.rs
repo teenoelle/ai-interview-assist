@@ -486,6 +486,7 @@ Rules:\n\
 - NEVER name specific companies, clients, or employers — refer by industry only (e.g. 'a retail brand', 'a tech startup').\n\
 - Ask topics: 2-4 word noun phrases naming the specific thing being asked about — e.g. 'team structure', 'success metrics', 'client mix'. Must directly relate to what the interviewer asked. Never a verb phrase. Never vague.\n\
 - Ask questions must probe the specific topic the interviewer raised — not generic role questions. If the recent conversation includes specific words or concerns the interviewer mentioned, prioritise those for Ask topics.\n\
+- LEVEL/FIT MISMATCH: If the interviewer is questioning why the candidate is applying for a more junior, lower-level, or different-channel role (e.g. 'why are you applying for a junior position?', 'you seem overqualified'), treat this as a fit/trade-off question. Role must name the specific skill gap or channel the candidate is deliberately expanding into, framing it as a strategic move — not a step back. Self must name what the candidate gains here that they cannot get elsewhere. Never be defensive. Reframe the level or channel difference as the point, not the problem.\n\
 - No adjectives or adverbs. No 'passionate', 'excited', 'dedicated', 'driven'. Facts and direction only.",
         ctx_prefix, question
     )

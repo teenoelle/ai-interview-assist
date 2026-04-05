@@ -1320,10 +1320,10 @@
           const isFirst = qi === 0;
           const newIdx = suggestions.length;
           if (isFirst) { currentQuestionIdx = newIdx; jumpSignal = { idx: newIdx, key: Date.now() }; }
-          const isCompound = isFirst && !!secondaryTag;
           const qTag = tagQuestion(q);
           const isSalary = isFirst && qTag === 'salary';
           const isClosingQ = isFirst && qTag === 'closing';
+          const isCompound = isFirst && !!secondaryTag && qTag !== 'fit';
           suggestions = [...suggestions, {
             question: q,
             suggestion: isSalary

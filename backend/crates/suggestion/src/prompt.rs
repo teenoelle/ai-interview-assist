@@ -352,6 +352,11 @@ pub fn classify_question(question: &str) -> (QuestionType, Option<QuestionType>)
         }
     }
 
+    // Fit questions never compound — they have their own dedicated structure
+    if matches!(primary, QuestionType::Fit) {
+        return (primary, None);
+    }
+
     (primary, secondary)
 }
 

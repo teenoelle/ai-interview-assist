@@ -2045,16 +2045,6 @@
                       ></video>
                     </div>
                     <div class="selfview-label">You</div>
-                    {#if capturing && paceReading.status !== 'idle'}
-                      {@const paceColor = paceReading.status === 'good' ? '#4ade80' : paceReading.status === 'fast' ? '#f87171' : '#f59e0b'}
-                      {@const pacePct = Math.min(100, (paceReading.wordsPerMinute / 220) * 100)}
-                      <div class="selfview-pace-bar" title={paceReading.tip ?? ''}>
-                        <div class="selfview-pace-track">
-                          <div class="selfview-pace-fill" style="width:{pacePct}%; background:{paceColor};"></div>
-                        </div>
-                        <span class="selfview-pace-wpm" style="color:{paceColor}">{paceReading.wordsPerMinute} wpm</span>
-                      </div>
-                    {/if}
                     <!-- svelte-ignore a11y_no_static_element_interactions -->
                     <div class="vid-resize-handle selfview-resize-handle"
                       onpointerdown={selfviewResizeDown}
@@ -2288,11 +2278,6 @@
                 {:else if sid === 'interviewer-profiles'}
                   <InterviewerProfilePanel interviewers={interviewerSummaries} onLoad={fetchInterviewerSummaries} onReload={() => { interviewerSummaries = buildInterviewerStubs(); loadingProfileIndices = []; void fetchInterviewerSummaries(); }} loading={loadingSummaries} onLoadProfile={fetchInterviewerSummaryByIndex} loadingProfileIndices={loadingProfileIndices} />
                 {:else if sid === 'stats'}
-                  {#if capturing}
-                    <div class="stats-audio-meter">
-                      <AudioMeter micLevel={captureMicLevel} systemLevel={captureSystemLevel} capturing={capturing} />
-                    </div>
-                  {/if}
                   <div class="side-stats">
                     <div class="side-stat" title="Time since you started answering. Green = under 30s (concise), amber = 30–60s (detailed), red = over 60s (wrap up). Aim for 30–90 seconds per answer.">
                       <span class="side-label">Answer</span>
@@ -2301,13 +2286,6 @@
                     <div class="side-stat" title="Your share of speaking time vs the interviewer. Aim for 40–60% — enough to show depth, while leaving room for the interviewer to lead.">
                       <span class="side-label">You / Them</span>
                       <span class="side-value" style="color: {ratioColor}">{youPct > 0 ? `${youPct}% / ${interviewerPct}%` : '—'}</span>
-                    </div>
-                    <div class="side-stat side-stat-pace" title="Your speaking pace in words per minute">
-                      <EnergyCoachPanel
-                        wpm={paceReading.wordsPerMinute}
-                        status={paceReading.status}
-                        tip={paceReading.tip}
-                      />
                     </div>
                     <div class="side-stat" title="Filler word count — words to avoid">
                       <span class="side-label">Fillers</span>
@@ -2322,7 +2300,19 @@
                         {/each}
                       </div>
                     {/if}
+                    <div class="side-stat side-stat-pace" title="Your speaking pace in words per minute">
+                      <EnergyCoachPanel
+                        wpm={paceReading.wordsPerMinute}
+                        status={paceReading.status}
+                        tip={paceReading.tip}
+                      />
+                    </div>
                   </div>
+                  {#if capturing}
+                    <div class="stats-audio-meter">
+                      <AudioMeter micLevel={captureMicLevel} systemLevel={captureSystemLevel} capturing={capturing} />
+                    </div>
+                  {/if}
                   {#if energySignal || youLog.length > 0 || suggestions.some(s => s.answerFeedback || s.vocalFeedback) || Object.keys(pendingVocalData).length > 0}
                     {@const latestFeedback = suggestions.slice().reverse().find(s => s.answerFeedback || s.vocalFeedback)}
                     <div class="you-log">

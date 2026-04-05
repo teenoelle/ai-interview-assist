@@ -140,8 +140,10 @@ async fn main() -> anyhow::Result<()> {
     let (question_tx, question_rx) = mpsc::channel::<String>(64);
     let (event_tx, _event_rx) = broadcast::channel::<WsEvent>(512);
 
-    let rate_limiter = RateLimiter::new();
-    let suggestion_rl = RateLimiter::new(); // separate bucket — prevents transcription from blocking suggestions
+    let mic_rl        = RateLimiter::new(); // Gemini fallback for mic transcription
+    let system_rl     = RateLimiter::new(); // Gemini fallback for system-audio transcription
+    let sentiment_rl  = RateLimiter::new(); // Gemini/vision sentiment — isolated so it never competes with transcription
+    let suggestion_rl = RateLimiter::new(); // suggestion chain — already separate
     let call_counts = Arc::new(std::sync::Mutex::new(std::collections::HashMap::<String, u64>::new()));
 
     let active = |k: &Option<String>| if k.is_some() { "yes" } else { "no" };
@@ -213,7 +215,7 @@ async fn main() -> anyhow::Result<()> {
         whisper_url: config.whisper_url.clone(),
         whisper_model: config.whisper_model.clone(),
         diarize_url: config.diarize_url.clone(),
-        rate_limiter: rate_limiter.clone(),
+        rate_limiter: suggestion_rl.clone(),
         call_counts: call_counts.clone(),
         piper_binary: config.piper_binary.clone(),
         piper_models_dir: config.piper_models_dir.clone(),
@@ -233,7 +235,7 @@ async fn main() -> anyhow::Result<()> {
         config.groq_api_key_2.clone(),
         config.whisper_url.clone(),
         config.whisper_model.clone(),
-        rate_limiter.clone(),
+        mic_rl,
         Some(call_counts.clone()),
     ));
 
@@ -249,7 +251,7 @@ async fn main() -> anyhow::Result<()> {
         config.whisper_url.clone(),
         config.whisper_model.clone(),
         config.diarize_url.clone(),
-        rate_limiter.clone(),
+        system_rl,
         Some(call_counts.clone()),
     ));
 
@@ -260,7 +262,7 @@ async fn main() -> anyhow::Result<()> {
         config.anthropic_api_key.clone(),
         config.ollama_url.clone(),
         config.ollama_vision_model.clone(),
-        rate_limiter.clone(),
+        sentiment_rl,
     ));
 
     tokio::spawn(suggestion::run_agent(

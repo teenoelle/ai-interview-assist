@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { TranscriptEntry } from '../lib/types';
   import PanelHeader from './PanelHeader.svelte';
+  import { FILLER_RE } from '../lib/filler';
 
   const { entries, onFlipSpeaker, jdKeywords = [] } = $props<{
     entries: TranscriptEntry[];
@@ -20,8 +21,6 @@
     const d = new Date(ms);
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
-
-const FILLER_RE = /\b(um+h?|uh+|er+|hmm+|mhm+|you know|i mean|kind of|sort of|basically|literally|right\?|like,|like )\b/gi;
 
   function wordCount(text: string): number {
     return text.trim().split(/\s+/).filter(Boolean).length;
@@ -48,7 +47,7 @@ const FILLER_RE = /\b(um+h?|uh+|er+|hmm+|mhm+|you know|i mean|kind of|sort of|ba
 
     // Filler word highlighting (You speaker only)
     if (isYou) {
-      html = html.replace(FILLER_RE, '<mark class="filler-hit">$1</mark>');
+      html = html.replace(FILLER_RE, '<mark class="filler-hit">$&</mark>');
     }
 
     return html;

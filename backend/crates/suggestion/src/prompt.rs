@@ -525,29 +525,17 @@ fn build_closing_prompt(ctx_prefix: &str, question: &str) -> String {
 CRITICAL: This is a CLOSING question — the interviewer is asking if you have questions.\n\
 DO NOT output Acknowledge:, Solve:, Bridge:, Answer:, or Close: — those labels do not exist here.\n\
 Output ONLY the --- separator followed by exactly 4 Ask: lines.\n\n\
-INTERVIEWER TYPE — check the Interviewer Profile in your system prompt for their role title, then apply the matching template below:\n\
-  HR / recruiter / talent acquisition / people partner → use these 4 topics:\n\
-    (1) onboarding and ramp-up — how long until someone is fully productive, what the first 90 days look like\n\
-    (2) high-performer traits — what the most successful people in this role or team have in common\n\
-    (3) career growth path — what progression from this role typically looks like, timelines, what opens up\n\
-    (4) day-to-day culture — how the team's values or ways of working show up concretely, not just on paper\n\
-  Hiring manager / team lead / director / VP / engineering / technical / product → use these 4 topics:\n\
-    (1) employer's core challenge — probe the specific business or technical problem named in the system prompt\n\
-    (2) 90-day success definition — what outcomes or deliverables define a strong start in this exact role\n\
-    (3) team decision-making — how the team makes decisions in the relevant domain (process, tooling, priorities)\n\
-    (4) company or team direction — where the team or product is headed, what the biggest opportunity is\n\
-  Role unknown → default to hiring manager template.\n\n\
 ---\n\
-Ask: <2-4 word noun phrase for topic 1 above> | <Question for topic 1 — specific, names a real metric, process, or outcome. Ends with '?'.> | <1 sentence follow-up if asked 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase for topic 2 above> | <Question for topic 2 — specific, names a real metric, process, or outcome. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase for topic 3 above> | <Question for topic 3 — specific, names a real metric, process, or outcome. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase for topic 4 above> | <Question for topic 4 — specific, names a real metric, process, or outcome. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
+Ask: <2-4 word noun phrase — the employer's core challenge, drawn from the system prompt. e.g. 'revenue growth constraint', 'client retention challenge'> | <Question probing the employer's specific business challenge. Names the exact problem from the system prompt. Ends with '?'.> | <1 sentence if asked 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — how success is defined in this role> | <Question about how success is measured — names the specific outcome, metric, or deliverable. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — team structure or way of working> | <Question about how the team works or is structured around the key challenge. Names the specific process, tool, or domain. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — company or team direction> | <Forward-looking question about where the company or team is headed. Names the specific domain or growth area. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
 Rules:\n\
 - Output ONLY the --- separator and then exactly 4 Ask: lines. No other content.\n\
 - All 4 Ask: lines are questions the CANDIDATE asks the INTERVIEWER.\n\
 - Ask topics: 2-4 word noun phrases naming the specific thing being asked about. Never verb phrases. Never vague.\n\
-- Every question names a specific metric, process, tool, domain, or outcome — never 'this', 'it', or vague pronouns.\n\
-- Draw on the employer's challenge and role details from the system prompt — not generic interview questions.\n\
+- Every question names a specific metric, process, tool, or domain from the system prompt — never 'this', 'it', or vague pronouns.\n\
+- Draw on the employer's challenge from the system prompt — not generic interview questions.\n\
 - Never repeat a topic across Ask lines.\n\
 - NEVER name specific clients or companies. Refer by industry only.",
         ctx_prefix, question

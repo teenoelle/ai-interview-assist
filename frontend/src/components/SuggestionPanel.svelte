@@ -37,13 +37,12 @@
     } catch { expandedCues = { ...expandedCues, [cue]: { sentence: cue, loading: false } }; }
   }
 
-  const { suggestions, onClear, teleprompter = false, lockOnNew = false, jumpSignal = null, navSignal = null, cueExpandSignal = null, onPinnedChange, onClosingSectionOpen, salaryTactics = null } = $props<{
+  const { suggestions, onClear, teleprompter = false, lockOnNew = false, jumpSignal = null, cueExpandSignal = null, onPinnedChange, onClosingSectionOpen, salaryTactics = null } = $props<{
     suggestions: SuggestionEntry[];
     onClear: () => void;
     teleprompter?: boolean;
     lockOnNew?: boolean;
     jumpSignal?: { idx: number; key: number } | null;
-    navSignal?: { dir: 'prev' | 'next' | 'latest'; key: number } | null;
     cueExpandSignal?: { cueIdx: number; key: number } | null;
     onPinnedChange?: (pinned: boolean) => void;
     onClosingSectionOpen?: (entryIdx: number, key: string) => void;
@@ -159,18 +158,7 @@
     lastSeenCount = totalCount;
   }
 
-  function navPrev() {
-    const idx = currentIndex;
-    if (idx > 0) jumpTo(idx - 1);
-  }
-
-  function navNext() {
-    const idx = currentIndex;
-    if (idx < totalCount - 1) jumpTo(idx + 1);
-  }
-
   // When lockOnNew=true, freeze on the current question when a new one arrives.
-  // The user must press Down (navLatest) to advance to the new question.
   let lockCount = $state(0);
   $effect(() => {
     const count = suggestions.length;
@@ -182,16 +170,6 @@
         lockCount = count;
       });
     }
-  });
-
-  // React to parent-driven navigation signals (arrow keys from app.svelte)
-  $effect(() => {
-    if (!navSignal) return;
-    untrack(() => {
-      if (navSignal.dir === 'prev') navPrev();
-      else if (navSignal.dir === 'next') navNext();
-      else jumpToLatest();
-    });
   });
 
   function toggleExpand(i: number) {
@@ -814,8 +792,9 @@
           {@const parsed = parseSuggestion(eModeSuggestion, eModeStreaming)}
           {@const bodyCues = parsed.body ? parseCues(parsed.body) : []}
           {@const isLatest = i === suggestions.length - 1}
+          {@const isCurrent = i === currentIndex && !isLatest}
           {@const eAnsType = getAnswerType(parsed, eMode === 'compound' ? undefined : entry.tag)}
-          <div class="entry" class:latest={isLatest}>
+          <div class="entry" class:latest={isLatest} class:current={isCurrent}>
             <div class="question-row">
               <span class="q-num-badge">Q{i + 1}</span>
               <p class="question-text">"{entry.question}"</p>
@@ -1493,6 +1472,7 @@
     gap: 0.3rem; opacity: 0.6; transition: opacity 0.2s;
   }
   .entry.latest { border-left-color: #4ade80; opacity: 1; }
+  .entry.current { border-left-color: #38bdf8; opacity: 1; }
 
   .question-row { display: flex; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap; }
   .q-num-badge {

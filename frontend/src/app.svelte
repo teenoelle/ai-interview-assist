@@ -447,8 +447,8 @@
 
   // Jump signal for SuggestionPanel cross-navigation from QuestionsHistoryPanel
   let jumpSignal = $state<{ idx: number; key: number } | null>(null);
-  // Arrow-key navigation signal for both teleprompter and focus panels
-  let suggestionNavSignal = $state<{ dir: 'prev' | 'next' | 'latest'; key: number } | null>(null);
+  // Index to return to when Left arrow is pressed after a Right-arrow jump to latest
+  let beforeJumpIdx = $state<number | null>(null);
 
   // New question notification
   let suggestionPinned = $state(true);
@@ -1323,12 +1323,13 @@
           const isCompound = isFirst && !!secondaryTag;
           const qTag = tagQuestion(q);
           const isSalary = isFirst && qTag === 'salary';
+          const isClosingQ = isFirst && qTag === 'closing';
           suggestions = [...suggestions, {
             question: q,
             suggestion: isSalary
               ? (salaryTactics?.early_round ?? '')
               : (isFirst ? '' : '(Additional question — will generate suggestion when you navigate here)'),
-            streaming: isFirst && !isCompound && !isSalary,
+            streaming: isFirst && !isCompound && !isSalary && !isClosingQ,
             tag: qTag,
             secondaryTag: isFirst ? secondaryTag : undefined,
             compoundSuggestion: isCompound ? '' : undefined,
@@ -1539,18 +1540,52 @@
         case '1': cueExpandSignal = { cueIdx: 0, key: Date.now() }; break;
         case '2': cueExpandSignal = { cueIdx: 1, key: Date.now() }; break;
         case '3': cueExpandSignal = { cueIdx: 2, key: Date.now() }; break;
-        case 'ArrowLeft':
+        case 'ArrowUp': {
           e.preventDefault();
-          suggestionNavSignal = { dir: 'prev', key: Date.now() };
+          const cur = histViewIdx === -1 ? suggestions.length - 1 : histViewIdx;
+          if (cur > 0) {
+            histViewIdx = cur - 1;
+            jumpSignal = { idx: cur - 1, key: Date.now() };
+            beforeJumpIdx = null;
+          }
           break;
-        case 'ArrowRight':
+        }
+        case 'ArrowDown': {
           e.preventDefault();
-          suggestionNavSignal = { dir: 'next', key: Date.now() };
+          const cur = histViewIdx === -1 ? suggestions.length - 1 : histViewIdx;
+          const next = cur + 1;
+          if (next < suggestions.length) {
+            histViewIdx = next;
+            jumpSignal = { idx: next, key: Date.now() };
+            beforeJumpIdx = null;
+          }
           break;
-        case 'ArrowDown':
+        }
+        case 'ArrowRight': {
           e.preventDefault();
-          suggestionNavSignal = { dir: 'latest', key: Date.now() };
+          if (suggestions.length > 0 && histViewIdx !== -1) {
+            beforeJumpIdx = histViewIdx;
+            histViewIdx = -1;
+            jumpSignal = { idx: suggestions.length - 1, key: Date.now() };
+          }
           break;
+        }
+        case 'ArrowLeft': {
+          e.preventDefault();
+          if (beforeJumpIdx !== null) {
+            const target = beforeJumpIdx;
+            beforeJumpIdx = null;
+            histViewIdx = target;
+            jumpSignal = { idx: target, key: Date.now() };
+          } else {
+            const cur = histViewIdx === -1 ? suggestions.length - 1 : histViewIdx;
+            if (cur > 0) {
+              histViewIdx = cur - 1;
+              jumpSignal = { idx: cur - 1, key: Date.now() };
+            }
+          }
+          break;
+        }
       }
     }
     function onMouseDown() { showPresetMenu = false; showPresetSave = false; presetNameInput = ''; }
@@ -1969,7 +2004,7 @@
               {#if !collapsedCols.has('center')}
                 <div class="col-body col-split-body" bind:this={centerColBodyEl}>
                   <div class="col-body-scroll" style="zoom: {centerZoom/100}; padding: 0.25rem 0.5rem 0.5rem; {fontCenter ? `font-family: ${panelFontStack(fontCenter)};` : ''}">
-                    <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} lockOnNew={true} {jumpSignal} navSignal={suggestionNavSignal} {cueExpandSignal} onPinnedChange={(p) => (suggestionPinned = p)} {onClosingSectionOpen} {salaryTactics} />
+                    <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} lockOnNew={true} {jumpSignal} {cueExpandSignal} onPinnedChange={(p) => (suggestionPinned = p)} {onClosingSectionOpen} {salaryTactics} />
                   </div>
                 </div>
               {/if}
@@ -2455,7 +2490,7 @@
             </div>
           </div>
           <div class="focus-panel-wrap" style="zoom:{focusCardFs/100}">
-            <SuggestionPanel {suggestions} onClear={() => {}} teleprompter={true} lockOnNew={true} navSignal={suggestionNavSignal} {onClosingSectionOpen} {salaryTactics} />
+            <SuggestionPanel {suggestions} onClear={() => {}} teleprompter={true} lockOnNew={true} {jumpSignal} {onClosingSectionOpen} {salaryTactics} />
           </div>
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="focus-resize-handle" onmousedown={onFocusResizeDown}></div>

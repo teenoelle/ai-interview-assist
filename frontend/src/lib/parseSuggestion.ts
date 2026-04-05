@@ -8,7 +8,7 @@ export interface ParsedSuggestion {
   tell: string;    // main spoken line
   body: string;    // raw body text (cue lines after Answer)
   cues: string[];  // unused — kept for compat
-  asks: { topic: string; question: string; followUp?: string }[];
+  asks: { topic: string; question: string; followUp?: string; section?: string }[];
   strategies: { keyword: string; text: string }[];
   solveStrategies: { keyword: string; text: string }[];
   // Introduction (Career Story framework)
@@ -38,15 +38,16 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
   let company = '', role = '', self = '';
   let direction = '', alignment = '', contribution = '';
   let transition1 = '', transition2 = '', transition3 = '';
-  const asks: { topic: string; question: string; followUp?: string }[] = [];
+  const asks: { topic: string; question: string; followUp?: string; section?: string }[] = [];
   const bodyLines: string[] = [];
   let pendingAskTopic = '';
+  let currentSection = '';
   let pendingTell = false; // true when Answer: was seen but had no inline text
   let pendingNewField: string | null = null; // tracks new-type field when LLM puts content on next line
   // Strip markdown bold markers e.g. **Affirm:** → Affirm:
   const clean = (s: string) => s.replace(/^\*+([^*]+)\*+\s*/, '$1 ').trim();
   const isCueLabel = (s: string) =>
-    /^(Principle|Context|Action|Result|Point|Metric|General|Example|Story|Pivot|Acknowledge|Affirm|Solve|Bridge|Close|Answer|Say|Tell|Ask|Present|Summary|Thread|Past|Story|Future|Next|Company|Role|Self|Direction|Alignment|Contribution|Transition1|Transition2|Transition3):/i.test(s);
+    /^(Principle|Context|Action|Result|Point|Metric|General|Example|Story|Pivot|Acknowledge|Affirm|Solve|Bridge|Close|Answer|Say|Tell|Ask|Present|Summary|Thread|Past|Story|Future|Next|Company|Role|Self|Direction|Alignment|Contribution|Transition1|Transition2|Transition3|Section):/i.test(s);
 
   for (const line of lines) {
     const t = line.trim();
@@ -132,6 +133,9 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
         pendingTell = true; // answer text is on the next line
       }
       pendingAskTopic = '';
+    } else if (c.match(/^Section:/i)) {
+      pendingTell = false; pendingNewField = null; pendingAskTopic = '';
+      currentSection = c.replace(/^Section:\s*/i, '').trim();
     } else if (c.match(/^Ask:/i)) {
       pendingTell = false; pendingNewField = null;
       const raw = c.replace(/^Ask:\s*/i, '').trim();
@@ -140,11 +144,11 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
         const topic = parts[0]?.trim() ?? '';
         const question = parts[1]?.trim() ?? topic;
         const followUp = parts[2]?.trim() ?? '';
-        if (topic) asks.push({ topic, question, followUp });
+        if (topic) asks.push({ topic, question, followUp, section: currentSection || undefined });
       } else if (raw) {
         const words = raw.replace(/[?!.]$/, '').split(/\s+/);
         const topic = words.slice(0, Math.min(3, words.length)).join(' ');
-        asks.push({ topic, question: raw, followUp: '' });
+        asks.push({ topic, question: raw, followUp: '', section: currentSection || undefined });
       }
       pendingAskTopic = '';
     } else if (c.match(/^(Principle|Context|Action|Result|Point|Metric|General|Example|Story|Pivot):\s*.+/i)) {

@@ -521,23 +521,32 @@ Rules:\n\
 
 fn build_closing_prompt(ctx_prefix: &str, question: &str) -> String {
     format!(
-        "{}The interviewer asked a closing question: '{}'\n\n\
-CRITICAL: This is a CLOSING question — the interviewer is asking if you have questions.\n\
-DO NOT output Acknowledge:, Solve:, Bridge:, Answer:, or Close: — those labels do not exist here.\n\
-Output ONLY the --- separator followed by exactly 4 Ask: lines.\n\n\
----\n\
-Ask: <2-4 word noun phrase — the employer's core challenge, drawn from the system prompt. e.g. 'revenue growth constraint', 'client retention challenge'> | <Question probing the employer's specific business challenge. Names the exact problem from the system prompt. Ends with '?'.> | <1 sentence if asked 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase — how success is defined in this role> | <Question about how success is measured — names the specific outcome, metric, or deliverable. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase — team structure or way of working> | <Question about how the team works or is structured around the key challenge. Names the specific process, tool, or domain. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase — company or team direction> | <Forward-looking question about where the company or team is headed. Names the specific domain or growth area. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
-Rules:\n\
-- Output ONLY the --- separator and then exactly 4 Ask: lines. No other content.\n\
-- All 4 Ask: lines are questions the CANDIDATE asks the INTERVIEWER.\n\
-- Ask topics: 2-4 word noun phrases naming the specific thing being asked about. Never verb phrases. Never vague.\n\
-- Every question names a specific metric, process, tool, or domain from the system prompt — never 'this', 'it', or vague pronouns.\n\
-- Draw on the employer's challenge from the system prompt — not generic interview questions.\n\
-- Never repeat a topic across Ask lines.\n\
-- NEVER name specific clients or companies. Refer by industry only.",
+        "{}The interviewer asked a closing question: '{}'
+
+\nCRITICAL: This is a CLOSING question — the interviewer is asking if you have questions.
+\nDO NOT output Acknowledge:, Solve:, Bridge:, Answer:, or Close: — those labels do not exist here.
+\nOutput ONLY the --- separator, then a Section: line, then 4 Ask: lines, then another Section: line, then 4 more Ask: lines.
+
+\n---
+\nSection: HR
+\nAsk: <2-4 word noun phrase — onboarding and ramp-up> | <Question about how the first 90 days are structured, what ramp-up looks like, or what support is in place. Names something specific from the role or company context. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — what high performers share> | <Question about what the most successful people in this role or on this team have in common — beyond skills. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — career growth path> | <Question about what progression from this role typically looks like — what opens up, rough timelines, what signals readiness for the next step. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — day-to-day culture> | <Question about how the company's or team's values show up concretely in day-to-day work — not just on paper. Names something specific. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nSection: Hiring Manager
+\nAsk: <2-4 word noun phrase — the employer's core challenge, drawn from the system prompt> | <Question probing the employer's specific business or technical challenge. Names the exact problem from the system prompt. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — 90-day success definition> | <Question about what outcomes or deliverables define a strong start in this exact role. Names the specific outcome, metric, or deliverable. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — team decision-making process> | <Question about how the team makes decisions in the relevant domain. Names the specific process, tool, or domain. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — company or team direction> | <Forward-looking question about where the company or team is headed. Names the specific domain or growth area. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+
+\nRules:
+\n- Output ONLY: --- separator, Section: HR, 4 Ask: lines, Section: Hiring Manager, 4 Ask: lines. No other content.
+\n- All Ask: lines are questions the CANDIDATE asks the INTERVIEWER.
+\n- Ask topics: 2-4 word noun phrases naming the specific thing being asked about. Never verb phrases. Never vague.
+\n- Every question names a specific metric, process, tool, domain, or outcome — never 'this', 'it', or vague pronouns.
+\n- Draw on the employer's challenge and role details from the system prompt — not generic interview questions.
+\n- Never repeat a topic across any Ask lines.
+\n- NEVER name specific clients or companies. Refer by industry only.",
         ctx_prefix, question
     )
 }

@@ -242,6 +242,20 @@
     }
   }
 
+  function groupAsksBySection(asks: { topic: string; question: string; followUp?: string; section?: string }[]) {
+    const groups: { section: string; asks: typeof asks }[] = [];
+    let current: (typeof groups)[0] | null = null;
+    for (const ask of asks) {
+      const s = ask.section ?? '';
+      if (!current || current.section !== s) {
+        current = { section: s, asks: [] };
+        groups.push(current);
+      }
+      current.asks.push(ask);
+    }
+    return groups;
+  }
+
   function getModeContent(mode: 'compound' | 'primary' | 'secondary', entry: import('../lib/types').SuggestionEntry): string {
     if (mode === 'compound') return entry.compoundSuggestion ?? '';
     if (mode === 'secondary') return entry.secondarySuggestion ?? '';
@@ -467,19 +481,35 @@
             {#if parsed.asks.length > 0}<div class="tp-sec tp-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
           {:else if isClosing}
-            <!-- CLOSING: Featured question cards -->
+            <!-- CLOSING: Featured question cards, grouped by section -->
+            {@const closingGroups = groupAsksBySection(parsed.asks)}
             <div class="tp-closing-wrap">
-              <div class="tp-closing-header">Questions to Ask</div>
-              {#each parsed.asks as ask, ai}
-                <div class="tp-closing-card">
-                  <span class="tp-closing-num">{ai + 1}</span>
-                  <div class="tp-closing-content">
-                    <span class="tp-closing-topic">{ask.topic}</span>
-                    <span class="tp-closing-question">{ask.question}</span>
-                    {#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}
+              {#if closingGroups.some(g => g.section)}
+                {#each closingGroups as group}
+                  {#if group.section}<div class="tp-closing-section">{group.section}</div>{/if}
+                  {#each group.asks as ask}
+                    <div class="tp-closing-card">
+                      <div class="tp-closing-content">
+                        <span class="tp-closing-topic">{ask.topic}</span>
+                        <span class="tp-closing-question">{ask.question}</span>
+                        {#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}
+                      </div>
+                    </div>
+                  {/each}
+                {/each}
+              {:else}
+                <div class="tp-closing-header">Questions to Ask</div>
+                {#each parsed.asks as ask, ai}
+                  <div class="tp-closing-card">
+                    <span class="tp-closing-num">{ai + 1}</span>
+                    <div class="tp-closing-content">
+                      <span class="tp-closing-topic">{ask.topic}</span>
+                      <span class="tp-closing-question">{ask.question}</span>
+                      {#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}
+                    </div>
                   </div>
-                </div>
-              {/each}
+                {/each}
+              {/if}
             </div>
 
           {:else}
@@ -873,17 +903,33 @@
                 {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
               {:else if eIsClosing}
+                {@const eClosingGroups = groupAsksBySection(parsed.asks)}
                 <div class="e-closing-wrap">
-                  <div class="tp-closing-header">Questions to Ask</div>
-                  {#each parsed.asks as ask, ai}
-                    <div class="tp-closing-card">
-                      <span class="tp-closing-num">{ai + 1}</span>
-                      <div class="tp-closing-content">
-                        <span class="tp-closing-topic">{ask.topic}</span>
-                        <span class="tp-closing-question">{ask.question}</span>
+                  {#if eClosingGroups.some(g => g.section)}
+                    {#each eClosingGroups as group}
+                      {#if group.section}<div class="tp-closing-section">{group.section}</div>{/if}
+                      {#each group.asks as ask}
+                        <div class="tp-closing-card">
+                          <div class="tp-closing-content">
+                            <span class="tp-closing-topic">{ask.topic}</span>
+                            <span class="tp-closing-question">{ask.question}</span>
+                            {#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}
+                          </div>
+                        </div>
+                      {/each}
+                    {/each}
+                  {:else}
+                    <div class="tp-closing-header">Questions to Ask</div>
+                    {#each parsed.asks as ask, ai}
+                      <div class="tp-closing-card">
+                        <span class="tp-closing-num">{ai + 1}</span>
+                        <div class="tp-closing-content">
+                          <span class="tp-closing-topic">{ask.topic}</span>
+                          <span class="tp-closing-question">{ask.question}</span>
+                        </div>
                       </div>
-                    </div>
-                  {/each}
+                    {/each}
+                  {/if}
                 </div>
 
               {:else}
@@ -1528,6 +1574,12 @@
   .cue-badge.cue-contribution { background: #451a03; color: #fca5a5; }
 
   /* Closing question cards (teleprompter) */
+  .tp-closing-section {
+    font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #475569; padding: 0.5rem 0.25rem 0.15rem;
+    border-top: 1px solid #1e293b; margin-top: 0.25rem;
+  }
+  .tp-closing-section:first-child { border-top: none; margin-top: 0; padding-top: 0.15rem; }
   .tp-closing-wrap {
     display: flex; flex-direction: column; gap: 0.5rem; flex: 1;
   }

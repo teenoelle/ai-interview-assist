@@ -355,7 +355,7 @@ export function getAnswerType(
 ): { framework: string; label: string } {
   // Tag-specific overrides for types that share STAR fields but have distinct coaching frames
   if (tag === 'smalltalk')   return { framework: 'A: Small Talk',  label: '' };
-  if (tag === 'fit')         return { framework: 'A: Fit',         label: 'Reframe → Gap → Choice → Bring' };
+  if (tag === 'fit')         return { framework: 'A: Fit',         label: 'Acknowledge → Reframe → Gap → Choice → Bring' };
   if (tag === 'weaknesses')  return { framework: 'A: Weakness',    label: 'Real → Growth → Evidence → Redirect' };
   if (tag === 'situational') return { framework: 'A: Situational', label: 'Stakes → Approach → Reasoning → Answer' };
   if (tag === 'strengths')   return { framework: 'A: Strengths',   label: 'Acknowledge → Strengths → Close' };
@@ -369,7 +369,7 @@ export function getAnswerType(
   if (parsed.company || parsed.role || parsed.self)
     return { framework: 'A: Motivation', label: 'Company → Role → Self' };
   if (parsed.reframe || parsed.gap || parsed.choice || parsed.bring || parsed.trade || parsed.value)
-    return { framework: 'A: Fit', label: 'Reframe → Gap → Choice → Bring' };
+    return { framework: 'A: Fit', label: 'Acknowledge → Reframe → Gap → Choice → Bring' };
   if (parsed.direction || parsed.alignment || parsed.contribution)
     return { framework: 'A: Future', label: 'Direction → Alignment → Contribution' };
   if (parsed.asks.length >= 3 && !parsed.acknowledge && !parsed.tell)

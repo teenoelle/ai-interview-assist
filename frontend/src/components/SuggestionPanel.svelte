@@ -460,7 +460,13 @@
             {#if parsed.asks.length > 0}<div class="tp-sec tp-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
           {:else if isFit}
-            <!-- FIT: Reframe → Gap → Choice → Bring -->
+            <!-- FIT: Acknowledge → Reframe → Gap → Choice → Bring -->
+            {#if parsed.acknowledge}
+              <div class="tp-sec tp-sec-acknowledge">
+                <span class="cue-badge cue-ack">Acknowledge</span>
+                <span class="tp-narrative-text">{parsed.acknowledge}{#if tpStreaming && !parsed.reframe}<span class="cursor">|</span>{/if}</span>
+              </div>
+            {/if}
             {#if parsed.reframe}
               <div class="tp-sec tp-sec-reframe">
                 <span class="cue-badge cue-reframe">Reframe</span>
@@ -933,6 +939,7 @@
                 {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
               {:else if eIsFit}
+                {#if parsed.acknowledge}<div class="e-sec e-sec-acknowledge"><span class="cue-badge cue-ack">Acknowledge</span><span class="affirm-text">{parsed.acknowledge}</span></div>{/if}
                 {#if parsed.reframe}<div class="e-sec e-sec-reframe"><span class="cue-badge cue-reframe">Reframe</span><span class="affirm-text">{parsed.reframe}</span></div>{/if}
                 {#if parsed.transition1}<div class="e-transition">{parsed.transition1}</div>{/if}
                 {#if parsed.gap}<div class="e-sec e-sec-gap"><span class="cue-badge cue-gap">Gap</span><span class="affirm-text">{parsed.gap}</span></div>{/if}
@@ -1623,7 +1630,8 @@
   .cue-badge.cue-company      { background: #3b0764; color: #d8b4fe; }
   .cue-badge.cue-role         { background: #164e63; color: #67e8f9; }
   .cue-badge.cue-self         { background: #0c4a6e; color: #7dd3fc; }
-  .cue-badge.cue-reframe      { background: #1e293b; color: #94a3b8; }
+  .cue-badge.cue-acknowledge  { background: #1e293b; color: #64748b; }
+  .cue-badge.cue-reframe      { background: #334155; color: #94a3b8; }
   .cue-badge.cue-gap          { background: #451a03; color: #fb923c; }
   .cue-badge.cue-choice       { background: #164e63; color: #22d3ee; }
   .cue-badge.cue-bring        { background: #0f3d2e; color: #6ee7b7; }

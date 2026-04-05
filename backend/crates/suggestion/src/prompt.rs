@@ -530,7 +530,8 @@ fn build_fit_prompt(ctx_prefix: &str, question: &str) -> String {
 CRITICAL: This is a FIT/TRADE-OFF question — the interviewer is questioning why the candidate is applying at this level or in this channel. \
 Output ONLY the labeled lines below. Never be defensive.\n\
 DO NOT output Company:, Motivation:, Role:, Trade:, Value:, or Answer: — those labels do not exist here.\n\n\
-Reframe: <1-2 sentences. Flip the premise directly — acknowledge the level or channel difference exists, then name it as a deliberate choice, not a retreat. Starts with 'I'. Tone: matter-of-fact, not defensive. Max 10 words each.>\n\
+Acknowledge: <1 sentence. Briefly confirm ONLY the level or seniority observation the interviewer made. Do NOT name any skills, channels, tools, or experience gaps here — those belong in Gap. Just confirm the premise calmly. Starts with 'That\\'s right', 'You\\'re right', or 'Fair observation'. Max 12 words. Example for 'why a more entry-level position': 'You\\'re right — my background is at a more senior level.'>\n\
+Reframe: <1-2 sentences. Flip the premise — name the level or channel difference as a deliberate choice, not a retreat. Starts with 'I'. Tone: matter-of-fact. Max 10 words each.>\n\
 Transition1: <1 sentence bridging Reframe to Gap. Starts with 'Specifically,' or 'The area I am building toward is' or 'What the JD asks for that I am actively developing is'. Max 12 words.>\n\
 Gap: <1-2 sentences. From the employer's perspective: name the SPECIFIC skill, channel, or domain listed in the JD where the candidate's background is absent or materially thinner. Read the JD requirements in the system prompt carefully — if the JD asks for channel X and the candidate lacks X, name X explicitly and tactfully. Starts with 'I'. Max 10 words each.>\n\
 Transition2: <1 sentence bridging Gap to Choice. Starts with 'I chose this employer specifically because' or 'This organisation is the right place to build it because' or 'The reason this role in particular is'. Max 12 words.>\n\
@@ -539,14 +540,22 @@ Transition3: <1 sentence bridging Choice to Bring. Starts with 'What I bring in 
 Bring: <1-2 sentences. What the candidate contributes from existing depth that a career junior can't: faster ramp, cross-channel perspective, stakeholder credibility, pattern recognition from adjacent domains. Names the specific skill or perspective — not vague. Starts with 'I'. Max 10 words each.>\n\
 Close: <One sentence. Connects the whole framing to the employer's specific challenge from the system prompt. Starts with 'That\\'s why', 'This is why', or 'I\\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
 ----\n\
-Ask: <2-4 word noun phrase — specifically about how the team or role supports development in the gap area named> | <Question about how the team approaches developing the specific channel or skill just named as the gap. Names the specific domain. Ends with '?'.> | <1 sentence if asked 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase — about what success looks like for someone making this transition> | <Question about how success is defined for someone who comes in with adjacent experience and is building toward the gap area. Names the specific domain or outcome. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
+Ask: <2-4 word noun phrase> | <Question> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase> | <Question> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
 Rules:\n\
-- Output ONLY: Reframe:, Transition1:, Gap:, Transition2:, Choice:, Transition3:, Bring:, Close:, then two Ask: lines. No other labels. No preamble.\n\
+- Output ONLY: Acknowledge:, Reframe:, Transition1:, Gap:, Transition2:, Choice:, Transition3:, Bring:, Close:, then two Ask: lines. No other labels. No preamble.\n\
+- Acknowledge confirms ONLY the level/seniority observation — no skills, channels, tools, or JD specifics. Those belong in Gap. One calm factual sentence.\n\
+- Acknowledge must not repeat what Reframe says — it only confirms the observation. Reframe does the pivoting.\n\
 - CRITICAL — Gap must identify a SPECIFIC skill, channel, or domain from the JD (system prompt) where the candidate's background is absent or materially thinner. Name it by its actual domain (e.g. 'paid social', 'programmatic buying', 'SEO') — never 'a new area' or 'further experience'.\n\
 - Choice draws from the employer's actual challenge in the system prompt — not generic.\n\
 - Bring draws ONLY from candidate background. Names the specific skills or perspective that cross over from adjacent experience.\n\
-- Ask questions must be anchored to the specific gap named — not generic career questions.\n\
+- Ask questions: choose the TWO most relevant angles from the list below — do not always use the same two. Pick based on what is most specific to the fit narrative just constructed:\n\
+  • Gap development: how does the team approach developing [specific gap skill]? What learning or mentorship is in place?\n\
+  • Choice validation: what does the specific JD challenge named in Choice look like in practice day-to-day for this team?\n\
+  • Bring application: where would the existing depth described in Bring have the most immediate impact in this team?\n\
+  • Success definition: how is strong performance defined in year one for someone transitioning from adjacent experience into this gap area?\n\
+  • Level transition: how does the team typically support someone stepping into a more specialised or focused scope than their prior role?\n\
+- Each Ask noun phrase must name the specific domain, channel, or challenge — never a generic phrase like 'this role' or 'team growth'.\n\
 - NEVER invent metrics, percentages, dollar figures, headcount, or timeframes.\n\
 - NEVER name specific companies, clients, or employers — refer by category only.\n\
 - No adjectives or adverbs. No 'passionate', 'excited', 'dedicated'. Facts and trade-offs only.",

@@ -1120,6 +1120,7 @@
     loadingCompanyBrief = false;
     void fetchBackgroundSetup();
     phase = 'interview';
+    connectWs(); // always listen for events in interview phase (test questions need this even without capture)
   }
 
   function handleSetupComplete() {
@@ -1614,7 +1615,7 @@
     <div class="interview-layout" class:capturing>
       <header class="interview-header">
         <div class="header-title-row">
-          <button class="header-back-btn" onclick={() => { phase = 'setup'; }} title="Back to overview">← Overview</button>
+          <button class="header-back-btn" onclick={() => { phase = 'setup'; eventWs?.disconnect(); wsStatus = 'disconnected'; }} title="Back to overview">← Overview</button>
           <h1>AI Interview Assistant</h1>
           <span class="ws-header-dot"
             class:ws-connected={wsStatus === 'connected'}
@@ -1761,7 +1762,7 @@
           <button class="history-btn" onclick={() => showPastInterviews = true}>Reports</button>
           <CaptureButton
             initialCapture={captureInst}
-            onCapture={(v) => { capturing = v; if (v) { connectWs(); ttsEnabled = true; ttsClient.getAudioOutputs().then(o => { ttsOutputDevices = o; }); } if (!v) { eventWs?.disconnect(); wsStatus = 'disconnected'; webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); captureMicLevel = 0; captureSystemLevel = 0; } }}
+            onCapture={(v) => { capturing = v; if (v) { connectWs(); ttsEnabled = true; ttsClient.getAudioOutputs().then(o => { ttsOutputDevices = o; }); } if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); captureMicLevel = 0; captureSystemLevel = 0; } }}
             onStreams={(screen, webcam) => { screenStream = screen; webcamStream = webcam; }}
             onReady={(cap) => { captureInst = cap; }}
             onLevel={(mic, sys) => { captureMicLevel = mic; captureSystemLevel = sys; updateSysEnergy(sys); }}

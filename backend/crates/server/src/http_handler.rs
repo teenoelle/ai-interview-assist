@@ -625,8 +625,11 @@ pub async fn handle_suggest_mode(
     let q = req.question.trim().to_string();
     if q.is_empty() { return Err((StatusCode::BAD_REQUEST, "Question is empty".to_string())); }
     let mode = match req.mode.as_str() {
-        "secondary" => common::messages::SuggestionMode::Secondary,
-        _ => common::messages::SuggestionMode::Primary,
+        "secondary"   => common::messages::SuggestionMode::Secondary,
+        "closing_hr"  => common::messages::SuggestionMode::ClosingHr,
+        "closing_hm"  => common::messages::SuggestionMode::ClosingHm,
+        "closing_ceo" => common::messages::SuggestionMode::ClosingCeo,
+        _             => common::messages::SuggestionMode::Primary,
     };
     let sp = state.system_prompt.read().await.clone();
     let tr = state.transcript.read().await.clone();

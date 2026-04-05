@@ -1127,6 +1127,26 @@
     transitionToInterview();
   }
 
+  function onClosingSectionOpen(entryIdx: number, key: string) {
+    const entry = suggestions[entryIdx];
+    if (!entry) return;
+    const alreadyFetched = key === 'hr' ? entry.closingHRFetched : key === 'hm' ? entry.closingHMFetched : entry.closingCEOFetched;
+    if (alreadyFetched) return;
+    suggestions = suggestions.map((s, i) => i !== entryIdx ? s : {
+      ...s,
+      closingHRFetched:  key === 'hr'  ? true : s.closingHRFetched,
+      closingHMFetched:  key === 'hm'  ? true : s.closingHMFetched,
+      closingCEOFetched: key === 'ceo' ? true : s.closingCEOFetched,
+      closingHR:  key === 'hr'  ? (s.closingHR  ?? '') : s.closingHR,
+      closingHM:  key === 'hm'  ? (s.closingHM  ?? '') : s.closingHM,
+      closingCEO: key === 'ceo' ? (s.closingCEO ?? '') : s.closingCEO,
+    });
+    authFetch('/api/suggest-mode', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: entry.question, mode: `closing_${key}` }),
+    }).catch(() => {});
+  }
+
   function connectWs() {
     eventWs?.disconnect();
     eventWs = new EventWebSocket();
@@ -1348,6 +1368,12 @@
           suggestions = suggestions.map(s =>
             s.secondaryStreaming ? { ...s, secondarySuggestion: (s.secondarySuggestion ?? '') + event.token } : s
           );
+        } else if (event.mode === 'closing_hr') {
+          suggestions = suggestions.map(s => s.closingHRFetched ? { ...s, closingHR: (s.closingHR ?? '') + event.token } : s);
+        } else if (event.mode === 'closing_hm') {
+          suggestions = suggestions.map(s => s.closingHMFetched ? { ...s, closingHM: (s.closingHM ?? '') + event.token } : s);
+        } else if (event.mode === 'closing_ceo') {
+          suggestions = suggestions.map(s => s.closingCEOFetched ? { ...s, closingCEO: (s.closingCEO ?? '') + event.token } : s);
         } else {
           suggestions = suggestions.map(s =>
             s.streaming ? { ...s, suggestion: s.suggestion + event.token } : s
@@ -1378,6 +1404,12 @@
           suggestions = suggestions.map(s =>
             s.secondaryStreaming ? { ...s, secondarySuggestion: event.full_text, secondaryStreaming: false } : s
           );
+        } else if (event.mode === 'closing_hr') {
+          suggestions = suggestions.map(s => s.closingHRFetched ? { ...s, closingHR: event.full_text } : s);
+        } else if (event.mode === 'closing_hm') {
+          suggestions = suggestions.map(s => s.closingHMFetched ? { ...s, closingHM: event.full_text } : s);
+        } else if (event.mode === 'closing_ceo') {
+          suggestions = suggestions.map(s => s.closingCEOFetched ? { ...s, closingCEO: event.full_text } : s);
         } else {
           suggestions = suggestions.map(s => {
             if (!s.streaming) return s;
@@ -1937,7 +1969,7 @@
               {#if !collapsedCols.has('center')}
                 <div class="col-body col-split-body" bind:this={centerColBodyEl}>
                   <div class="col-body-scroll" style="zoom: {centerZoom/100}; padding: 0.25rem 0.5rem 0.5rem; {fontCenter ? `font-family: ${panelFontStack(fontCenter)};` : ''}">
-                    <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} lockOnNew={true} {jumpSignal} navSignal={suggestionNavSignal} {cueExpandSignal} onPinnedChange={(p) => (suggestionPinned = p)} {salaryTactics} />
+                    <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} lockOnNew={true} {jumpSignal} navSignal={suggestionNavSignal} {cueExpandSignal} onPinnedChange={(p) => (suggestionPinned = p)} {onClosingSectionOpen} {salaryTactics} />
                   </div>
                 </div>
               {/if}
@@ -2423,7 +2455,7 @@
             </div>
           </div>
           <div class="focus-panel-wrap" style="zoom:{focusCardFs/100}">
-            <SuggestionPanel {suggestions} onClear={() => {}} teleprompter={true} lockOnNew={true} navSignal={suggestionNavSignal} {salaryTactics} />
+            <SuggestionPanel {suggestions} onClear={() => {}} teleprompter={true} lockOnNew={true} navSignal={suggestionNavSignal} {onClosingSectionOpen} {salaryTactics} />
           </div>
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="focus-resize-handle" onmousedown={onFocusResizeDown}></div>

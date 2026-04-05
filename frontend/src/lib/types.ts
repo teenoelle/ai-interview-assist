@@ -71,6 +71,13 @@ export interface SuggestionEntry {
   compoundStreaming?: boolean;
   secondarySuggestion?: string;
   secondaryStreaming?: boolean;
+  // Closing question on-demand sections
+  closingHR?: string;
+  closingHRFetched?: boolean;
+  closingHM?: string;
+  closingHMFetched?: boolean;
+  closingCEO?: string;
+  closingCEOFetched?: boolean;
   redFlag?: RedFlag;
   answerFeedback?: AnswerFeedback;
   vocalFeedback?: VocalSentiment;

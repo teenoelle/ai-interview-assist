@@ -6,6 +6,9 @@ pub enum SuggestionMode {
     Compound,
     Primary,
     Secondary,
+    ClosingHr,
+    ClosingHm,
+    ClosingCeo,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

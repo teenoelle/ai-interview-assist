@@ -217,6 +217,15 @@ pub async fn run_agent(
                     continue;
                 }
 
+                // Closing: sections fetched on-demand — just signal detection, no auto-generation
+                if matches!(primary_type, prompt::QuestionType::Closing) {
+                    let _ = etx.send(WsEvent::QuestionDetected {
+                        question: question.clone(),
+                        secondary_tag: None,
+                    });
+                    continue;
+                }
+
                 let secondary_tag = secondary_type.map(|qt| prompt::question_type_to_tag(qt).to_string());
 
                 let _ = etx.send(WsEvent::QuestionDetected {
@@ -275,6 +284,7 @@ pub async fn run_single(
     call_counts: &Option<CallCounts>,
 ) -> anyhow::Result<()> {
     let (primary_type, secondary_type) = prompt::classify_question(question);
+    let ctx = prompt::make_ctx_prefix(transcript);
     let user_prompt = match mode {
         SuggestionMode::Secondary => {
             if let Some(sec_type) = secondary_type {
@@ -290,6 +300,9 @@ pub async fn run_single(
                 prompt::build_user_prompt(question, transcript)
             }
         }
+        SuggestionMode::ClosingHr  => prompt::build_closing_hr_prompt(&ctx, question),
+        SuggestionMode::ClosingHm  => prompt::build_closing_hm_prompt(&ctx, question),
+        SuggestionMode::ClosingCeo => prompt::build_closing_ceo_prompt(&ctx, question),
         SuggestionMode::Primary => prompt::build_user_prompt_for_type(question, transcript, primary_type),
     };
     suggest_with_fallback(

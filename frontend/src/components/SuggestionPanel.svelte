@@ -37,7 +37,7 @@
     } catch { expandedCues = { ...expandedCues, [cue]: { sentence: cue, loading: false } }; }
   }
 
-  const { suggestions, onClear, teleprompter = false, lockOnNew = false, jumpSignal = null, navSignal = null, cueExpandSignal = null, onPinnedChange, salaryTactics = null } = $props<{
+  const { suggestions, onClear, teleprompter = false, lockOnNew = false, jumpSignal = null, navSignal = null, cueExpandSignal = null, onPinnedChange, onClosingSectionOpen, salaryTactics = null } = $props<{
     suggestions: SuggestionEntry[];
     onClear: () => void;
     teleprompter?: boolean;
@@ -46,6 +46,7 @@
     navSignal?: { dir: 'prev' | 'next' | 'latest'; key: number } | null;
     cueExpandSignal?: { cueIdx: number; key: number } | null;
     onPinnedChange?: (pinned: boolean) => void;
+    onClosingSectionOpen?: (entryIdx: number, key: string) => void;
     salaryTactics?: { early_round: string; reveal: string; direct_ask: string; total_package: string; counter: string } | null;
   }>();
 
@@ -219,6 +220,31 @@
   // Active mode per entry index (compound | primary | secondary)
   // Defaults to 'compound' for compound questions, 'primary' otherwise
   let activeModes = $state<Record<number, 'compound' | 'primary' | 'secondary'>>({});
+
+  // Closing section open state: entryIndex → Set of open section keys ('hr'|'hm'|'ceo')
+  let openClosingSections = $state<Record<number, Set<string>>>({});
+
+  const CLOSING_SECTIONS = [
+    { key: 'hr',  label: 'HR' },
+    { key: 'hm',  label: 'Hiring Manager' },
+    { key: 'ceo', label: 'CEO' },
+  ] as const;
+
+  function toggleClosingSection(entryIdx: number, key: string) {
+    const prev = openClosingSections[entryIdx] ?? new Set<string>();
+    const next = new Set(prev);
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      next.add(key);
+      onClosingSectionOpen?.(entryIdx, key);
+    }
+    openClosingSections = { ...openClosingSections, [entryIdx]: next };
+  }
+
+  function closingSectionContent(entry: import('../lib/types').SuggestionEntry, key: string): string {
+    return (key === 'hr' ? entry.closingHR : key === 'hm' ? entry.closingHM : entry.closingCEO) ?? '';
+  }
 
   function getActiveMode(i: number, entry: import('../lib/types').SuggestionEntry): 'compound' | 'primary' | 'secondary' {
     if (!entry.secondaryTag) return 'primary';
@@ -394,7 +420,7 @@
           {@const isIntro    = !!(parsed.present || parsed.thread || parsed.past || parsed.future)}
           {@const isMotiv    = !!(parsed.company || parsed.role || parsed.self)}
           {@const isFutureTy = !!(parsed.direction || parsed.alignment || parsed.contribution)}
-          {@const isClosing  = parsed.asks.length >= 3 && !parsed.acknowledge && !parsed.present && !parsed.company && !parsed.direction && !parsed.tell}
+          {@const isClosing  = current?.tag === 'closing'}
 
           {#if isIntro}
             <!-- INTRODUCTION: Summary → Thread → Story → Next → Close -->
@@ -481,35 +507,36 @@
             {#if parsed.asks.length > 0}<div class="tp-sec tp-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
           {:else if isClosing}
-            <!-- CLOSING: Featured question cards, grouped by section -->
-            {@const closingGroups = groupAsksBySection(parsed.asks)}
+            <!-- CLOSING: Three collapsible sections, fetched on demand -->
             <div class="tp-closing-wrap">
-              {#if closingGroups.some(g => g.section)}
-                {#each closingGroups as group}
-                  {#if group.section}<div class="tp-closing-section">{group.section}</div>{/if}
-                  {#each group.asks as ask}
-                    <div class="tp-closing-card">
-                      <div class="tp-closing-content">
-                        <span class="tp-closing-topic">{ask.topic}</span>
-                        <span class="tp-closing-question">{ask.question}</span>
-                        {#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}
-                      </div>
-                    </div>
-                  {/each}
-                {/each}
-              {:else}
-                <div class="tp-closing-header">Questions to Ask</div>
-                {#each parsed.asks as ask, ai}
-                  <div class="tp-closing-card">
-                    <span class="tp-closing-num">{ai + 1}</span>
-                    <div class="tp-closing-content">
-                      <span class="tp-closing-topic">{ask.topic}</span>
-                      <span class="tp-closing-question">{ask.question}</span>
-                      {#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}
-                    </div>
+              {#each CLOSING_SECTIONS as sec}
+                {@const isOpen = openClosingSections[currentIndex]?.has(sec.key) ?? false}
+                {@const content = closingSectionContent(current, sec.key)}
+                {@const fetched = sec.key === 'hr' ? current.closingHRFetched : sec.key === 'hm' ? current.closingHMFetched : current.closingCEOFetched}
+                <div class="closing-sec">
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <div class="closing-sec-toggle" onclick={() => toggleClosingSection(currentIndex, sec.key)}>
+                    <span class="closing-sec-arrow">{isOpen ? '▾' : '▸'}</span>
+                    <span class="closing-sec-label">{sec.label}</span>
                   </div>
-                {/each}
-              {/if}
+                  {#if isOpen}
+                    {#if fetched && !content}
+                      <div class="closing-loading">···</div>
+                    {:else if content}
+                      {@const secParsed = parseSuggestion(content)}
+                      {#each secParsed.asks as ask}
+                        <div class="tp-closing-card">
+                          <div class="tp-closing-content">
+                            <span class="tp-closing-topic">{ask.topic}</span>
+                            <span class="tp-closing-question">{ask.question}</span>
+                            {#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}
+                          </div>
+                        </div>
+                      {/each}
+                    {/if}
+                  {/if}
+                </div>
+              {/each}
             </div>
 
           {:else}
@@ -869,7 +896,7 @@
               {@const eIsIntro    = !!(parsed.present || parsed.thread || parsed.past || parsed.future)}
               {@const eIsMotiv    = !!(parsed.company || parsed.role || parsed.self)}
               {@const eIsFutureTy = !!(parsed.direction || parsed.alignment || parsed.contribution)}
-              {@const eIsClosing  = parsed.asks.length >= 3 && !parsed.acknowledge && !parsed.present && !parsed.company && !parsed.direction && !parsed.tell}
+              {@const eIsClosing  = entry.tag === 'closing'}
 
               {#if eIsIntro}
                 {#if parsed.present}<div class="e-sec e-sec-present"><span class="cue-badge cue-present">Summary</span><span class="affirm-text">{parsed.present}</span></div>{/if}
@@ -903,33 +930,35 @@
                 {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
               {:else if eIsClosing}
-                {@const eClosingGroups = groupAsksBySection(parsed.asks)}
                 <div class="e-closing-wrap">
-                  {#if eClosingGroups.some(g => g.section)}
-                    {#each eClosingGroups as group}
-                      {#if group.section}<div class="tp-closing-section">{group.section}</div>{/if}
-                      {#each group.asks as ask}
-                        <div class="tp-closing-card">
-                          <div class="tp-closing-content">
-                            <span class="tp-closing-topic">{ask.topic}</span>
-                            <span class="tp-closing-question">{ask.question}</span>
-                            {#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}
-                          </div>
-                        </div>
-                      {/each}
-                    {/each}
-                  {:else}
-                    <div class="tp-closing-header">Questions to Ask</div>
-                    {#each parsed.asks as ask, ai}
-                      <div class="tp-closing-card">
-                        <span class="tp-closing-num">{ai + 1}</span>
-                        <div class="tp-closing-content">
-                          <span class="tp-closing-topic">{ask.topic}</span>
-                          <span class="tp-closing-question">{ask.question}</span>
-                        </div>
+                  {#each CLOSING_SECTIONS as sec}
+                    {@const isOpen = openClosingSections[i]?.has(sec.key) ?? false}
+                    {@const content = closingSectionContent(entry, sec.key)}
+                    {@const fetched = sec.key === 'hr' ? entry.closingHRFetched : sec.key === 'hm' ? entry.closingHMFetched : entry.closingCEOFetched}
+                    <div class="closing-sec">
+                      <!-- svelte-ignore a11y_no_static_element_interactions -->
+                      <div class="closing-sec-toggle" onclick={() => toggleClosingSection(i, sec.key)}>
+                        <span class="closing-sec-arrow">{isOpen ? '▾' : '▸'}</span>
+                        <span class="closing-sec-label">{sec.label}</span>
                       </div>
-                    {/each}
-                  {/if}
+                      {#if isOpen}
+                        {#if fetched && !content}
+                          <div class="closing-loading">···</div>
+                        {:else if content}
+                          {@const secParsed = parseSuggestion(content)}
+                          {#each secParsed.asks as ask}
+                            <div class="tp-closing-card">
+                              <div class="tp-closing-content">
+                                <span class="tp-closing-topic">{ask.topic}</span>
+                                <span class="tp-closing-question">{ask.question}</span>
+                                {#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}
+                              </div>
+                            </div>
+                          {/each}
+                        {/if}
+                      {/if}
+                    </div>
+                  {/each}
                 </div>
 
               {:else}
@@ -1573,13 +1602,25 @@
   .cue-badge.cue-alignment    { background: #134e4a; color: #5eead4; }
   .cue-badge.cue-contribution { background: #451a03; color: #fca5a5; }
 
-  /* Closing question cards (teleprompter) */
-  .tp-closing-section {
-    font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
-    letter-spacing: 0.08em; color: #475569; padding: 0.5rem 0.25rem 0.15rem;
-    border-top: 1px solid #1e293b; margin-top: 0.25rem;
+  /* Closing question collapsible sections */
+  .closing-sec { display: flex; flex-direction: column; }
+  .closing-sec-toggle {
+    display: flex; align-items: center; gap: 0.35rem;
+    padding: 0.3rem 0.25rem; cursor: pointer; user-select: none;
+    border-bottom: 1px solid #1e293b;
   }
-  .tp-closing-section:first-child { border-top: none; margin-top: 0; padding-top: 0.15rem; }
+  .closing-sec-toggle:hover .closing-sec-label { color: #94a3b8; }
+  .closing-sec-arrow { font-size: 0.65rem; color: #334155; width: 0.7rem; }
+  .closing-sec-label {
+    font-size: var(--fs-xs); font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #475569; transition: color 0.12s;
+  }
+  .closing-loading {
+    padding: 0.4rem 0.75rem; color: #334155; font-size: var(--fs-sm);
+    letter-spacing: 0.2em;
+  }
+
+  /* Closing question cards (teleprompter) */
   .tp-closing-wrap {
     display: flex; flex-direction: column; gap: 0.5rem; flex: 1;
   }

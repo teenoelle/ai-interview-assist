@@ -523,23 +523,25 @@ fn build_fit_prompt(ctx_prefix: &str, question: &str) -> String {
     format!(
         "{}The interviewer asked a level/fit challenge question: '{}'\n\n\
 CRITICAL: This is a FIT/TRADE-OFF question — the interviewer is questioning why the candidate is applying at this level or in this channel. \
-Output ONLY the labeled lines below. Never be defensive. Reframe the level or channel difference as the deliberate point, not a problem.\n\
-DO NOT output Company:, Motivation:, Role:, or Answer: — those labels do not exist here.\n\n\
-Gap: <1-2 sentences. Name the specific skill, channel, or domain the candidate is deliberately moving into. This is the exact reason for the level or title difference — not a vague 'new challenge'. Starts with 'I'. Max 10 words each.>\n\
-Transition1: <1 sentence bridging Gap to Trade. Starts with 'The trade-off is deliberate:' or 'That means accepting' or 'It means trading'. Max 10 words.>\n\
-Trade: <1-2 sentences. The explicit exchange: what depth or seniority is being set aside, and what is gained here instead. Framed as a calculated decision. Starts with 'I'. Max 10 words each.>\n\
-Transition2: <1 sentence bridging Trade to Value. Starts with 'What I bring to this level is' or 'Where I add immediate value is' or 'The advantage is'. Max 10 words.>\n\
-Value: <1-2 sentences. What existing depth contributes at this level that a career junior wouldn't have. Names specific skills, perspective, or shortcuts. Starts with 'I'. Max 10 words each.>\n\
-Transition3: <1 sentence bridging Value to Close. Starts with 'So the fit here is' or 'That combination is why' or 'Which is why'. Max 10 words.>\n\
-Close: <One sentence. Connects the trade-off directly to the employer's specific challenge from the system prompt. Starts with 'That\\'s why', 'This is why', or 'I\\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
+Output ONLY the labeled lines below. Never be defensive.\n\
+DO NOT output Company:, Motivation:, Role:, Trade:, Value:, or Answer: — those labels do not exist here.\n\n\
+Reframe: <1-2 sentences. Flip the premise directly — acknowledge the level or channel difference exists, then name it as a deliberate choice, not a retreat. Starts with 'I'. Tone: matter-of-fact, not defensive. Max 10 words each.>\n\
+Transition1: <1 sentence bridging Reframe to Gap. Starts with 'Specifically,' or 'The area I am building toward is' or 'What the JD asks for that I am actively developing is'. Max 12 words.>\n\
+Gap: <1-2 sentences. From the employer's perspective: name the SPECIFIC skill, channel, or domain listed in the JD where the candidate's background is absent or materially thinner. Read the JD requirements in the system prompt carefully — if the JD asks for channel X and the candidate lacks X, name X explicitly and tactfully. Starts with 'I'. Max 10 words each.>\n\
+Transition2: <1 sentence bridging Gap to Choice. Starts with 'I chose this employer specifically because' or 'This organisation is the right place to build it because' or 'The reason this role in particular is'. Max 12 words.>\n\
+Choice: <1-2 sentences. Why this specific employer and role is the right place to address this gap — connects the JD challenge to the candidate's strategic intent. Draws from the employer's specific challenge in the system prompt. Starts with 'I'. Max 10 words each.>\n\
+Transition3: <1 sentence bridging Choice to Bring. Starts with 'What I bring in the meantime is' or 'And what I contribute from existing depth is' or 'Where I add immediate value is'. Max 12 words.>\n\
+Bring: <1-2 sentences. What the candidate contributes from existing depth that a career junior can't: faster ramp, cross-channel perspective, stakeholder credibility, pattern recognition from adjacent domains. Names the specific skill or perspective — not vague. Starts with 'I'. Max 10 words each.>\n\
+Close: <One sentence. Connects the whole framing to the employer's specific challenge from the system prompt. Starts with 'That\\'s why', 'This is why', or 'I\\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
 ----\n\
-Ask: <2-4 word noun phrase naming what you're asking about — related to the channel, domain, or level the interviewer raised> | <Specific grammatical question. Probes how the team or role approaches the specific channel or skill gap being discussed. Ends with '?'.> | <1 sentence if asked 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase — a different angle> | <A different specific question about how success is defined at this level or how the team supports someone expanding into this area. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
+Ask: <2-4 word noun phrase — specifically about how the team or role supports development in the gap area named> | <Question about how the team approaches developing the specific channel or skill just named as the gap. Names the specific domain. Ends with '?'.> | <1 sentence if asked 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — about what success looks like for someone making this transition> | <Question about how success is defined for someone who comes in with adjacent experience and is building toward the gap area. Names the specific domain or outcome. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
 Rules:\n\
-- Output ONLY: Gap:, Transition1:, Trade:, Transition2:, Value:, Transition3:, Close:, then two Ask: lines. No other labels. No preamble.\n\
-- CRITICAL — Gap must identify a SPECIFIC skill, channel, or domain listed in the job description (system prompt) where the candidate's background is absent or materially thinner than required. Read the JD requirements carefully: if the JD asks for channel X and the candidate's background does not show clear experience in channel X, that is the gap. Name it explicitly and tactfully — not defensively. If multiple gaps exist, name the most relevant one to this role.\n\
-- Trade draws ONLY from candidate background — no invented details. Names what is being deliberately set aside (seniority, scope, title) in exchange for what is gained (new channel depth, domain expansion).\n\
-- Value names what a candidate with existing depth brings that a career junior wouldn't have: faster ramp, cross-channel perspective, stakeholder credibility, pattern recognition from adjacent work.\n\
+- Output ONLY: Reframe:, Transition1:, Gap:, Transition2:, Choice:, Transition3:, Bring:, Close:, then two Ask: lines. No other labels. No preamble.\n\
+- CRITICAL — Gap must identify a SPECIFIC skill, channel, or domain from the JD (system prompt) where the candidate's background is absent or materially thinner. Name it by its actual domain (e.g. 'paid social', 'programmatic buying', 'SEO') — never 'a new area' or 'further experience'.\n\
+- Choice draws from the employer's actual challenge in the system prompt — not generic.\n\
+- Bring draws ONLY from candidate background. Names the specific skills or perspective that cross over from adjacent experience.\n\
+- Ask questions must be anchored to the specific gap named — not generic career questions.\n\
 - NEVER invent metrics, percentages, dollar figures, headcount, or timeframes.\n\
 - NEVER name specific companies, clients, or employers — refer by category only.\n\
 - No adjectives or adverbs. No 'passionate', 'excited', 'dedicated'. Facts and trade-offs only.",

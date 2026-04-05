@@ -397,7 +397,7 @@
         {:else}
           {@const isIntro    = !!(parsed.present || parsed.thread || parsed.past || parsed.future)}
           {@const isMotiv    = !!(parsed.company || parsed.role || parsed.self)}
-          {@const isFit      = !!(parsed.gap || parsed.trade || parsed.value)}
+          {@const isFit      = !!(parsed.reframe || parsed.gap || parsed.choice || parsed.bring || parsed.trade || parsed.value)}
           {@const isFutureTy = !!(parsed.direction || parsed.alignment || parsed.contribution)}
           {@const isClosing  = current?.tag === 'closing'}
 
@@ -460,28 +460,34 @@
             {#if parsed.asks.length > 0}<div class="tp-sec tp-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
           {:else if isFit}
-            <!-- FIT: Gap → Trade → Value -->
-            {#if parsed.gap}
-              <div class="tp-sec tp-sec-gap">
-                <span class="cue-badge cue-gap">Gap</span>
-                <span class="tp-narrative-text">{parsed.gap}{#if tpStreaming && !parsed.transition1 && !parsed.trade}<span class="cursor">|</span>{/if}</span>
+            <!-- FIT: Reframe → Gap → Choice → Bring -->
+            {#if parsed.reframe}
+              <div class="tp-sec tp-sec-reframe">
+                <span class="cue-badge cue-reframe">Reframe</span>
+                <span class="tp-narrative-text">{parsed.reframe}{#if tpStreaming && !parsed.gap}<span class="cursor">|</span>{/if}</span>
               </div>
             {/if}
             {#if parsed.transition1}<div class="tp-transition">{parsed.transition1}</div>{/if}
-            {#if parsed.trade}
-              <div class="tp-sec tp-sec-trade">
-                <span class="cue-badge cue-trade">Trade</span>
-                <span class="tp-narrative-text">{parsed.trade}{#if tpStreaming && !parsed.transition2 && !parsed.value}<span class="cursor">|</span>{/if}</span>
+            {#if parsed.gap}
+              <div class="tp-sec tp-sec-gap">
+                <span class="cue-badge cue-gap">Gap</span>
+                <span class="tp-narrative-text">{parsed.gap}{#if tpStreaming && !parsed.choice}<span class="cursor">|</span>{/if}</span>
               </div>
             {/if}
             {#if parsed.transition2}<div class="tp-transition">{parsed.transition2}</div>{/if}
-            {#if parsed.value}
-              <div class="tp-sec tp-sec-value">
-                <span class="cue-badge cue-value">Value</span>
-                <span class="tp-narrative-text">{parsed.value}{#if tpStreaming && !parsed.transition3 && !parsed.close}<span class="cursor">|</span>{/if}</span>
+            {#if parsed.choice}
+              <div class="tp-sec tp-sec-choice">
+                <span class="cue-badge cue-choice">Choice</span>
+                <span class="tp-narrative-text">{parsed.choice}{#if tpStreaming && !parsed.bring}<span class="cursor">|</span>{/if}</span>
               </div>
             {/if}
             {#if parsed.transition3}<div class="tp-transition">{parsed.transition3}</div>{/if}
+            {#if parsed.bring}
+              <div class="tp-sec tp-sec-bring">
+                <span class="cue-badge cue-bring">Bring</span>
+                <span class="tp-narrative-text">{parsed.bring}{#if tpStreaming && !parsed.close}<span class="cursor">|</span>{/if}</span>
+              </div>
+            {/if}
             {#if parsed.close}<div class="tp-sec tp-sec-close"><span class="cue-badge cue-close">Close</span><span class="tp-close-text">{parsed.close}</span></div>{/if}
             {#if parsed.asks.length > 0}<div class="tp-sec tp-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
@@ -901,7 +907,7 @@
             {:else}
               {@const eIsIntro    = !!(parsed.present || parsed.thread || parsed.past || parsed.future)}
               {@const eIsMotiv    = !!(parsed.company || parsed.role || parsed.self)}
-              {@const eIsFit      = !!(parsed.gap || parsed.trade || parsed.value)}
+              {@const eIsFit      = !!(parsed.reframe || parsed.gap || parsed.choice || parsed.bring || parsed.trade || parsed.value)}
               {@const eIsFutureTy = !!(parsed.direction || parsed.alignment || parsed.contribution)}
               {@const eIsClosing  = entry.tag === 'closing'}
 
@@ -927,12 +933,13 @@
                 {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
               {:else if eIsFit}
-                {#if parsed.gap}<div class="e-sec e-sec-gap"><span class="cue-badge cue-gap">Gap</span><span class="affirm-text">{parsed.gap}</span></div>{/if}
+                {#if parsed.reframe}<div class="e-sec e-sec-reframe"><span class="cue-badge cue-reframe">Reframe</span><span class="affirm-text">{parsed.reframe}</span></div>{/if}
                 {#if parsed.transition1}<div class="e-transition">{parsed.transition1}</div>{/if}
-                {#if parsed.trade}<div class="e-sec e-sec-trade"><span class="cue-badge cue-trade">Trade</span><span class="affirm-text">{parsed.trade}</span></div>{/if}
+                {#if parsed.gap}<div class="e-sec e-sec-gap"><span class="cue-badge cue-gap">Gap</span><span class="affirm-text">{parsed.gap}</span></div>{/if}
                 {#if parsed.transition2}<div class="e-transition">{parsed.transition2}</div>{/if}
-                {#if parsed.value}<div class="e-sec e-sec-value"><span class="cue-badge cue-value">Value</span><span class="affirm-text">{parsed.value}</span></div>{/if}
+                {#if parsed.choice}<div class="e-sec e-sec-choice"><span class="cue-badge cue-choice">Choice</span><span class="affirm-text">{parsed.choice}</span></div>{/if}
                 {#if parsed.transition3}<div class="e-transition">{parsed.transition3}</div>{/if}
+                {#if parsed.bring}<div class="e-sec e-sec-bring"><span class="cue-badge cue-bring">Bring</span><span class="affirm-text">{parsed.bring}</span></div>{/if}
                 {#if parsed.close}<div class="e-sec e-sec-close"><span class="cue-badge cue-close">Close</span><span class="affirm-text">{parsed.close}</span></div>{/if}
                 {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
 
@@ -1616,7 +1623,10 @@
   .cue-badge.cue-company      { background: #3b0764; color: #d8b4fe; }
   .cue-badge.cue-role         { background: #164e63; color: #67e8f9; }
   .cue-badge.cue-self         { background: #0c4a6e; color: #7dd3fc; }
-  .cue-badge.cue-gap          { background: #164e63; color: #22d3ee; }
+  .cue-badge.cue-reframe      { background: #1e293b; color: #94a3b8; }
+  .cue-badge.cue-gap          { background: #451a03; color: #fb923c; }
+  .cue-badge.cue-choice       { background: #164e63; color: #22d3ee; }
+  .cue-badge.cue-bring        { background: #0f3d2e; color: #6ee7b7; }
   .cue-badge.cue-trade        { background: #1e3a5f; color: #93c5fd; }
   .cue-badge.cue-value        { background: #0f3d2e; color: #6ee7b7; }
   .cue-badge.cue-direction    { background: #14532d; color: #86efac; }

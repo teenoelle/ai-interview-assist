@@ -748,7 +748,7 @@
     if (Date.now() - lastSpeechAt < TTS_SILENCE_GAP_MS) return;
     if (answerStartTime !== null) return;
     const parsed = parseSuggestion(text);
-    const firstField = parsed.tell || parsed.acknowledge || parsed.present || parsed.company || parsed.gap || parsed.direction || parsed.asks?.[0]?.question || '';
+    const firstField = parsed.tell || parsed.reframe || parsed.acknowledge || parsed.present || parsed.company || parsed.gap || parsed.direction || parsed.asks?.[0]?.question || '';
     if (!firstField) return;
     const sentenceEnd = firstField.search(/[.!?]/);
     const firstSentence = sentenceEnd >= 0 ? firstField.slice(0, sentenceEnd + 1) : firstField;
@@ -1384,7 +1384,7 @@
             const streamingSug = suggestions.find(s => s.streaming);
             if (streamingSug?.suggestion) {
               const parsed = parseSuggestion(streamingSug.suggestion, true);
-              const firstField = parsed.tell || parsed.acknowledge || parsed.present || parsed.company || parsed.gap || parsed.direction || parsed.asks?.[0]?.question || '';
+              const firstField = parsed.tell || parsed.reframe || parsed.acknowledge || parsed.present || parsed.company || parsed.gap || parsed.direction || parsed.asks?.[0]?.question || '';
               if (firstField && firstField.search(/[.!?]/) >= 0) {
                 ttsSpokenForQuestion = true;
                 speakText(streamingSug.suggestion);

@@ -51,11 +51,15 @@ pub async fn ws_events(ws: WebSocketUpgrade, Query(q): Query<TokenQuery>, State(
 }
 
 async fn handle_audio(mut socket: WebSocket, tx: tokio::sync::mpsc::Sender<Vec<u8>>) {
+    let mut count: u64 = 0;
     while let Some(Ok(msg)) = socket.next().await {
         if let Message::Binary(data) = msg {
+            count += 1;
+            if count == 1 { tracing::info!("audio WS: first chunk ({} bytes)", data.len()); }
             let _ = tx.send(data.to_vec()).await;
         }
     }
+    tracing::warn!("audio WS: closed after {} chunks", count);
 }
 
 async fn handle_video(mut socket: WebSocket, tx: tokio::sync::mpsc::Sender<Vec<u8>>) {

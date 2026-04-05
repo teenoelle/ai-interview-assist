@@ -321,18 +321,26 @@ pub async fn run_mic_agent(
     call_counts: Option<CallCounts>,
 ) {
     let mut ring_buf = buffer::RingBuffer::new();
+    let mut mic_chunks_received: u64 = 0;
 
     loop {
         match audio_rx.recv().await {
             Some(chunk) => {
+                mic_chunks_received += 1;
+                if mic_chunks_received == 1 {
+                    tracing::info!("mic: first audio chunk received ({} bytes)", chunk.len());
+                }
                 ring_buf.push(&chunk);
                 if ring_buf.should_flush() {
                     if !ring_buf.has_speech() {
-                        ring_buf.drain_segment(); // discard silent window, avoid Whisper hallucination
+                        tracing::debug!("mic: silent segment discarded ({:.1}s, peak energy {:.0}, threshold 200)",
+                            ring_buf.duration_secs(), ring_buf.peak_energy);
+                        ring_buf.drain_segment();
                         continue;
                     }
                     let pcm = ring_buf.drain_segment();
                     if pcm.is_empty() { continue; }
+                    tracing::info!("mic: sending {:.1}s segment to transcription", pcm.len() as f32 / (16000.0 * 2.0));
 
                     let gkey = gemini_key.clone();
                     let grkey = groq_key.clone();
@@ -378,7 +386,10 @@ pub async fn run_mic_agent(
                     });
                 }
             }
-            None => break,
+            None => {
+                tracing::warn!("mic: audio channel closed after {} chunks — WebSocket disconnected?", mic_chunks_received);
+                break;
+            }
         }
     }
 }
@@ -406,18 +417,26 @@ pub async fn run_agent(
     // Heuristic fallback state
     let mut prev_speaker = String::from("You");
     let mut prev_word_count: usize = 0;
+    let mut sys_chunks_received: u64 = 0;
 
     loop {
         match audio_rx.recv().await {
             Some(pcm_chunk) => {
+                sys_chunks_received += 1;
+                if sys_chunks_received == 1 {
+                    tracing::info!("system: first audio chunk received ({} bytes)", pcm_chunk.len());
+                }
                 ring_buf.push(&pcm_chunk);
                 if ring_buf.should_flush() {
                     if !ring_buf.has_speech() {
-                        ring_buf.drain_segment(); // discard silent window, avoid Whisper hallucination
+                        tracing::debug!("system: silent segment discarded ({:.1}s, peak energy {:.0}, threshold 200)",
+                            ring_buf.duration_secs(), ring_buf.peak_energy);
+                        ring_buf.drain_segment();
                         continue;
                     }
                     let segment_pcm = ring_buf.drain_segment();
                     if segment_pcm.is_empty() { continue; }
+                    tracing::info!("system: sending {:.1}s segment to transcription", segment_pcm.len() as f32 / (16000.0 * 2.0));
 
                     let gkey = gemini_key.clone();
                     let grkey = groq_key.clone();
@@ -521,7 +540,10 @@ pub async fn run_agent(
                     }
                 }
             }
-            None => break,
+            None => {
+                tracing::warn!("system: audio channel closed after {} chunks — WebSocket disconnected?", sys_chunks_received);
+                break;
+            }
         }
     }
 }

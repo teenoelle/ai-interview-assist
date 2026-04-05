@@ -15,6 +15,7 @@ pub struct RingBuffer {
     data: Vec<u8>,
     silent_bytes: usize,
     has_speech: bool,
+    pub peak_energy: f32, // highest energy chunk seen in this segment — for diagnostics
 }
 
 impl RingBuffer {
@@ -23,6 +24,7 @@ impl RingBuffer {
             data: Vec::with_capacity(MAX_SEGMENT_BYTES),
             silent_bytes: 0,
             has_speech: false,
+            peak_energy: 0.0,
         }
     }
 
@@ -41,6 +43,8 @@ impl RingBuffer {
         } else {
             0.0
         };
+
+        if energy > self.peak_energy { self.peak_energy = energy; }
 
         if energy > 200.0 {
             self.has_speech = true;
@@ -73,7 +77,14 @@ impl RingBuffer {
         let data = std::mem::take(&mut self.data);
         self.silent_bytes = 0;
         self.has_speech = false;
+        self.peak_energy = 0.0;
         data
+    }
+
+    pub fn data_len(&self) -> usize { self.data.len() }
+
+    pub fn duration_secs(&self) -> f32 {
+        self.data.len() as f32 / (16000.0 * 2.0)
     }
 }
 

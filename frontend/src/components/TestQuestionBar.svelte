@@ -25,6 +25,8 @@
     { label: 'Motivation', tag: 'motivation', questions: [
       'Why are you interested in this role?',
       'What draws you to this company?',
+    ]},
+    { label: 'Fit', tag: 'fit', questions: [
       'Why are you applying for a junior position?',
       'You seem overqualified — why this role?',
       'Why are you looking to step back from your current level?',

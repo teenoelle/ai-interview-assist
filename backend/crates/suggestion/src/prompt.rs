@@ -51,6 +51,29 @@ const MOTIVATION_TRIGGERS: &[&str] = &[
     "what brought you to",
 ];
 
+const FIT_TRIGGERS: &[&str] = &[
+    "overqualified",
+    "seem overqualified",
+    "appears overqualified",
+    "why junior",
+    "why a junior",
+    "why a lower",
+    "why a more junior",
+    "why are you applying for a junior",
+    "why are you applying for such",
+    "why apply for a junior",
+    "step back",
+    "step down",
+    "lower level",
+    "more entry-level",
+    "why would you take a",
+    "why would you want a junior",
+    "seems like a step back",
+    "seems like a step down",
+    "taking a step back",
+    "taking a step down",
+];
+
 const FUTURE_TRIGGERS: &[&str] = &[
     "five years",
     "5 years",
@@ -274,6 +297,7 @@ pub enum QuestionType {
     Smalltalk,
     Introduction,
     Motivation,
+    Fit,
     Future,
     Closing,
     Strengths,
@@ -296,6 +320,7 @@ pub fn classify_question(question: &str) -> (QuestionType, Option<QuestionType>)
     let candidates: &[(usize, QuestionType)] = &[
         (score_triggers(SMALLTALK_TRIGGERS,    &q), QuestionType::Smalltalk),
         (score_triggers(INTRODUCTION_TRIGGERS, &q), QuestionType::Introduction),
+        (score_triggers(FIT_TRIGGERS,          &q), QuestionType::Fit),
         (score_triggers(MOTIVATION_TRIGGERS,   &q), QuestionType::Motivation),
         (score_triggers(FUTURE_TRIGGERS,       &q), QuestionType::Future),
         (score_triggers(CLOSING_TRIGGERS,      &q), QuestionType::Closing),
@@ -340,6 +365,7 @@ fn question_type_topic(qt: QuestionType) -> &'static str {
         QuestionType::Smalltalk     => "small talk and pleasantries",
         QuestionType::Introduction => "your career background and story",
         QuestionType::Motivation   => "why you want this role and company",
+        QuestionType::Fit          => "why you are applying at this level or channel — a deliberate trade-off",
         QuestionType::Future       => "your career direction and goals",
         QuestionType::Closing      => "questions you have for the interviewer",
         QuestionType::Strengths    => "your key strengths",
@@ -359,6 +385,7 @@ pub fn question_type_to_tag(qt: QuestionType) -> &'static str {
         QuestionType::Smalltalk    => "smalltalk",
         QuestionType::Introduction => "personal",
         QuestionType::Motivation   => "motivation",
+        QuestionType::Fit          => "fit",
         QuestionType::Future       => "future",
         QuestionType::Closing      => "closing",
         QuestionType::Strengths    => "strengths",
@@ -416,6 +443,7 @@ fn dispatch_prompt(ctx_prefix: &str, question: &str, qtype: QuestionType) -> Str
         QuestionType::Smalltalk    => build_competency_prompt(ctx_prefix, question), // fallback; normally short-circuited before LLM
         QuestionType::Introduction => build_introduction_prompt(ctx_prefix, question),
         QuestionType::Motivation   => build_motivation_prompt(ctx_prefix, question),
+        QuestionType::Fit          => build_fit_prompt(ctx_prefix, question),
         QuestionType::Future       => build_future_prompt(ctx_prefix, question),
         QuestionType::Closing      => build_closing_hm_prompt(ctx_prefix, question),
         QuestionType::Strengths    => build_strengths_prompt(ctx_prefix, question),
@@ -486,8 +514,35 @@ Rules:\n\
 - NEVER name specific companies, clients, or employers — refer by industry only (e.g. 'a retail brand', 'a tech startup').\n\
 - Ask topics: 2-4 word noun phrases naming the specific thing being asked about — e.g. 'team structure', 'success metrics', 'client mix'. Must directly relate to what the interviewer asked. Never a verb phrase. Never vague.\n\
 - Ask questions must probe the specific topic the interviewer raised — not generic role questions. If the recent conversation includes specific words or concerns the interviewer mentioned, prioritise those for Ask topics.\n\
-- LEVEL/FIT MISMATCH: If the interviewer is questioning why the candidate is applying for a more junior, lower-level, or different-channel role (e.g. 'why are you applying for a junior position?', 'you seem overqualified'), treat this as a fit/trade-off question. Role must name the specific skill gap or channel the candidate is deliberately expanding into, framing it as a strategic move — not a step back. Self must name what the candidate gains here that they cannot get elsewhere. Never be defensive. Reframe the level or channel difference as the point, not the problem.\n\
 - No adjectives or adverbs. No 'passionate', 'excited', 'dedicated', 'driven'. Facts and direction only.",
+        ctx_prefix, question
+    )
+}
+
+fn build_fit_prompt(ctx_prefix: &str, question: &str) -> String {
+    format!(
+        "{}The interviewer asked a level/fit challenge question: '{}'\n\n\
+CRITICAL: This is a FIT/TRADE-OFF question — the interviewer is questioning why the candidate is applying at this level or in this channel. \
+Output ONLY the labeled lines below. Never be defensive. Reframe the level or channel difference as the deliberate point, not a problem.\n\
+DO NOT output Company:, Motivation:, Role:, or Answer: — those labels do not exist here.\n\n\
+Gap: <1-2 sentences. Name the specific skill, channel, or domain the candidate is deliberately moving into. This is the exact reason for the level or title difference — not a vague 'new challenge'. Starts with 'I'. Max 10 words each.>\n\
+Transition1: <1 sentence bridging Gap to Trade. Starts with 'The trade-off is deliberate:' or 'That means accepting' or 'It means trading'. Max 10 words.>\n\
+Trade: <1-2 sentences. The explicit exchange: what depth or seniority is being set aside, and what is gained here instead. Framed as a calculated decision. Starts with 'I'. Max 10 words each.>\n\
+Transition2: <1 sentence bridging Trade to Value. Starts with 'What I bring to this level is' or 'Where I add immediate value is' or 'The advantage is'. Max 10 words.>\n\
+Value: <1-2 sentences. What existing depth contributes at this level that a career junior wouldn't have. Names specific skills, perspective, or shortcuts. Starts with 'I'. Max 10 words each.>\n\
+Transition3: <1 sentence bridging Value to Close. Starts with 'So the fit here is' or 'That combination is why' or 'Which is why'. Max 10 words.>\n\
+Close: <One sentence. Connects the trade-off directly to the employer's specific challenge from the system prompt. Starts with 'That\\'s why', 'This is why', or 'I\\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
+----\n\
+Ask: <2-4 word noun phrase naming what you're asking about — related to the channel, domain, or level the interviewer raised> | <Specific grammatical question. Probes how the team or role approaches the specific channel or skill gap being discussed. Ends with '?'.> | <1 sentence if asked 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — a different angle> | <A different specific question about how success is defined at this level or how the team supports someone expanding into this area. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
+Rules:\n\
+- Output ONLY: Gap:, Transition1:, Trade:, Transition2:, Value:, Transition3:, Close:, then two Ask: lines. No other labels. No preamble.\n\
+- Gap names the specific channel or skill — never 'a new challenge' or 'growth opportunity'. If the system prompt names the channel or domain gap, use it.\n\
+- Trade draws ONLY from candidate background — no invented details.\n\
+- Value names what a senior-background candidate brings that justifies hiring them at a junior level: faster ramp, cross-channel perspective, stakeholder credibility, etc.\n\
+- NEVER invent metrics, percentages, dollar figures, headcount, or timeframes.\n\
+- NEVER name specific companies, clients, or employers — refer by category only.\n\
+- No adjectives or adverbs. No 'passionate', 'excited', 'dedicated'. Facts and trade-offs only.",
         ctx_prefix, question
     )
 }

@@ -537,9 +537,9 @@ Ask: <2-4 word noun phrase naming what you're asking about — related to the ch
 Ask: <2-4 word noun phrase — a different angle> | <A different specific question about how success is defined at this level or how the team supports someone expanding into this area. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
 Rules:\n\
 - Output ONLY: Gap:, Transition1:, Trade:, Transition2:, Value:, Transition3:, Close:, then two Ask: lines. No other labels. No preamble.\n\
-- Gap names the specific channel or skill — never 'a new challenge' or 'growth opportunity'. If the system prompt names the channel or domain gap, use it.\n\
-- Trade draws ONLY from candidate background — no invented details.\n\
-- Value names what a senior-background candidate brings that justifies hiring them at a junior level: faster ramp, cross-channel perspective, stakeholder credibility, etc.\n\
+- CRITICAL — Gap must identify a SPECIFIC skill, channel, or domain listed in the job description (system prompt) where the candidate's background is absent or materially thinner than required. Read the JD requirements carefully: if the JD asks for channel X and the candidate's background does not show clear experience in channel X, that is the gap. Name it explicitly and tactfully — not defensively. If multiple gaps exist, name the most relevant one to this role.\n\
+- Trade draws ONLY from candidate background — no invented details. Names what is being deliberately set aside (seniority, scope, title) in exchange for what is gained (new channel depth, domain expansion).\n\
+- Value names what a candidate with existing depth brings that a career junior wouldn't have: faster ramp, cross-channel perspective, stakeholder credibility, pattern recognition from adjacent work.\n\
 - NEVER invent metrics, percentages, dollar figures, headcount, or timeframes.\n\
 - NEVER name specific companies, clients, or employers — refer by category only.\n\
 - No adjectives or adverbs. No 'passionate', 'excited', 'dedicated'. Facts and trade-offs only.",

@@ -748,7 +748,7 @@
     if (Date.now() - lastSpeechAt < TTS_SILENCE_GAP_MS) return;
     if (answerStartTime !== null) return;
     const parsed = parseSuggestion(text);
-    const firstField = parsed.acknowledge || parsed.present || parsed.company || parsed.direction || parsed.tell || parsed.asks?.[0]?.question || '';
+    const firstField = parsed.tell || parsed.acknowledge || parsed.present || parsed.company || parsed.gap || parsed.direction || parsed.asks?.[0]?.question || '';
     if (!firstField) return;
     const sentenceEnd = firstField.search(/[.!?]/);
     const firstSentence = sentenceEnd >= 0 ? firstField.slice(0, sentenceEnd + 1) : firstField;
@@ -1384,7 +1384,7 @@
             const streamingSug = suggestions.find(s => s.streaming);
             if (streamingSug?.suggestion) {
               const parsed = parseSuggestion(streamingSug.suggestion, true);
-              const firstField = parsed.acknowledge || parsed.present || parsed.company || parsed.direction || parsed.tell || parsed.asks?.[0]?.question || '';
+              const firstField = parsed.tell || parsed.acknowledge || parsed.present || parsed.company || parsed.gap || parsed.direction || parsed.asks?.[0]?.question || '';
               if (firstField && firstField.search(/[.!?]/) >= 0) {
                 ttsSpokenForQuestion = true;
                 speakText(streamingSug.suggestion);
@@ -1405,12 +1405,16 @@
           suggestions = suggestions.map(s =>
             s.secondaryStreaming ? { ...s, secondarySuggestion: event.full_text, secondaryStreaming: false } : s
           );
+          if (!ttsSpokenForQuestion) { speakText(event.full_text); ttsSpokenForQuestion = true; }
         } else if (event.mode === 'closing_hr') {
           suggestions = suggestions.map(s => s.closingHRFetched ? { ...s, closingHR: event.full_text } : s);
+          speakText(event.full_text);
         } else if (event.mode === 'closing_hm') {
           suggestions = suggestions.map(s => s.closingHMFetched ? { ...s, closingHM: event.full_text } : s);
+          speakText(event.full_text);
         } else if (event.mode === 'closing_ceo') {
           suggestions = suggestions.map(s => s.closingCEOFetched ? { ...s, closingCEO: event.full_text } : s);
+          speakText(event.full_text);
         } else {
           suggestions = suggestions.map(s => {
             if (!s.streaming) return s;

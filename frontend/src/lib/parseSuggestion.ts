@@ -20,6 +20,10 @@ export interface ParsedSuggestion {
   company: string;
   role: string;
   self: string;
+  // Fit/level mismatch
+  gap: string;
+  trade: string;
+  value: string;
   // Future/growth
   direction: string;
   alignment: string;
@@ -36,6 +40,7 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
   let acknowledge = '', solve = '', bridge = '', close = '', affirm = '', tell = '', cue = 'Answer';
   let present = '', thread = '', past = '', future = '';
   let company = '', role = '', self = '';
+  let gap = '', trade = '', value = '';
   let direction = '', alignment = '', contribution = '';
   let transition1 = '', transition2 = '', transition3 = '';
   const asks: { topic: string; question: string; followUp?: string; section?: string }[] = [];
@@ -47,7 +52,7 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
   // Strip markdown bold markers e.g. **Affirm:** → Affirm:
   const clean = (s: string) => s.replace(/^\*+([^*]+)\*+\s*/, '$1 ').trim();
   const isCueLabel = (s: string) =>
-    /^(Principle|Context|Action|Result|Point|Metric|General|Example|Story|Pivot|Acknowledge|Affirm|Solve|Bridge|Close|Answer|Say|Tell|Ask|Present|Summary|Thread|Past|Story|Future|Next|Company|Role|Self|Direction|Alignment|Contribution|Transition1|Transition2|Transition3|Section):/i.test(s);
+    /^(Principle|Context|Action|Result|Point|Metric|General|Example|Story|Pivot|Acknowledge|Affirm|Solve|Bridge|Close|Answer|Say|Tell|Ask|Present|Summary|Thread|Past|Story|Future|Next|Company|Role|Self|Gap|Trade|Value|Direction|Alignment|Contribution|Transition1|Transition2|Transition3|Section):/i.test(s);
 
   for (const line of lines) {
     const t = line.trim();
@@ -66,6 +71,9 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
         else if (field === 'company') company = val;
         else if (field === 'role') role = val;
         else if (field === 'self') self = val;
+        else if (field === 'gap') gap = val;
+        else if (field === 'trade') trade = val;
+        else if (field === 'value') value = val;
         else if (field === 'direction') direction = val;
         else if (field === 'alignment') alignment = val;
         else if (field === 'contribution') contribution = val;
@@ -110,6 +118,12 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
       setNF('role', c.replace(/^Role:\s*/i, '').trim());
     } else if (c.match(/^Self:/i)) {
       setNF('self', c.replace(/^Self:\s*/i, '').trim());
+    } else if (c.match(/^Gap:/i)) {
+      setNF('gap', c.replace(/^Gap:\s*/i, '').trim());
+    } else if (c.match(/^Trade:/i)) {
+      setNF('trade', c.replace(/^Trade:\s*/i, '').trim());
+    } else if (c.match(/^Value:/i)) {
+      setNF('value', c.replace(/^Value:\s*/i, '').trim());
     } else if (c.match(/^Direction:/i)) {
       setNF('direction', c.replace(/^Direction:\s*/i, '').trim());
     } else if (c.match(/^Alignment:/i)) {
@@ -165,6 +179,9 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
       else if (f === 'company') company = company ? company + ' ' + t : t;
       else if (f === 'role') role = role ? role + ' ' + t : t;
       else if (f === 'self') self = self ? self + ' ' + t : t;
+      else if (f === 'gap') gap = gap ? gap + ' ' + t : t;
+      else if (f === 'trade') trade = trade ? trade + ' ' + t : t;
+      else if (f === 'value') value = value ? value + ' ' + t : t;
       else if (f === 'direction') direction = direction ? direction + ' ' + t : t;
       else if (f === 'alignment') alignment = alignment ? alignment + ' ' + t : t;
       else if (f === 'contribution') contribution = contribution ? contribution + ' ' + t : t;
@@ -187,7 +204,7 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
 
   // Positional fallback: if the model dropped all labels
   // Skip if we already have typed sections or ask entries (e.g. Closing type)
-  if (!acknowledge && !tell && !present && !company && !direction && asks.length === 0) {
+  if (!acknowledge && !tell && !present && !company && !gap && !direction && asks.length === 0) {
     const nonEmpty = lines.map(l => l.trim()).filter(l => l && l !== '---');
     if (nonEmpty.length >= 2) {
       acknowledge = clean(nonEmpty[0]);
@@ -271,6 +288,7 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
     solveStrategies: solveStrategies.map(s => ({ keyword: sc(s.keyword), text: sc(s.text) })),
     present: sc(present), thread: sc(thread), past: sc(past), future: sc(future),
     company: sc(company), role: sc(role), self: sc(self),
+    gap: sc(gap), trade: sc(trade), value: sc(value),
     direction: sc(direction), alignment: sc(alignment), contribution: sc(contribution),
     transition1: sc(transition1), transition2: sc(transition2), transition3: sc(transition3),
   };
@@ -320,6 +338,7 @@ export function getAnswerType(
 ): { framework: string; label: string } {
   // Tag-specific overrides for types that share STAR fields but have distinct coaching frames
   if (tag === 'smalltalk')   return { framework: 'A: Small Talk',  label: '' };
+  if (tag === 'fit')         return { framework: 'A: Fit',         label: 'Gap → Trade → Value' };
   if (tag === 'weaknesses')  return { framework: 'A: Weakness',    label: 'Real → Growth → Evidence → Redirect' };
   if (tag === 'situational') return { framework: 'A: Situational', label: 'Stakes → Approach → Reasoning → Answer' };
   if (tag === 'strengths')   return { framework: 'A: Strengths',   label: 'Acknowledge → Strengths → Close' };
@@ -332,6 +351,8 @@ export function getAnswerType(
     return { framework: 'A: Intro', label: 'Summary → Story → Next' };
   if (parsed.company || parsed.role || parsed.self)
     return { framework: 'A: Motivation', label: 'Company → Role → Self' };
+  if (parsed.gap || parsed.trade || parsed.value)
+    return { framework: 'A: Fit', label: 'Gap → Trade → Value' };
   if (parsed.direction || parsed.alignment || parsed.contribution)
     return { framework: 'A: Future', label: 'Direction → Alignment → Contribution' };
   if (parsed.asks.length >= 3 && !parsed.acknowledge && !parsed.tell)

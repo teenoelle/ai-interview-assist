@@ -20,6 +20,8 @@ export class MediaCapture {
   private videoInterval: ReturnType<typeof setInterval> | null = null;
   private faceInterval: ReturnType<typeof setInterval> | null = null;
   private analyserInterval: ReturnType<typeof setInterval> | null = null;
+  private systemKeepAlive: ReturnType<typeof setInterval> | null = null;
+  private micKeepAlive: ReturnType<typeof setInterval> | null = null;
   private systemWorklet: AudioWorkletNode | null = null;
   private micWorklet: AudioWorkletNode | null = null;
   private faceDetector: FaceEmotionDetector | null = null;
@@ -111,6 +113,14 @@ export class MediaCapture {
     source.connect(this.systemWorklet);
     this.systemWorklet.connect(this.systemAudioCtx.destination);
 
+    // Browsers suspend AudioContext when the page loses focus (e.g. user switches to meeting tab).
+    // Resume it every 2 seconds so the AudioWorklet keeps processing regardless of tab focus.
+    this.systemKeepAlive = setInterval(() => {
+      if (this.systemAudioCtx?.state === 'suspended') {
+        this.systemAudioCtx.resume().catch(() => {});
+      }
+    }, 2000);
+
     // Item 8: AnalyserNode for real-time spectral features
     const analyser = this.systemAudioCtx.createAnalyser();
     analyser.fftSize = 256; // 128 bins, each ~62.5 Hz wide at 16 kHz
@@ -159,6 +169,12 @@ export class MediaCapture {
     };
     source.connect(this.micWorklet);
     this.micWorklet.connect(this.micAudioCtx.destination);
+
+    this.micKeepAlive = setInterval(() => {
+      if (this.micAudioCtx?.state === 'suspended') {
+        this.micAudioCtx.resume().catch(() => {});
+      }
+    }, 2000);
   }
 
   private _captureFrameFn: (() => Promise<void>) | null = null;
@@ -253,6 +269,8 @@ export class MediaCapture {
     if (this.videoInterval) clearInterval(this.videoInterval);
     if (this.faceInterval) clearInterval(this.faceInterval);
     if (this.analyserInterval) clearInterval(this.analyserInterval);
+    if (this.systemKeepAlive) clearInterval(this.systemKeepAlive);
+    if (this.micKeepAlive) clearInterval(this.micKeepAlive);
     this.faceDetector?.dispose();
     this.faceDetector = null;
     this.systemWorklet?.disconnect();

@@ -13,13 +13,15 @@ pub async fn transcribe(api_key: &str, pcm: &[u8]) -> Result<String> {
         api_key,
         "whisper-large-v3",
         pcm,
+        30,
     )
     .await
 }
 
 /// Call any OpenAI-compatible /audio/transcriptions endpoint.
 /// Works with Groq, faster-whisper-server, whisper.cpp HTTP server, etc.
-pub async fn transcribe_openai_asr(url: &str, api_key: &str, model: &str, pcm: &[u8]) -> Result<String> {
+/// `timeout_secs`: use a short value (e.g. 10) for local Whisper so model-loading hangs fail fast.
+pub async fn transcribe_openai_asr(url: &str, api_key: &str, model: &str, pcm: &[u8], timeout_secs: u64) -> Result<String> {
     let wav_bytes = pcm_to_wav(pcm)?;
 
     let part = reqwest::multipart::Part::bytes(wav_bytes)
@@ -30,13 +32,12 @@ pub async fn transcribe_openai_asr(url: &str, api_key: &str, model: &str, pcm: &
         .part("file", part)
         .text("model", model.to_string())
         .text("language", "en")
-        .text("response_format", "text")
         .text("prompt", "Interview conversation. Speaker may have a non-native accent. Transcribe faithfully.");
 
     let mut req = client()
         .post(url)
         .multipart(form)
-        .timeout(std::time::Duration::from_secs(60));
+        .timeout(std::time::Duration::from_secs(timeout_secs));
     if !api_key.is_empty() {
         req = req.bearer_auth(api_key);
     }
@@ -48,8 +49,15 @@ pub async fn transcribe_openai_asr(url: &str, api_key: &str, model: &str, pcm: &
         return Err(anyhow!("ASR error {}: {}", status, body));
     }
 
-    let text = resp.text().await?;
-    Ok(text.trim().to_string())
+    let body = resp.text().await?;
+    // Both Groq and faster-whisper-server return JSON by default: {"text": "..."}
+    // Fall back to treating the body as plain text if it's not valid JSON.
+    let text = if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
+        v["text"].as_str().unwrap_or("").trim().to_string()
+    } else {
+        body.trim().to_string()
+    };
+    Ok(text)
 }
 
 fn pcm_to_wav(pcm: &[u8]) -> Result<Vec<u8>> {

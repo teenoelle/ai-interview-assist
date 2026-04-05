@@ -1,14 +1,27 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { MediaCapture } from '../lib/capture';
   type StreamsReadyCallback = (screen: MediaStream, webcam: MediaStream | null) => void;
-  const { onCapture, onStreams, onReady, onLevel: onLevelProp, onRecording, initialCapture = null } = $props<{
+  const { onCapture, onStreams, onReady, onLevel: onLevelProp, onRecording, onStreamEnded: onStreamEndedProp, initialCapture = null } = $props<{
     onCapture: (active: boolean) => void;
     onStreams?: StreamsReadyCallback;
     onReady?: (cap: MediaCapture) => void;
     onLevel?: (mic: number, sys: number) => void;
     onRecording?: (url: string) => void;
+    onStreamEnded?: () => void;
     initialCapture?: MediaCapture | null;
   }>();
+
+  function handleStreamEnded() {
+    if (capture) {
+      capture.stop();
+      capture = null;
+      micLevel = 0;
+      systemLevel = 0;
+      onCapture(false);
+      onStreamEndedProp?.();
+    }
+  }
 
   let capture: MediaCapture | null = $state(null);
   let starting = $state(false); // true only during the async start() call
@@ -17,10 +30,15 @@
   let micLevel = $state(0);
   let systemLevel = $state(0);
 
-  // Adopt a pre-created capture instance (from async setup transition)
+  // Adopt a pre-created capture instance (from async setup transition).
+  // untrack() on the capture read prevents this effect from re-running when capture
+  // is set to null by toggle() — avoiding the race where initialCapture is still
+  // non-null and immediately re-sets capture, leaving the button stuck on "Stop".
   $effect(() => {
-    if (initialCapture && !capture) {
-      capture = initialCapture;
+    if (initialCapture) {
+      untrack(() => {
+        if (!capture) capture = initialCapture;
+      });
     }
   });
 
@@ -39,6 +57,7 @@
         cap.onLevel((mic, sys) => { micLevel = mic; systemLevel = sys; onLevelProp?.(mic, sys); });
         if (onStreams) cap.onStreamsReady(onStreams);
         if (onRecording) cap.onRecording(onRecording);
+        cap.onStreamEnded(handleStreamEnded);
         await cap.start();
         capture = cap;
         onCapture(true);

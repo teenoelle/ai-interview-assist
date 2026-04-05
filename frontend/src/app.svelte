@@ -1838,6 +1838,7 @@
             onReady={(cap) => { captureInst = cap; }}
             onLevel={(mic, sys) => { captureMicLevel = mic; captureSystemLevel = sys; updateSysEnergy(sys); }}
             onRecording={(url) => { recordingUrl = url; }}
+            onStreamEnded={() => { errorMessages = [...errorMessages, 'Screen share ended unexpectedly (e.g. a meeting notification interrupted it). Click "Capture Meeting" to restart.']; }}
           />
         </div>
       </header>

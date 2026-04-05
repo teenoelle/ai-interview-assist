@@ -342,7 +342,7 @@ async fn make_chunks(pcm: &Path, work_dir: &Path, duration: f64) -> Result<Vec<A
 async fn transcribe_pcm(pcm: &[u8], cfg: &ReviewConfig) -> String {
     if let Some(url) = &cfg.whisper_url {
         let endpoint = format!("{}/v1/audio/transcriptions", url.trim_end_matches('/'));
-        if let Ok(t) = transcription::groq::transcribe_openai_asr(&endpoint, "", &cfg.whisper_model, pcm).await {
+        if let Ok(t) = transcription::groq::transcribe_openai_asr(&endpoint, "", &cfg.whisper_model, pcm, 10).await {
             if !t.trim().is_empty() { return t; }
         }
     }

@@ -7,6 +7,7 @@ export type AudioFeatures = { dominantBand: 'low' | 'mid' | 'high' | 'none'; flu
 export type AudioFeaturesCallback = (features: AudioFeatures) => void;
 export type LiveEmotionCallback = (emotion: string) => void;
 export type RecordingCallback = (url: string) => void;
+export type StreamEndedCallback = () => void;
 
 export class MediaCapture {
   private systemStream: MediaStream | null = null;
@@ -30,6 +31,7 @@ export class MediaCapture {
   private _audioFeaturesCallback: AudioFeaturesCallback | null = null;
   private _liveEmotionCallback: LiveEmotionCallback | null = null;
   private _recordingCallback: RecordingCallback | null = null;
+  private _streamEndedCallback: StreamEndedCallback | null = null;
   private screenRecordStream: MediaStream | null = null;
   private screenRecorder: MediaRecorder | null = null;
   private screenChunks: Blob[] = [];
@@ -47,6 +49,7 @@ export class MediaCapture {
   onAudioFeatures(cb: AudioFeaturesCallback) { this._audioFeaturesCallback = cb; }
   onLiveEmotion(cb: LiveEmotionCallback) { this._liveEmotionCallback = cb; }
   onRecording(cb: RecordingCallback) { this._recordingCallback = cb; }
+  onStreamEnded(cb: StreamEndedCallback) { this._streamEndedCallback = cb; }
 
   async start(): Promise<void> {
     this.systemStream = await navigator.mediaDevices.getDisplayMedia({
@@ -55,6 +58,12 @@ export class MediaCapture {
     });
     // Return focus to the interview app after the OS/browser switches to the captured window
     window.focus();
+
+    // Notify the app when the browser ends the screen share (e.g. user clicks "Stop sharing"
+    // or a meeting notification causes Chrome to drop the capture).
+    this.systemStream.getTracks().forEach((track) => {
+      track.onended = () => this._streamEndedCallback?.();
+    });
 
     try {
       this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -264,6 +273,8 @@ export class MediaCapture {
   }
 
   stop() {
+    // Clear before stopping tracks so onended on those tracks doesn't re-trigger handleStreamEnded.
+    this._streamEndedCallback = null;
     if (this.videoInterval) clearInterval(this.videoInterval);
     if (this.faceInterval) clearInterval(this.faceInterval);
     if (this.analyserInterval) clearInterval(this.analyserInterval);

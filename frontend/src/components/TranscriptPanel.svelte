@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import type { TranscriptEntry } from '../lib/types';
   import PanelHeader from './PanelHeader.svelte';
   import { FILLER_RE } from '../lib/filler';
@@ -10,10 +11,20 @@
   }>();
 
   let container: HTMLElement;
+  // Track whether the user has scrolled up to read history — if so, don't auto-scroll.
+  let userScrolledUp = false;
+
+  function onScroll() {
+    if (!container) return;
+    const distFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    userScrolledUp = distFromBottom > 80;
+  }
 
   $effect(() => {
-    if (entries.length && container) {
-      container.scrollTop = container.scrollHeight;
+    if (entries.length && container && !userScrolledUp) {
+      tick().then(() => {
+        container.scrollTop = container.scrollHeight;
+      });
     }
   });
 
@@ -68,7 +79,7 @@
   {#if entries.length > 0}
     <PanelHeader title="Transcript" />
   {/if}
-  <div class="entries" bind:this={container}>
+  <div class="entries" bind:this={container} onscroll={onScroll}>
     {#if entries.length === 0}
       <p class="empty">Transcript will appear here when audio is captured...</p>
     {:else}

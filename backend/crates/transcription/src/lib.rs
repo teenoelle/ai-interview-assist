@@ -37,7 +37,7 @@ async fn transcribe_with_fallback(
     // 1. Local Whisper — completely free, no quota; silently skip if not running
     if let Some(url) = whisper_url {
         let endpoint = format!("{}/v1/audio/transcriptions", url.trim_end_matches('/'));
-        match groq::transcribe_openai_asr(&endpoint, "", whisper_model, pcm).await {
+        match groq::transcribe_openai_asr(&endpoint, "", whisper_model, pcm, 10).await {
             Ok(text) => {
                 inc(call_counts, "Whisper (local)");
                 tracing::info!("transcription ✓ Whisper (local) — {} chars", text.len());

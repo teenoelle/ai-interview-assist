@@ -25,12 +25,14 @@ const FILLER_PATTERNS: { word: string; re: RegExp }[] = [
   },
 ];
 
-// Shared regex for transcript highlighting — union of all patterns.
-// Re-created as a single alternation so the transcript only needs one pass.
-export const FILLER_RE = new RegExp(
-  FILLER_PATTERNS.map(p => p.re.source).join('|'),
-  'gi',
-);
+// Source string for filler regex — used to create fresh instances to avoid
+// shared lastIndex state bugs with the g flag.
+const FILLER_RE_SRC = FILLER_PATTERNS.map(p => p.re.source).join('|');
+
+// Always returns a fresh regex instance — never share a /g regex across calls.
+export function fillerRe(): RegExp {
+  return new RegExp(FILLER_RE_SRC, 'gi');
+}
 
 export function countFillers(text: string): FillerCount[] {
   return FILLER_PATTERNS

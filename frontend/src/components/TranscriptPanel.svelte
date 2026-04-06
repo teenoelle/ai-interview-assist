@@ -2,7 +2,7 @@
   import { tick } from 'svelte';
   import type { TranscriptEntry } from '../lib/types';
   import PanelHeader from './PanelHeader.svelte';
-  import { FILLER_RE } from '../lib/filler';
+  import { fillerRe } from '../lib/filler';
 
   const { entries, onFlipSpeaker, jdKeywords = [] } = $props<{
     entries: TranscriptEntry[];
@@ -58,14 +58,14 @@
 
     // Filler word highlighting (You speaker only)
     if (isYou) {
-      html = html.replace(FILLER_RE, '<mark class="filler-hit">$&</mark>');
+      html = html.replace(fillerRe(), '<mark class="filler-hit">$&</mark>');
     }
 
     return html;
   }
 
   function fillerCount(text: string): number {
-    return (text.match(FILLER_RE) ?? []).length;
+    return (text.match(fillerRe()) ?? []).length;
   }
 
   function wpmLabel(text: string, durationMs: number): string {

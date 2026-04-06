@@ -27,6 +27,7 @@ pub struct AppState {
     pub anthropic_key: Option<String>,
     pub groq_key: Option<String>,
     pub groq_key_2: Option<String>,
+    pub deepgram_key: Option<String>,
     pub openrouter_key: Option<String>,
     pub mistral_key: Option<String>,
     pub cerebras_key: Option<String>,

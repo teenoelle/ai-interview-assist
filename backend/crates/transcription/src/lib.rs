@@ -2,6 +2,7 @@ pub mod buffer;
 pub mod vad;
 pub mod gemini;
 pub mod groq;
+pub mod deepgram;
 pub mod diarize;
 
 use std::sync::{Arc, OnceLock};
@@ -39,6 +40,7 @@ async fn transcribe_with_fallback(
     gemini_key: &str,
     groq_key: Option<&str>,
     groq_key_2: Option<&str>,
+    deepgram_key: Option<&str>,
     whisper_url: Option<&str>,
     whisper_model: &str,
     pcm: &[u8],
@@ -68,7 +70,25 @@ async fn transcribe_with_fallback(
         }
     }
 
-    // 2. Groq Whisper key 2 — tried first; more reliable (key 1 is often exhausted)
+    // 2. Deepgram Nova-2 — 200 hours/month free, no RPM limit; most reliable API option
+    if let Some(key) = deepgram_key {
+        match deepgram::transcribe(key, pcm).await {
+            Ok(text) => {
+                inc(call_counts, "Deepgram");
+                tracing::info!("transcription ✓ Deepgram — {} chars", text.len());
+                let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Deepgram".to_string(), local: false });
+                return Ok(text);
+            }
+            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
+                tracing::warn!("Deepgram quota/rate-limit, trying Groq");
+            }
+            Err(e) => {
+                tracing::warn!("Deepgram error, trying Groq: {}", e);
+            }
+        }
+    }
+
+    // 3. Groq Whisper key 2 — fallback when Deepgram unavailable
     if let Some(key) = groq_key_2 {
         match groq::transcribe(key, pcm).await {
             Ok(text) => {
@@ -78,9 +98,11 @@ async fn transcribe_with_fallback(
                 return Ok(text);
             }
             Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                tracing::warn!("Groq key 2 transcription quota/rate-limit, trying key 1");
+                tracing::warn!("Groq key 2 rate-limit/quota, trying key 1");
             }
-            Err(e) => return Err(e),
+            Err(e) => {
+                tracing::warn!("Groq key 2 error, trying key 1: {}", e);
+            }
         }
     }
 
@@ -99,14 +121,17 @@ async fn transcribe_with_fallback(
                 }
                 Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
                     groq_key1_cb().record_failure();
-                    tracing::warn!("Groq key 1 quota/rate-limit (failure #{}), falling back to Gemini", groq_key1_cb().failure_count());
+                    tracing::warn!("Groq key 1 rate-limit/quota (failure #{}), falling back to Gemini", groq_key1_cb().failure_count());
                 }
-                Err(e) => return Err(e),
+                Err(e) => {
+                    groq_key1_cb().record_failure();
+                    tracing::warn!("Groq key 1 error (failure #{}), falling back to Gemini: {}", groq_key1_cb().failure_count(), e);
+                }
             }
         }
     }
 
-    // 4. Gemini — final fallback; conserves vision quota for sentiment
+    // 5. Gemini — final fallback; conserves vision quota for sentiment
     let result = with_retry(rate_limiter, || {
         let k = gemini_key.to_string();
         let p = pcm.to_vec();
@@ -341,6 +366,7 @@ pub async fn run_mic_agent(
     gemini_key: String,
     groq_key: Option<String>,
     groq_key_2: Option<String>,
+    deepgram_key: Option<String>,
     whisper_url: Option<String>,
     whisper_model: String,
     rate_limiter: RateLimiter,
@@ -371,6 +397,7 @@ pub async fn run_mic_agent(
                     let gkey = gemini_key.clone();
                     let grkey = groq_key.clone();
                     let grkey2 = groq_key_2.clone();
+                    let dgkey = deepgram_key.clone();
                     let wurl = whisper_url.clone();
                     let wmodel = whisper_model.clone();
                     let etx = event_tx.clone();
@@ -379,7 +406,7 @@ pub async fn run_mic_agent(
                     let cc = call_counts.clone();
 
                     tokio::spawn(async move {
-                        match transcribe_with_fallback(&gkey, grkey.as_deref(), grkey2.as_deref(), wurl.as_deref(), &wmodel, &pcm, &rl, &cc, &etx).await {
+                        match transcribe_with_fallback(&gkey, grkey.as_deref(), grkey2.as_deref(), dgkey.as_deref(), wurl.as_deref(), &wmodel, &pcm, &rl, &cc, &etx).await {
                             Ok(text) if !text.trim().is_empty() => {
                                 let ts = SystemTime::now()
                                     .duration_since(UNIX_EPOCH)
@@ -430,6 +457,7 @@ pub async fn run_agent(
     gemini_key: String,
     groq_key: Option<String>,
     groq_key_2: Option<String>,
+    deepgram_key: Option<String>,
     whisper_url: Option<String>,
     whisper_model: String,
     diarize_url: Option<String>,
@@ -467,6 +495,7 @@ pub async fn run_agent(
                     let gkey = gemini_key.clone();
                     let grkey = groq_key.clone();
                     let grkey2 = groq_key_2.clone();
+                    let dgkey = deepgram_key.clone();
                     let wurl = whisper_url.clone();
                     let wmodel = whisper_model.clone();
                     let durl = diarize_url.clone();
@@ -485,7 +514,7 @@ pub async fn run_agent(
 
                         // Run transcription and diarization concurrently
                         let (transcription_result, diarization_result) = tokio::join!(
-                            transcribe_with_fallback(&gkey, grkey.as_deref(), grkey2.as_deref(), wurl.as_deref(), &wmodel, &segment_pcm, &rl, &cc, &etx),
+                            transcribe_with_fallback(&gkey, grkey.as_deref(), grkey2.as_deref(), dgkey.as_deref(), wurl.as_deref(), &wmodel, &segment_pcm, &rl, &cc, &etx),
                             async {
                                 match (durl.as_deref(), wav_for_diarize) {
                                     (Some(url), Some(wav)) => {

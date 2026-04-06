@@ -3,15 +3,19 @@ cd /d "%~dp0"
 
 echo Starting AI Interview Assistant...
 
-REM Start diarization server (speaker detection — optional, falls back to heuristics if unavailable)
+REM Start diarization server (optional — falls back to heuristics if unavailable)
 start "Diarization Server" /min cmd /c "python diarize_server.py"
 
-REM Start local Whisper server (optional — falls back to Groq/Gemini if unavailable)
+REM Start local Whisper server (optional — falls back to Deepgram/Groq/Gemini if unavailable)
 start "Whisper Server" /min cmd /c "start_whisper.bat"
 
-REM Start backend (logs to backend\logs\server.log)
+REM Give Whisper a head-start before the backend tries to warm it up
+echo Waiting for Whisper to start...
+timeout /t 8 /nobreak >nul
+
+REM Start backend (loads .env automatically, logs to backend\target\release\logs\server.log)
 if not exist backend\logs mkdir backend\logs
-start "AI Interview Backend" /min cmd /c "cd backend && target\release\server.exe >> logs\server.log 2>&1"
+start "AI Interview Backend" /min cmd /c "cd backend && target\release\server.exe"
 
 REM Wait for backend to bind
 timeout /t 3 /nobreak >nul

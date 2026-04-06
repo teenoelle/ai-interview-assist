@@ -5,6 +5,7 @@ pub struct Config {
     pub gemini_api_key: String,
     pub groq_api_key: Option<String>,
     pub groq_api_key_2: Option<String>,
+    pub deepgram_api_key: Option<String>,
     pub openrouter_api_key: Option<String>,
     pub mistral_api_key: Option<String>,
     pub cerebras_api_key: Option<String>,
@@ -35,6 +36,7 @@ impl Config {
             .context("GEMINI_API_KEY must be set in .env or environment")?;
         let groq_api_key = std::env::var("GROQ_API_KEY").ok();
         let groq_api_key_2 = std::env::var("GROQ_API_KEY_2").ok();
+        let deepgram_api_key = std::env::var("DEEPGRAM_API_KEY").ok();
         let openrouter_api_key = std::env::var("OPENROUTER_API_KEY").ok();
         let mistral_api_key = std::env::var("MISTRAL_API_KEY").ok();
         let cerebras_api_key = std::env::var("CEREBRAS_API_KEY").ok();
@@ -77,6 +79,6 @@ impl Config {
             .split_whitespace()
             .map(|s| s.to_string())
             .collect();
-        Ok(Self { gemini_api_key, groq_api_key, groq_api_key_2, openrouter_api_key, mistral_api_key, cerebras_api_key, anthropic_api_key, qwen_api_key, whisper_url, whisper_model, ollama_url, ollama_model, ollama_models, ollama_vision_model, diarize_url, port, piper_binary, piper_models_dir, app_token, ffmpeg_bin, whisper_spawn_cmd, whisper_spawn_args })
+        Ok(Self { gemini_api_key, groq_api_key, groq_api_key_2, deepgram_api_key, openrouter_api_key, mistral_api_key, cerebras_api_key, anthropic_api_key, qwen_api_key, whisper_url, whisper_model, ollama_url, ollama_model, ollama_models, ollama_vision_model, diarize_url, port, piper_binary, piper_models_dir, app_token, ffmpeg_bin, whisper_spawn_cmd, whisper_spawn_args })
     }
 }

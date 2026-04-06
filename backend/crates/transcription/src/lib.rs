@@ -4,12 +4,24 @@ pub mod gemini;
 pub mod groq;
 pub mod diarize;
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio::sync::{broadcast, mpsc, RwLock};
 use common::messages::{TranscriptSegment, WsEvent};
 use common::rate_limiter::{RateLimiter, with_retry};
 use common::providers::{is_quota_exhausted, is_rate_limit};
+use common::circuit_breaker::CircuitBreaker;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+static WHISPER_CB: OnceLock<CircuitBreaker> = OnceLock::new();
+static GROQ_KEY1_CB: OnceLock<CircuitBreaker> = OnceLock::new();
+
+fn whisper_cb() -> &'static CircuitBreaker {
+    WHISPER_CB.get_or_init(|| CircuitBreaker::new("local-whisper", 3, 300))
+}
+
+fn groq_key1_cb() -> &'static CircuitBreaker {
+    GROQ_KEY1_CB.get_or_init(|| CircuitBreaker::new("groq-key-1", 5, 900))
+}
 
 type CallCounts = Arc<std::sync::Mutex<std::collections::HashMap<String, u64>>>;
 
@@ -34,37 +46,29 @@ async fn transcribe_with_fallback(
     call_counts: &Option<CallCounts>,
     event_tx: &broadcast::Sender<WsEvent>,
 ) -> Result<String, anyhow::Error> {
-    // 1. Local Whisper — completely free, no quota; silently skip if not running
+    // 1. Local Whisper — completely free, no quota; silently skip if not running or circuit open
     if let Some(url) = whisper_url {
-        let endpoint = format!("{}/v1/audio/transcriptions", url.trim_end_matches('/'));
-        match groq::transcribe_openai_asr(&endpoint, "", whisper_model, pcm, 10).await {
-            Ok(text) => {
-                inc(call_counts, "Whisper (local)");
-                tracing::info!("transcription ✓ Whisper (local) — {} chars", text.len());
-                let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Whisper (local)".to_string(), local: true });
-                return Ok(text);
+        if whisper_cb().is_open() {
+            tracing::debug!("Local Whisper circuit open ({} failures) — skipping", whisper_cb().failure_count());
+        } else {
+            let endpoint = format!("{}/v1/audio/transcriptions", url.trim_end_matches('/'));
+            match groq::transcribe_openai_asr(&endpoint, "", whisper_model, pcm, 10).await {
+                Ok(text) => {
+                    whisper_cb().record_success();
+                    inc(call_counts, "Whisper (local)");
+                    tracing::info!("transcription ✓ Whisper (local) — {} chars", text.len());
+                    let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Whisper (local)".to_string(), local: true });
+                    return Ok(text);
+                }
+                Err(e) => {
+                    whisper_cb().record_failure();
+                    tracing::warn!("Local Whisper failed (failure #{}): {}", whisper_cb().failure_count(), e);
+                }
             }
-            Err(e) => tracing::warn!("Local Whisper unavailable, trying Groq: {}", e),
         }
     }
 
-    // 2. Groq Whisper key 1
-    if let Some(key) = groq_key {
-        match groq::transcribe(key, pcm).await {
-            Ok(text) => {
-                inc(call_counts, "Groq Whisper");
-                tracing::info!("transcription ✓ Groq Whisper — {} chars", text.len());
-                let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Groq Whisper".to_string(), local: false });
-                return Ok(text);
-            }
-            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                tracing::warn!("Groq key 1 transcription quota/rate-limit, trying key 2");
-            }
-            Err(e) => return Err(e),
-        }
-    }
-
-    // 2b. Groq Whisper key 2 — higher-limit secondary key
+    // 2. Groq Whisper key 2 — tried first; more reliable (key 1 is often exhausted)
     if let Some(key) = groq_key_2 {
         match groq::transcribe(key, pcm).await {
             Ok(text) => {
@@ -74,13 +78,35 @@ async fn transcribe_with_fallback(
                 return Ok(text);
             }
             Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                tracing::warn!("Groq key 2 transcription quota/rate-limit, falling back to Gemini");
+                tracing::warn!("Groq key 2 transcription quota/rate-limit, trying key 1");
             }
             Err(e) => return Err(e),
         }
     }
 
-    // 3. Gemini — fallback; conserves vision quota for sentiment
+    // 3. Groq Whisper key 1 — circuit breaker: 5 consecutive rate-limits → skip 15min
+    if let Some(key) = groq_key {
+        if groq_key1_cb().is_open() {
+            tracing::debug!("Groq key 1 circuit open ({} failures) — skipping", groq_key1_cb().failure_count());
+        } else {
+            match groq::transcribe(key, pcm).await {
+                Ok(text) => {
+                    groq_key1_cb().record_success();
+                    inc(call_counts, "Groq Whisper");
+                    tracing::info!("transcription ✓ Groq Whisper — {} chars", text.len());
+                    let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Groq Whisper".to_string(), local: false });
+                    return Ok(text);
+                }
+                Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
+                    groq_key1_cb().record_failure();
+                    tracing::warn!("Groq key 1 quota/rate-limit (failure #{}), falling back to Gemini", groq_key1_cb().failure_count());
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    // 4. Gemini — final fallback; conserves vision quota for sentiment
     let result = with_retry(rate_limiter, || {
         let k = gemini_key.to_string();
         let p = pcm.to_vec();

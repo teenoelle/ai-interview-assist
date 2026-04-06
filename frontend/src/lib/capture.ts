@@ -8,6 +8,7 @@ export type AudioFeaturesCallback = (features: AudioFeatures) => void;
 export type LiveEmotionCallback = (emotion: string) => void;
 export type RecordingCallback = (url: string) => void;
 export type StreamEndedCallback = () => void;
+export type ReshareNeededCallback = () => void;
 
 export class MediaCapture {
   private systemStream: MediaStream | null = null;
@@ -23,6 +24,9 @@ export class MediaCapture {
   private analyserInterval: ReturnType<typeof setInterval> | null = null;
   private systemWorklet: AudioWorkletNode | null = null;
   private micWorklet: AudioWorkletNode | null = null;
+  private systemAudioSource: MediaStreamAudioSourceNode | null = null;
+  private systemAnalyser: AnalyserNode | null = null;
+  private videoElement: HTMLVideoElement | null = null;
   private faceDetector: FaceEmotionDetector | null = null;
   private _micLevel = 0;
   private _systemLevel = 0;
@@ -32,6 +36,7 @@ export class MediaCapture {
   private _liveEmotionCallback: LiveEmotionCallback | null = null;
   private _recordingCallback: RecordingCallback | null = null;
   private _streamEndedCallback: StreamEndedCallback | null = null;
+  private _reshareNeededCallback: ReshareNeededCallback | null = null;
   private screenRecordStream: MediaStream | null = null;
   private screenRecorder: MediaRecorder | null = null;
   private screenChunks: Blob[] = [];
@@ -50,6 +55,7 @@ export class MediaCapture {
   onLiveEmotion(cb: LiveEmotionCallback) { this._liveEmotionCallback = cb; }
   onRecording(cb: RecordingCallback) { this._recordingCallback = cb; }
   onStreamEnded(cb: StreamEndedCallback) { this._streamEndedCallback = cb; }
+  onReshareNeeded(cb: ReshareNeededCallback) { this._reshareNeededCallback = cb; }
 
   async start(): Promise<void> {
     this.systemStream = await navigator.mediaDevices.getDisplayMedia({
@@ -59,11 +65,10 @@ export class MediaCapture {
     // Return focus to the interview app after the OS/browser switches to the captured window
     window.focus();
 
-    // Notify the app when the browser ends the screen share (e.g. user clicks "Stop sharing"
-    // or a meeting notification causes Chrome to drop the capture).
-    this.systemStream.getTracks().forEach((track) => {
-      track.onended = () => this._streamEndedCallback?.();
-    });
+    // Only watch VIDEO tracks for onended — when a meeting popup or notification causes
+    // Chrome to revoke the stream, we trigger a reshare prompt but keep the audio pipeline
+    // alive so transcription resumes the moment the user reshares (no WebSocket reconnect).
+    this._attachVideoEndedHandlers(this.systemStream);
 
     try {
       this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -93,12 +98,56 @@ export class MediaCapture {
       console.warn('Face detection unavailable:', e);
       this.faceDetector = null;
     });
-    // Screen recording is opt-in — call startScreenRecording() explicitly if needed.
 
     // Notify caller with both streams for display
     if (this._streamsCallback) {
       this._streamsCallback(this.systemStream!, this.webcamStream);
     }
+  }
+
+  /** Re-acquire the screen/audio share without tearing down the audio pipeline.
+   *  Call this when a meeting popup caused the video track to end.
+   *  The AudioContext, AudioWorklet, and WebSockets stay connected throughout —
+   *  transcription resumes instantly once the new stream is attached. */
+  async reshare(): Promise<void> {
+    const newStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: 1, displaySurface: 'monitor' } as MediaTrackConstraints,
+      audio: true,
+    });
+    window.focus();
+
+    // Stop old tracks (they're already ended but clean up anyway)
+    this.systemStream?.getTracks().forEach(t => { t.onended = null; t.stop(); });
+    this.systemStream = newStream;
+
+    // Swap audio source node — keep AudioContext and AudioWorklet alive
+    const audioTracks = newStream.getAudioTracks();
+    if (audioTracks.length > 0 && this.systemAudioCtx && this.systemWorklet) {
+      this.systemAudioSource?.disconnect();
+      this.systemAudioSource = this.systemAudioCtx.createMediaStreamSource(
+        new MediaStream([audioTracks[0]])
+      );
+      this.systemAudioSource.connect(this.systemWorklet);
+      if (this.systemAnalyser) this.systemAudioSource.connect(this.systemAnalyser);
+    }
+
+    // Swap video source — keep interval and canvas alive
+    const videoTracks = newStream.getVideoTracks();
+    if (videoTracks.length > 0 && this.videoElement) {
+      this.videoElement.srcObject = new MediaStream([videoTracks[0]]);
+    }
+
+    // Watch new video tracks for the next potential interruption
+    this._attachVideoEndedHandlers(newStream);
+
+    // Notify app so screen preview updates
+    this._streamsCallback?.(newStream, this.webcamStream);
+  }
+
+  private _attachVideoEndedHandlers(stream: MediaStream) {
+    stream.getVideoTracks().forEach(track => {
+      track.onended = () => this._reshareNeededCallback?.();
+    });
   }
 
   private async startSystemAudioCapture() {
@@ -107,7 +156,7 @@ export class MediaCapture {
     if (tracks.length === 0) return;
     this.systemAudioCtx = new AudioContext({ sampleRate: 16000 });
     await this.systemAudioCtx.audioWorklet.addModule('/pcm-processor.js');
-    const source = this.systemAudioCtx.createMediaStreamSource(new MediaStream([tracks[0]]));
+    this.systemAudioSource = this.systemAudioCtx.createMediaStreamSource(new MediaStream([tracks[0]]));
     this.systemWorklet = new AudioWorkletNode(this.systemAudioCtx, 'pcm-processor');
     this.systemWorklet.port.onmessage = (e: MessageEvent) => {
       if (e.data instanceof Int16Array) {
@@ -117,26 +166,24 @@ export class MediaCapture {
         this._levelCallback?.(this._micLevel, this._systemLevel);
       }
     };
-    source.connect(this.systemWorklet);
+    this.systemAudioSource.connect(this.systemWorklet);
     this.systemWorklet.connect(this.systemAudioCtx.destination);
 
     // Chrome throttles setInterval in hidden tabs (2s → ~60s), so use onstatechange instead.
-    // This fires immediately when the browser suspends the context and is not subject to throttling.
     this.systemAudioCtx.onstatechange = () => {
       if (this.systemAudioCtx?.state === 'suspended') {
         this.systemAudioCtx.resume().catch(() => {});
       }
     };
 
-    // Item 8: AnalyserNode for real-time spectral features
-    const analyser = this.systemAudioCtx.createAnalyser();
-    analyser.fftSize = 256; // 128 bins, each ~62.5 Hz wide at 16 kHz
-    source.connect(analyser);
-    const freqBuf = new Uint8Array(analyser.frequencyBinCount);
+    // AnalyserNode for real-time spectral features
+    this.systemAnalyser = this.systemAudioCtx.createAnalyser();
+    this.systemAnalyser.fftSize = 256;
+    this.systemAudioSource.connect(this.systemAnalyser);
+    const freqBuf = new Uint8Array(this.systemAnalyser.frequencyBinCount);
     let prevFreqBuf: Uint8Array | null = null;
     this.analyserInterval = setInterval(() => {
-      analyser.getByteFrequencyData(freqBuf);
-      // Band averages: low=80-300 Hz (bins 1-4), mid=300-2kHz (5-32), high=2-4kHz (32-64)
+      this.systemAnalyser!.getByteFrequencyData(freqBuf);
       const avg = (a: number, b: number) => {
         let s = 0; for (let i = a; i < b; i++) s += freqBuf[i]; return s / (b - a);
       };
@@ -146,7 +193,6 @@ export class MediaCapture {
       if (total > 8) {
         dominantBand = low >= mid && low >= high ? 'low' : high >= low && high >= mid ? 'high' : 'mid';
       }
-      // Spectral flux: normalised sum of absolute bin differences
       let flux = 0;
       if (prevFreqBuf) {
         let diff = 0;
@@ -230,61 +276,64 @@ export class MediaCapture {
     if (!this.systemStream) return;
     const videoTracks = this.systemStream.getVideoTracks();
     if (videoTracks.length === 0) return;
-    // Item 4: 320×180 canvas halves payload, keeps enough detail for vision models
     const canvas = document.createElement('canvas');
     canvas.width = 320; canvas.height = 180;
     const ctx = canvas.getContext('2d')!;
-    const video = document.createElement('video');
-    video.muted = true; video.autoplay = true; video.playsInline = true;
-    video.srcObject = new MediaStream([videoTracks[0]]);
-    video.play().catch((e) => console.warn('Video play failed:', e));
+    this.videoElement = document.createElement('video');
+    this.videoElement.muted = true;
+    this.videoElement.autoplay = true;
+    this.videoElement.playsInline = true;
+    this.videoElement.srcObject = new MediaStream([videoTracks[0]]);
+    this.videoElement.play().catch((e) => console.warn('Video play failed:', e));
 
     const captureFrame = async () => {
-      if (video.readyState >= 2 && video.videoWidth > 0) {
-        const crop = this._cropRect;
-        if (crop) {
-          const sw = video.videoWidth * crop.w;
-          const sh = video.videoHeight * crop.h;
-          const sx = video.videoWidth * crop.x;
-          const sy = video.videoHeight * crop.y;
-          ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-        } else {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        }
-        const blob = await new Promise<Blob | null>((resolve) =>
-          canvas.toBlob(resolve, 'image/jpeg', 0.7)
-        );
-        if (blob && this._sentimentEnabled) this.videoWs.send(await blob.arrayBuffer());
+      const video = this.videoElement;
+      if (!video || video.readyState < 2 || video.videoWidth === 0) return;
+      const crop = this._cropRect;
+      if (crop) {
+        const sw = video.videoWidth * crop.w;
+        const sh = video.videoHeight * crop.h;
+        const sx = video.videoWidth * crop.x;
+        const sy = video.videoHeight * crop.y;
+        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      } else {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       }
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, 'image/jpeg', 0.7)
+      );
+      if (blob && this._sentimentEnabled) this.videoWs.send(await blob.arrayBuffer());
     };
     this._captureFrameFn = captureFrame;
-    video.addEventListener('loadeddata', () => captureFrame(), { once: true });
+    this.videoElement.addEventListener('loadeddata', () => captureFrame(), { once: true });
     setTimeout(() => captureFrame(), 3000);
-    // Item 1: 6s interval (was 12s) for faster backend sentiment updates
     this.videoInterval = setInterval(captureFrame, 6000);
 
-    // Item 5: client-side face detection on the cropped interviewer region (500ms)
     this.faceInterval = setInterval(() => {
-      if (!this.faceDetector || !this._liveEmotionCallback) return;
-      if (video.readyState < 2 || video.videoWidth === 0) return;
-      const emo = this.faceDetector.analyzeFrame(video, this._cropRect);
+      if (!this.faceDetector || !this._liveEmotionCallback || !this.videoElement) return;
+      if (this.videoElement.readyState < 2 || this.videoElement.videoWidth === 0) return;
+      const emo = this.faceDetector.analyzeFrame(this.videoElement, this._cropRect);
       if (emo) this._liveEmotionCallback(emo);
     }, 500);
   }
 
   stop() {
-    // Clear before stopping tracks so onended on those tracks doesn't re-trigger handleStreamEnded.
+    // Clear callbacks before stopping tracks so onended doesn't re-trigger them.
     this._streamEndedCallback = null;
+    this._reshareNeededCallback = null;
     if (this.videoInterval) clearInterval(this.videoInterval);
     if (this.faceInterval) clearInterval(this.faceInterval);
     if (this.analyserInterval) clearInterval(this.analyserInterval);
     this.faceDetector?.dispose();
     this.faceDetector = null;
+    this.systemAudioSource?.disconnect();
+    this.systemAudioSource = null;
+    this.systemAnalyser = null;
     this.systemWorklet?.disconnect();
     this.micWorklet?.disconnect();
     this.systemAudioCtx?.close();
     this.micAudioCtx?.close();
-    this.systemStream?.getTracks().forEach((t) => t.stop());
+    this.systemStream?.getTracks().forEach((t) => { t.onended = null; t.stop(); });
     this.micStream?.getTracks().forEach((t) => t.stop());
     this.webcamStream?.getTracks().forEach((t) => t.stop());
     this.systemAudioWs.disconnect();
@@ -293,12 +342,12 @@ export class MediaCapture {
     this.systemStream = null;
     this.micStream = null;
     this.webcamStream = null;
+    this.videoElement = null;
     this.micActive = false;
-    // Finalise screen recording — onstop handler assembles blob and fires _recordingCallback
+    // Finalise screen recording
     if (this.screenRecorder && this.screenRecorder.state !== 'inactive') {
       this.screenRecorder.stop();
     } else {
-      // No recording was started; stop any lingering tracks
       this.screenRecordStream?.getTracks().forEach((t) => t.stop());
       this.screenRecordStream = null;
     }

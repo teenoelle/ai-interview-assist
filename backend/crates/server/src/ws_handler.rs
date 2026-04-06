@@ -56,7 +56,9 @@ async fn handle_audio(mut socket: WebSocket, tx: tokio::sync::mpsc::Sender<Vec<u
         if let Message::Binary(data) = msg {
             count += 1;
             if count == 1 { tracing::info!("audio WS: first chunk ({} bytes)", data.len()); }
-            let _ = tx.send(data.to_vec()).await;
+            // try_send never blocks — if the transcription channel is full, drop the chunk
+            // rather than stalling the WS handler (which would let Chrome's keepalive time out).
+            let _ = tx.try_send(data.to_vec());
         }
     }
     tracing::warn!("audio WS: closed after {} chunks", count);
@@ -65,7 +67,7 @@ async fn handle_audio(mut socket: WebSocket, tx: tokio::sync::mpsc::Sender<Vec<u
 async fn handle_video(mut socket: WebSocket, tx: tokio::sync::mpsc::Sender<Vec<u8>>) {
     while let Some(Ok(msg)) = socket.next().await {
         if let Message::Binary(data) = msg {
-            let _ = tx.send(data.to_vec()).await;
+            let _ = tx.try_send(data.to_vec());
         }
     }
 }

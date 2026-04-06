@@ -61,7 +61,9 @@ fn spawn_detached(cmd: &str, args: &[String]) {
 }
 
 /// Poll the Whisper URL root until it responds, or give up after ~30 s.
-async fn wait_for_whisper(url: &str) {
+/// Once reachable, fire a silent dummy transcription to pre-load the model
+/// so the first real segment doesn't incur a 60 s model-loading delay.
+async fn wait_for_whisper(url: &str, whisper_model: &str) {
     let client = reqwest::Client::new();
     let check = format!("{}/", url.trim_end_matches('/'));
     tracing::info!("Waiting for local Whisper at {} …", url);
@@ -75,6 +77,7 @@ async fn wait_for_whisper(url: &str) {
             // Any HTTP response (even 404) means the server is up
             Ok(_) => {
                 tracing::info!("Local Whisper ready (attempt {})", attempt);
+                warmup_whisper(url, whisper_model).await;
                 return;
             }
             Err(_) => {
@@ -88,6 +91,18 @@ async fn wait_for_whisper(url: &str) {
         "Local Whisper at {} did not respond within 30 s — will fall back to Groq/Gemini",
         url
     );
+}
+
+/// Send a tiny silent WAV to Whisper to trigger model loading before any real audio arrives.
+async fn warmup_whisper(url: &str, model: &str) {
+    // 1 second of silence: 16000 samples × 2 bytes = 32000 bytes of zeros
+    let silent_pcm = vec![0u8; 16000 * 2];
+    let endpoint = format!("{}/v1/audio/transcriptions", url.trim_end_matches('/'));
+    tracing::info!("Warming up local Whisper model (pre-loading) …");
+    match transcription::groq::transcribe_openai_asr(&endpoint, "", model, &silent_pcm, 120).await {
+        Ok(_) => tracing::info!("Local Whisper model warm — first real segment will be fast"),
+        Err(e) => tracing::warn!("Whisper warmup failed (model may still load on first use): {}", e),
+    }
 }
 
 #[tokio::main]
@@ -132,7 +147,8 @@ async fn main() -> anyhow::Result<()> {
         spawn_detached(cmd, &config.whisper_spawn_args);
     }
     if let Some(url) = config.whisper_url.clone() {
-        tokio::spawn(async move { wait_for_whisper(&url).await });
+        let model = config.whisper_model.clone();
+        tokio::spawn(async move { wait_for_whisper(&url, &model).await });
     }
 
     let (audio_tx, audio_rx) = mpsc::channel::<Vec<u8>>(256);

@@ -23,8 +23,14 @@
     }
   }
 
+  function handleReshareNeeded() {
+    reshareNeeded = true;
+  }
+
   let capture: MediaCapture | null = $state(null);
-  let starting = $state(false); // true only during the async start() call
+  let starting = $state(false);
+  let resharing = $state(false);
+  let reshareNeeded = $state(false);
   let active = $derived(capture !== null || starting);
   let error = $state('');
   let micLevel = $state(0);
@@ -44,6 +50,7 @@
 
   async function toggle() {
     error = '';
+    reshareNeeded = false;
     if (capture) {
       capture.stop();
       capture = null;
@@ -58,11 +65,11 @@
         if (onStreams) cap.onStreamsReady(onStreams);
         if (onRecording) cap.onRecording(onRecording);
         cap.onStreamEnded(handleStreamEnded);
+        cap.onReshareNeeded(handleReshareNeeded);
         await cap.start();
         capture = cap;
         onCapture(true);
         onReady?.(cap);
-        // Warn if no system audio was captured (user didn't tick the checkbox)
         if (!cap.hasSystemAudio) {
           error = 'No system audio captured — interviewer audio won\'t be transcribed. Stop, reshare your screen, and tick "Share system audio" in the browser dialog. For Zoom/Teams desktop, share your Entire Screen.';
         }
@@ -80,10 +87,35 @@
       }
     }
   }
+
+  async function reshare() {
+    if (!capture || resharing) return;
+    resharing = true;
+    try {
+      await capture.reshare();
+      reshareNeeded = false;
+    } catch (e: unknown) {
+      const msg = String(e);
+      if (!msg.includes('Permission denied') && !msg.includes('NotAllowedError')) {
+        error = msg;
+      }
+      // If user cancelled the dialog, keep reshareNeeded = true so they can try again
+    } finally {
+      resharing = false;
+    }
+  }
 </script>
 
 <div class="capture-btn-container">
   {#if error}<div class="capture-error">{error}</div>{/if}
+  {#if reshareNeeded}
+    <div class="reshare-banner">
+      Screen share interrupted — mic still recording.
+      <button class="reshare-btn" onclick={reshare} disabled={resharing}>
+        {resharing ? 'Sharing…' : '↺ Reshare Screen'}
+      </button>
+    </div>
+  {/if}
   <button onclick={toggle} class="capture-btn" class:active>
     <span class="dot"></span>
     {starting ? 'Starting…' : capture ? 'Stop' : 'Capture Meeting'}
@@ -112,4 +144,16 @@
     padding: 0.5rem; background: #450a0a; border-radius: 0.375rem;
     color: #fca5a5; font-size: var(--fs-base);
   }
+  .reshare-banner {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.4rem 0.75rem; background: #451a03; border-radius: 0.375rem;
+    color: #fdba74; font-size: var(--fs-base);
+  }
+  .reshare-btn {
+    padding: 0.2rem 0.6rem; font-size: var(--fs-base); font-weight: 600;
+    background: #ea580c; color: white; border: none; border-radius: 0.25rem;
+    cursor: pointer; white-space: nowrap;
+  }
+  .reshare-btn:hover:not(:disabled) { background: #c2410c; }
+  .reshare-btn:disabled { opacity: 0.6; cursor: default; }
 </style>

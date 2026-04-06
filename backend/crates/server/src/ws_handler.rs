@@ -75,16 +75,29 @@ async fn handle_video(mut socket: WebSocket, tx: tokio::sync::mpsc::Sender<Vec<u
 async fn handle_events(mut socket: WebSocket, event_tx: tokio::sync::broadcast::Sender<common::messages::WsEvent>) {
     let mut rx = event_tx.subscribe();
     loop {
-        match rx.recv().await {
-            Ok(event) => {
-                if let Ok(json) = serde_json::to_string(&event) {
-                    if socket.send(Message::Text(json.into())).await.is_err() {
-                        break;
+        tokio::select! {
+            result = rx.recv() => {
+                match result {
+                    Ok(event) => {
+                        if let Ok(json) = serde_json::to_string(&event) {
+                            if socket.send(Message::Text(json.into())).await.is_err() {
+                                break;
+                            }
+                        }
                     }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                 }
             }
-            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+            msg = socket.recv() => {
+                match msg {
+                    Some(Ok(Message::Close(_))) | None => break,
+                    Some(Ok(Message::Ping(data))) => {
+                        let _ = socket.send(Message::Pong(data)).await;
+                    }
+                    _ => {} // ignore other incoming frames
+                }
+            }
         }
     }
 }

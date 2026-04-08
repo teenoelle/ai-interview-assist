@@ -215,6 +215,16 @@ pub async fn handle_extract_file(
 pub struct DebriefRequest {
     pub transcript: Vec<TranscriptEntry>,
     pub suggestions: Vec<SuggestionItem>,
+    #[serde(default)]
+    pub filler_counts: Vec<StatItem>,
+    #[serde(default)]
+    pub hedge_counts: Vec<StatItem>,
+    #[serde(default)]
+    pub practice_answers: Vec<PracticeAnswerItem>,
+    #[serde(default)]
+    pub answered_count: u32,
+    #[serde(default)]
+    pub viewed_count: u32,
 }
 
 #[derive(serde::Deserialize)]
@@ -227,6 +237,29 @@ pub struct TranscriptEntry {
 pub struct SuggestionItem {
     pub question: String,
     pub suggestion: String,
+}
+
+#[derive(serde::Deserialize)]
+pub struct StatItem {
+    pub word: String,
+    pub count: u32,
+}
+
+#[derive(serde::Deserialize)]
+pub struct PracticeAnswerItem {
+    pub question: String,
+    pub answer: String,
+}
+
+#[derive(serde::Deserialize)]
+pub struct FollowupEmailRequest {
+    pub transcript: Vec<TranscriptEntry>,
+    pub followup_bullets: Vec<String>,
+}
+
+#[derive(serde::Serialize)]
+pub struct FollowupEmailResponse {
+    pub email: String,
 }
 
 pub async fn handle_debrief(
@@ -245,6 +278,40 @@ pub async fn handle_debrief(
         .collect::<Vec<_>>()
         .join("\n\n");
 
+    // Build session context string for the AI
+    let mut ctx_parts: Vec<String> = Vec::new();
+
+    if req.viewed_count > 0 || req.answered_count > 0 {
+        ctx_parts.push(format!(
+            "Questions detected: {} | Questions with candidate response in transcript: {}",
+            req.viewed_count, req.answered_count
+        ));
+    }
+
+    if !req.filler_counts.is_empty() {
+        let fillers = req.filler_counts.iter()
+            .map(|f| format!("\"{}\" ×{}", f.word, f.count))
+            .collect::<Vec<_>>().join(", ");
+        ctx_parts.push(format!("Filler words used: {}", fillers));
+    }
+
+    if !req.hedge_counts.is_empty() {
+        let hedges = req.hedge_counts.iter()
+            .map(|h| format!("\"{}\" ×{}", h.word, h.count))
+            .collect::<Vec<_>>().join(", ");
+        ctx_parts.push(format!("Hedging phrases used: {}", hedges));
+    }
+
+    if !req.practice_answers.is_empty() {
+        ctx_parts.push(format!(
+            "Practice answers submitted for {} question(s): {}",
+            req.practice_answers.len(),
+            req.practice_answers.iter().map(|p| format!("\"{}\"", p.question)).collect::<Vec<_>>().join(", ")
+        ));
+    }
+
+    let session_context = ctx_parts.join("\n");
+
     let cfg = AiConfig {
         gemini_key: &state.gemini_key,
         anthropic_key: state.anthropic_key.as_deref(),
@@ -254,10 +321,35 @@ pub async fn handle_debrief(
         ollama_model: &state.ollama_model,
         usage: Some(state.call_counts.clone()),
     };
-    generate_debrief(&transcript_text, &suggestions_text, &cfg)
+    generate_debrief(&transcript_text, &suggestions_text, &session_context, &cfg)
         .await
         .map(Json)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+pub async fn handle_followup_email(
+    State(state): State<AppState>,
+    Json(req): Json<FollowupEmailRequest>,
+) -> Result<Json<FollowupEmailResponse>, (StatusCode, String)> {
+    use context::ai_helper::generate_followup_email;
+    let transcript_text = req.transcript
+        .iter()
+        .map(|e| format!("{}: {}", e.speaker, e.text))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let cfg = AiConfig {
+        gemini_key: &state.gemini_key,
+        anthropic_key: state.anthropic_key.as_deref(),
+        groq_key: state.groq_key.as_deref(),
+        groq_key_2: state.groq_key_2.as_deref(),
+        ollama_url: &state.ollama_url,
+        ollama_model: &state.ollama_model,
+        usage: Some(state.call_counts.clone()),
+    };
+    let email = generate_followup_email(&transcript_text, &req.followup_bullets, &cfg)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(FollowupEmailResponse { email }))
 }
 
 #[derive(serde::Deserialize)]

@@ -37,7 +37,7 @@
     } catch { expandedCues = { ...expandedCues, [cue]: { sentence: cue, loading: false } }; }
   }
 
-  const { suggestions, onClear, teleprompter = false, lockOnNew = false, jumpSignal = null, cueExpandSignal = null, onPinnedChange, onClosingSectionOpen, salaryTactics = null } = $props<{
+  const { suggestions, onClear, teleprompter = false, lockOnNew = false, jumpSignal = null, cueExpandSignal = null, onPinnedChange, onClosingSectionOpen, salaryTactics = null, capturing = false } = $props<{
     suggestions: SuggestionEntry[];
     onClear: () => void;
     teleprompter?: boolean;
@@ -47,6 +47,7 @@
     onPinnedChange?: (pinned: boolean) => void;
     onClosingSectionOpen?: (entryIdx: number, key: string) => void;
     salaryTactics?: { early_round: string; reveal: string; direct_ask: string; total_package: string; counter: string } | null;
+    capturing?: boolean;
   }>();
 
   // -1 = pinned to latest; >= 0 = viewing specific entry
@@ -189,6 +190,24 @@
 
   let collapsedSecs = $state<Record<string, boolean>>({});
   function toggleSec(key: string) { collapsedSecs = { ...collapsedSecs, [key]: !collapsedSecs[key] }; }
+
+  function lblClass(label: string): string {
+    const l = label.toLowerCase();
+    if (['close', 'connect', 'company', 'choice'].includes(l)) return 'cue-lbl-blue';
+    if (['gap', 'real'].includes(l)) return 'cue-lbl-amber';
+    if (['trait', 'growth', 'evidence'].includes(l)) return 'cue-lbl-purple';
+    if (['approach', 'experience', 'method', 'style', 'preferences'].includes(l)) return 'cue-lbl-green';
+    return '';
+  }
+
+  function sectionStyle(label: string): string {
+    const lbl = lblClass(label);
+    if (lbl === 'cue-lbl-blue')   return 'background: #0a1020; border-left-color: #3b82f6;';
+    if (lbl === 'cue-lbl-amber')  return 'background: #120800; border-left-color: #92400e;';
+    if (lbl === 'cue-lbl-purple') return 'background: #0d0820; border-left-color: #6d28d9;';
+    if (lbl === 'cue-lbl-green')  return 'background: #060e0a; border-left-color: #166534;';
+    return '';
+  }
 
   function shortAsk(text: string, words = 6): string {
     const w = text.split(' ');
@@ -402,126 +421,262 @@
           {@const isClosing  = current?.tag === 'closing'}
 
           {#if isIntro}
-            <!-- INTRODUCTION: Summary → Thread → Story → Next → Close -->
+            <!-- INTRODUCTION: Acknowledge → Summary → Thread → Story → Next → Close -->
+            {#if parsed.acknowledge}
+              <div class="tp-sec tp-sec-ack">
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-ack')}>
+                  <span class="cue-badge cue-ack">Acknowledge</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-ack'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-ack']}<span class="tp-ack-text">{parsed.acknowledge}</span>{/if}
+              </div>
+            {/if}
             {#if parsed.present}
               <div class="tp-sec tp-sec-present">
-                <span class="cue-badge cue-present">Summary</span>
-                <span class="tp-narrative-text">{parsed.present}{#if tpStreaming && !parsed.thread}<span class="cursor">|</span>{/if}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-present')}>
+                  <span class="cue-badge cue-present">Summary</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-present'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-present']}<span class="tp-narrative-text">{parsed.present}{#if tpStreaming && !parsed.thread}<span class="cursor">|</span>{/if}</span>{/if}
               </div>
             {/if}
             {#if parsed.thread}
               <div class="tp-sec tp-sec-thread">
-                <span class="cue-badge cue-thread">Thread</span>
-                <span class="tp-narrative-text">{parsed.thread}{#if tpStreaming && !parsed.transition1 && !parsed.past}<span class="cursor">|</span>{/if}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-thread')}>
+                  <span class="cue-badge cue-thread">Thread</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-thread'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-thread']}<span class="tp-narrative-text">{parsed.thread}{#if tpStreaming && !parsed.transition1 && !parsed.past}<span class="cursor">|</span>{/if}</span>{/if}
               </div>
             {/if}
             {#if parsed.transition1}<div class="tp-transition">{parsed.transition1}</div>{/if}
             {#if parsed.past}
               <div class="tp-sec tp-sec-past">
-                <span class="cue-badge cue-past">Story</span>
-                <span class="tp-narrative-text">{parsed.past}{#if tpStreaming && !parsed.transition2 && !parsed.future}<span class="cursor">|</span>{/if}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-past')}>
+                  <span class="cue-badge cue-past">Story</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-past'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-past']}<span class="tp-narrative-text">{parsed.past}{#if tpStreaming && !parsed.transition2 && !parsed.future}<span class="cursor">|</span>{/if}</span>{/if}
               </div>
             {/if}
             {#if parsed.transition2}<div class="tp-transition">{parsed.transition2}</div>{/if}
             {#if parsed.future}
               <div class="tp-sec tp-sec-future">
-                <span class="cue-badge cue-future">Next</span>
-                <span class="tp-narrative-text">{parsed.future}{#if tpStreaming && !parsed.transition3 && !parsed.close}<span class="cursor">|</span>{/if}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-future')}>
+                  <span class="cue-badge cue-future">Next</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-future'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-future']}<span class="tp-narrative-text">{parsed.future}{#if tpStreaming && !parsed.transition3 && !parsed.close}<span class="cursor">|</span>{/if}</span>{/if}
               </div>
             {/if}
             {#if parsed.transition3}<div class="tp-transition">{parsed.transition3}</div>{/if}
-            {#if parsed.close}<div class="tp-sec tp-sec-close"><span class="cue-badge cue-close">Close</span><span class="tp-close-text">{parsed.close}</span></div>{/if}
-            {#if parsed.asks.length > 0}<div class="tp-sec tp-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
+            {#if parsed.close}
+              <div class="tp-sec tp-sec-close">
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-close')}>
+                  <span class="cue-badge cue-close">Close</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-close'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-close']}<span class="tp-close-text">{parsed.close}</span>{/if}
+              </div>
+            {/if}
+            {#if parsed.asks.length > 0}
+              <div class="tp-sec tp-sec-ask">
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-ask')}>
+                  <span class="cue-badge cue-ask">Ask</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-ask'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-ask']}<div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div>{/if}
+              </div>
+            {/if}
 
           {:else if isMotiv}
-            <!-- MOTIVATION: Company → Role → Self -->
+            <!-- MOTIVATION: Acknowledge → Company → Role → Self -->
+            {#if parsed.acknowledge}
+              <div class="tp-sec tp-sec-ack">
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-ack')}>
+                  <span class="cue-badge cue-ack">Acknowledge</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-ack'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-ack']}<span class="tp-ack-text">{parsed.acknowledge}</span>{/if}
+              </div>
+            {/if}
             {#if parsed.company}
               <div class="tp-sec tp-sec-company">
-                <span class="cue-badge cue-company">Company</span>
-                <span class="tp-narrative-text">{parsed.company}{#if current.streaming && !parsed.transition1 && !parsed.role}<span class="cursor">|</span>{/if}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-company')}>
+                  <span class="cue-badge cue-company">Company</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-company'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-company']}<span class="tp-narrative-text">{parsed.company}{#if current.streaming && !parsed.transition1 && !parsed.role}<span class="cursor">|</span>{/if}</span>{/if}
               </div>
             {/if}
             {#if parsed.transition1}<div class="tp-transition">{parsed.transition1}</div>{/if}
             {#if parsed.role}
               <div class="tp-sec tp-sec-role">
-                <span class="cue-badge cue-role">Role</span>
-                <span class="tp-narrative-text">{parsed.role}{#if current.streaming && !parsed.transition2 && !parsed.self}<span class="cursor">|</span>{/if}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-role')}>
+                  <span class="cue-badge cue-role">Role</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-role'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-role']}<span class="tp-narrative-text">{parsed.role}{#if current.streaming && !parsed.transition2 && !parsed.self}<span class="cursor">|</span>{/if}</span>{/if}
               </div>
             {/if}
             {#if parsed.transition2}<div class="tp-transition">{parsed.transition2}</div>{/if}
             {#if parsed.self}
               <div class="tp-sec tp-sec-self">
-                <span class="cue-badge cue-self">Self</span>
-                <span class="tp-narrative-text">{parsed.self}{#if tpStreaming && !parsed.transition3 && !parsed.close}<span class="cursor">|</span>{/if}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-self')}>
+                  <span class="cue-badge cue-self">Self</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-self'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-self']}<span class="tp-narrative-text">{parsed.self}{#if tpStreaming && !parsed.transition3 && !parsed.close}<span class="cursor">|</span>{/if}</span>{/if}
               </div>
             {/if}
             {#if parsed.transition3}<div class="tp-transition">{parsed.transition3}</div>{/if}
-            {#if parsed.close}<div class="tp-sec tp-sec-close"><span class="cue-badge cue-close">Close</span><span class="tp-close-text">{parsed.close}</span></div>{/if}
-            {#if parsed.asks.length > 0}<div class="tp-sec tp-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
+            {#if parsed.close}
+              <div class="tp-sec tp-sec-close">
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-close')}>
+                  <span class="cue-badge cue-close">Close</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-close'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-close']}<span class="tp-close-text">{parsed.close}</span>{/if}
+              </div>
+            {/if}
+            {#if parsed.asks.length > 0}
+              <div class="tp-sec tp-sec-ask">
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-ask')}>
+                  <span class="cue-badge cue-ask">Ask</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-ask'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-ask']}<div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div>{/if}
+              </div>
+            {/if}
 
           {:else if isFit}
             <!-- FIT: Acknowledge → Reframe → Gap → Choice → Bring -->
             {#if parsed.acknowledge}
               <div class="tp-sec tp-sec-acknowledge">
-                <span class="cue-badge cue-ack">Acknowledge</span>
-                <span class="tp-narrative-text">{parsed.acknowledge}{#if tpStreaming && !parsed.reframe}<span class="cursor">|</span>{/if}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-fit-ack')}>
+                  <span class="cue-badge cue-ack">Acknowledge</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-fit-ack'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-fit-ack']}<span class="tp-narrative-text">{parsed.acknowledge}{#if tpStreaming && !parsed.reframe}<span class="cursor">|</span>{/if}</span>{/if}
               </div>
             {/if}
             {#if parsed.reframe}
               <div class="tp-sec tp-sec-reframe">
-                <span class="cue-badge cue-reframe">Reframe</span>
-                <span class="tp-narrative-text">{parsed.reframe}{#if tpStreaming && !parsed.gap}<span class="cursor">|</span>{/if}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-reframe')}>
+                  <span class="cue-badge cue-reframe">Reframe</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-reframe'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-reframe']}<span class="tp-narrative-text">{parsed.reframe}{#if tpStreaming && !parsed.gap}<span class="cursor">|</span>{/if}</span>{/if}
               </div>
             {/if}
             {#if parsed.transition1}<div class="tp-transition">{parsed.transition1}</div>{/if}
             {#if parsed.gap}
               <div class="tp-sec tp-sec-gap">
-                <span class="cue-badge cue-gap">Gap</span>
-                <span class="tp-narrative-text">{parsed.gap}{#if tpStreaming && !parsed.choice}<span class="cursor">|</span>{/if}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-gap')}>
+                  <span class="cue-badge cue-gap">Gap</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-gap'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-gap']}<span class="tp-narrative-text">{parsed.gap}{#if tpStreaming && !parsed.choice}<span class="cursor">|</span>{/if}</span>{/if}
               </div>
             {/if}
             {#if parsed.transition2}<div class="tp-transition">{parsed.transition2}</div>{/if}
             {#if parsed.choice}
               <div class="tp-sec tp-sec-choice">
-                <span class="cue-badge cue-choice">Choice</span>
-                <span class="tp-narrative-text">{parsed.choice}{#if tpStreaming && !parsed.bring}<span class="cursor">|</span>{/if}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-choice')}>
+                  <span class="cue-badge cue-choice">Choice</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-choice'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-choice']}<span class="tp-narrative-text">{parsed.choice}{#if tpStreaming && !parsed.bring}<span class="cursor">|</span>{/if}</span>{/if}
               </div>
             {/if}
             {#if parsed.transition3}<div class="tp-transition">{parsed.transition3}</div>{/if}
             {#if parsed.bring}
               <div class="tp-sec tp-sec-bring">
-                <span class="cue-badge cue-bring">Bring</span>
-                <span class="tp-narrative-text">{parsed.bring}{#if tpStreaming && !parsed.close}<span class="cursor">|</span>{/if}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-bring')}>
+                  <span class="cue-badge cue-bring">Bring</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-bring'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-bring']}<span class="tp-narrative-text">{parsed.bring}{#if tpStreaming && !parsed.close}<span class="cursor">|</span>{/if}</span>{/if}
               </div>
             {/if}
-            {#if parsed.close}<div class="tp-sec tp-sec-close"><span class="cue-badge cue-close">Close</span><span class="tp-close-text">{parsed.close}</span></div>{/if}
-            {#if parsed.asks.length > 0}<div class="tp-sec tp-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
+            {#if parsed.close}
+              <div class="tp-sec tp-sec-close">
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-close')}>
+                  <span class="cue-badge cue-close">Close</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-close'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-close']}<span class="tp-close-text">{parsed.close}</span>{/if}
+              </div>
+            {/if}
+            {#if parsed.asks.length > 0}
+              <div class="tp-sec tp-sec-ask">
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-ask')}>
+                  <span class="cue-badge cue-ask">Ask</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-ask'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-ask']}<div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div>{/if}
+              </div>
+            {/if}
 
           {:else if isFutureTy}
-            <!-- FUTURE: Direction → Alignment → Contribution -->
+            <!-- FUTURE: Acknowledge → Direction → Alignment → Contribution -->
+            {#if parsed.acknowledge}
+              <div class="tp-sec tp-sec-ack">
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-ack')}>
+                  <span class="cue-badge cue-ack">Acknowledge</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-ack'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-ack']}<span class="tp-ack-text">{parsed.acknowledge}</span>{/if}
+              </div>
+            {/if}
             {#if parsed.direction}
               <div class="tp-sec tp-sec-direction">
-                <span class="cue-badge cue-direction">Direction</span>
-                <span class="tp-narrative-text">{parsed.direction}{#if current.streaming && !parsed.transition1 && !parsed.alignment}<span class="cursor">|</span>{/if}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-direction')}>
+                  <span class="cue-badge cue-direction">Direction</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-direction'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-direction']}<span class="tp-narrative-text">{parsed.direction}{#if current.streaming && !parsed.transition1 && !parsed.alignment}<span class="cursor">|</span>{/if}</span>{/if}
               </div>
             {/if}
             {#if parsed.transition1}<div class="tp-transition">{parsed.transition1}</div>{/if}
             {#if parsed.alignment}
               <div class="tp-sec tp-sec-alignment">
-                <span class="cue-badge cue-alignment">Alignment</span>
-                <span class="tp-narrative-text">{parsed.alignment}{#if current.streaming && !parsed.transition2 && !parsed.contribution}<span class="cursor">|</span>{/if}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-alignment')}>
+                  <span class="cue-badge cue-alignment">Alignment</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-alignment'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-alignment']}<span class="tp-narrative-text">{parsed.alignment}{#if current.streaming && !parsed.transition2 && !parsed.contribution}<span class="cursor">|</span>{/if}</span>{/if}
               </div>
             {/if}
             {#if parsed.transition2}<div class="tp-transition">{parsed.transition2}</div>{/if}
             {#if parsed.contribution}
               <div class="tp-sec tp-sec-contribution">
-                <span class="cue-badge cue-contribution">Contribution</span>
-                <span class="tp-narrative-text">{parsed.contribution}{#if tpStreaming && !parsed.transition3 && !parsed.close}<span class="cursor">|</span>{/if}</span>
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-contribution')}>
+                  <span class="cue-badge cue-contribution">Contribution</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-contribution'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-contribution']}<span class="tp-narrative-text">{parsed.contribution}{#if tpStreaming && !parsed.transition3 && !parsed.close}<span class="cursor">|</span>{/if}</span>{/if}
               </div>
             {/if}
             {#if parsed.transition3}<div class="tp-transition">{parsed.transition3}</div>{/if}
-            {#if parsed.close}<div class="tp-sec tp-sec-close"><span class="cue-badge cue-close">Close</span><span class="tp-close-text">{parsed.close}</span></div>{/if}
-            {#if parsed.asks.length > 0}<div class="tp-sec tp-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
+            {#if parsed.close}
+              <div class="tp-sec tp-sec-close">
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-close')}>
+                  <span class="cue-badge cue-close">Close</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-close'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-close']}<span class="tp-close-text">{parsed.close}</span>{/if}
+              </div>
+            {/if}
+            {#if parsed.asks.length > 0}
+              <div class="tp-sec tp-sec-ask">
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-ask')}>
+                  <span class="cue-badge cue-ask">Ask</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-ask'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-ask']}<div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div>{/if}
+              </div>
+            {/if}
 
           {:else if isClosing}
             <!-- CLOSING: Three collapsible sections, fetched on demand -->
@@ -560,18 +715,27 @@
             <!-- BEHAVIORAL / COMPETENCY / STRENGTHS: existing layout -->
             {@const sl = getSectionLabels(tpMode === 'compound' ? undefined : current.tag)}
             {#if parsed.acknowledge}
-              <div class="tp-sec tp-sec-ack">
+              <div class="tp-sec tp-sec-ack" style={sectionStyle(sl.ack)}>
                 <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-ack')}>
-                  <span class="cue-badge cue-ack">{sl.ack}</span>
+                  <span class="cue-badge cue-ack {lblClass(sl.ack)}">{sl.ack}</span>
                   <span class="e-sec-chevron">{collapsedSecs['tp-ack'] ? '▸' : '▾'}</span>
                 </button>
                 {#if !collapsedSecs['tp-ack']}<span class="tp-ack-text">{parsed.acknowledge}</span>{/if}
               </div>
             {/if}
+            {#if parsed.impact}
+              <div class="tp-sec tp-sec-impact">
+                <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-impact')}>
+                  <span class="cue-badge cue-impact">Impact</span>
+                  <span class="e-sec-chevron">{collapsedSecs['tp-impact'] ? '▸' : '▾'}</span>
+                </button>
+                {#if !collapsedSecs['tp-impact']}<span class="tp-ack-text">{parsed.impact}</span>{/if}
+              </div>
+            {/if}
             {#if parsed.solve}
-              <div class="tp-sec tp-sec-solve">
+              <div class="tp-sec tp-sec-solve" style={sectionStyle(sl.solve)}>
                 <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-solve')}>
-                  <span class="cue-badge cue-solve">{sl.solve}</span>
+                  <span class="cue-badge cue-solve {lblClass(sl.solve)}">{sl.solve}</span>
                   <span class="e-sec-chevron">{collapsedSecs['tp-solve'] ? '▸' : '▾'}</span>
                 </button>
                 {#if !collapsedSecs['tp-solve']}
@@ -602,9 +766,9 @@
               </div>
             {/if}
             {#if parsed.bridge}
-              <div class="tp-sec tp-sec-bridge">
+              <div class="tp-sec tp-sec-bridge" style={sectionStyle(sl.bridge)}>
                 <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-bridge')}>
-                  <span class="cue-badge cue-bridge">{sl.bridge}</span>
+                  <span class="cue-badge cue-bridge {lblClass(sl.bridge)}">{sl.bridge}</span>
                   <span class="e-sec-chevron">{collapsedSecs['tp-bridge'] ? '▸' : '▾'}</span>
                 </button>
                 {#if !collapsedSecs['tp-bridge']}<span class="tp-bridge-text">{parsed.bridge}</span>{/if}
@@ -617,7 +781,7 @@
           {#if parsed.tell || parsed.strategies.length > 1 || parsed.strategies[0]?.keyword || bodyCues.length > 0 || tpStreaming}
           <div class="tp-sec tp-sec-say" class:tp-sec-say-example={_sayEx} class:tp-sec-say-pivot={_sayPi}>
             <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-say')}>
-              <span class="cue-badge">{sl.answer}</span>
+              <span class="cue-badge {lblClass(sl.answer)}">{sl.answer}</span>
               {#if parsed.tell && !tpStreaming}
                 {@const secs = estimateSecs(parsed)}
                 <span class="tp-time-est">~{secs < 60 ? secs + 's' : Math.floor(secs/60) + 'm ' + (secs%60) + 's'}</span>
@@ -630,7 +794,7 @@
                 {parsed.tell}<span class="cursor">|</span>
               {:else if parsed.strategies.length > 1 || parsed.strategies[0]?.keyword}
                 <div class="tp-strats-row">
-                  {#each parsed.strategies as strategy, si}
+                  {#each parsed.strategies.filter(s => s.keyword) as strategy, si}
                     {@const stratKey = `strat-${currentIndex}-${si}`}
                     {@const isStratOpen = openCues[stratKey] !== false}
                     <div class="tp-strat-block" class:tp-strat-open={isStratOpen} style={isStratOpen ? 'max-width:100%' : ''}>
@@ -704,27 +868,34 @@
           <!-- CLOSE section (behavioral/competency) -->
           {#if parsed.close}
             <div class="tp-sec tp-sec-close">
-              <span class="cue-badge cue-close">{sl.close}</span>
-              <span class="tp-close-text">{parsed.close}</span>
+              <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-close')}>
+                <span class="cue-badge cue-close">{sl.close}</span>
+                <span class="e-sec-chevron">{collapsedSecs['tp-close'] ? '▸' : '▾'}</span>
+              </button>
+              {#if !collapsedSecs['tp-close']}<span class="tp-close-text">{parsed.close}</span>{/if}
             </div>
           {/if}
 
           <!-- ASK section (behavioral/competency) -->
           {#if parsed.asks.length > 0}
             <div class="tp-sec tp-sec-ask">
-              <span class="cue-badge cue-ask">Ask</span>
-              <div class="tp-ask-list">
-                {#each parsed.asks as ask}
-                  {@const askKey = '[Ask] ' + ask.topic}
-                  <div class="tp-ask-item">
-                    <div class="tp-ask-content">
-                      {#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}
-                      <span class="tp-ask-question">{ask.question}</span>
-                      {#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}
+              <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec('tp-ask')}>
+                <span class="cue-badge cue-ask">Ask</span>
+                <span class="e-sec-chevron">{collapsedSecs['tp-ask'] ? '▸' : '▾'}</span>
+              </button>
+              {#if !collapsedSecs['tp-ask']}
+                <div class="tp-ask-list">
+                  {#each parsed.asks as ask}
+                    <div class="tp-ask-item">
+                      <div class="tp-ask-content">
+                        {#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}
+                        <span class="tp-ask-question">{ask.question}</span>
+                        {#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}
+                      </div>
                     </div>
-                  </div>
-                {/each}
-              </div>
+                  {/each}
+                </div>
+              {/if}
             </div>
           {/if}
           {/if}<!-- end behavioral/competency else -->
@@ -772,7 +943,7 @@
         {/if}
       </div>
       {#if ansType.label}<span class="tp-hint">{ansType.label}</span>{/if}
-      {#if !tpStreaming && tpSuggestion && practiceRecorder.supported}
+      {#if !capturing && !tpStreaming && tpSuggestion && practiceRecorder.supported}
         {@const pState = practiceState[currentIndex]}
         {@const pResult = practiceResults[currentIndex]}
         <div class="practice-bar">
@@ -865,8 +1036,8 @@
               </div>
             {/if}
             {#if !collapsed[i]}
-            <!-- Practice bar — shown above cues so it's always visible without scrolling -->
-            {#if !eModeStreaming && eModeSuggestion}
+            <!-- Practice bar — hidden during live capture to save viewport space -->
+            {#if !capturing && !eModeStreaming && eModeSuggestion}
               {@const pState = practiceState[i]}
               {@const pResult = practiceResults[i]}
               <div class="practice-bar">
@@ -918,47 +1089,50 @@
               {@const eIsClosing  = entry.tag === 'closing'}
 
               {#if eIsIntro}
-                {#if parsed.present}<div class="e-sec e-sec-present"><span class="cue-badge cue-present">Summary</span><span class="affirm-text">{parsed.present}</span></div>{/if}
-                {#if parsed.thread}<div class="e-sec e-sec-thread"><span class="cue-badge cue-thread">Thread</span><span class="affirm-text">{parsed.thread}</span></div>{/if}
+                {#if parsed.acknowledge}<div class="e-sec e-sec-ack"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-ack`)}><span class="cue-badge cue-ack">Acknowledge</span><span class="e-sec-chevron">{collapsedSecs[`${i}-ack`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-ack`]}<span class="affirm-text">{parsed.acknowledge}</span>{/if}</div>{/if}
+                {#if parsed.present}<div class="e-sec e-sec-present"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-present`)}><span class="cue-badge cue-present">Summary</span><span class="e-sec-chevron">{collapsedSecs[`${i}-present`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-present`]}<span class="affirm-text">{parsed.present}</span>{/if}</div>{/if}
+                {#if parsed.thread}<div class="e-sec e-sec-thread"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-thread`)}><span class="cue-badge cue-thread">Thread</span><span class="e-sec-chevron">{collapsedSecs[`${i}-thread`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-thread`]}<span class="affirm-text">{parsed.thread}</span>{/if}</div>{/if}
                 {#if parsed.transition1}<div class="e-transition">{parsed.transition1}</div>{/if}
-                {#if parsed.past}<div class="e-sec e-sec-past"><span class="cue-badge cue-past">Story</span><span class="affirm-text">{parsed.past}</span></div>{/if}
+                {#if parsed.past}<div class="e-sec e-sec-past"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-past`)}><span class="cue-badge cue-past">Story</span><span class="e-sec-chevron">{collapsedSecs[`${i}-past`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-past`]}<span class="affirm-text">{parsed.past}</span>{/if}</div>{/if}
                 {#if parsed.transition2}<div class="e-transition">{parsed.transition2}</div>{/if}
-                {#if parsed.future}<div class="e-sec e-sec-future"><span class="cue-badge cue-future">Next</span><span class="affirm-text">{parsed.future}</span></div>{/if}
+                {#if parsed.future}<div class="e-sec e-sec-future"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-future`)}><span class="cue-badge cue-future">Next</span><span class="e-sec-chevron">{collapsedSecs[`${i}-future`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-future`]}<span class="affirm-text">{parsed.future}</span>{/if}</div>{/if}
                 {#if parsed.transition3}<div class="e-transition">{parsed.transition3}</div>{/if}
-                {#if parsed.close}<div class="e-sec e-sec-close"><span class="cue-badge cue-close">Close</span><span class="affirm-text">{parsed.close}</span></div>{/if}
-                {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
+                {#if parsed.close}<div class="e-sec e-sec-close"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-close`)}><span class="cue-badge cue-close">Close</span><span class="e-sec-chevron">{collapsedSecs[`${i}-close`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-close`]}<span class="affirm-text">{parsed.close}</span>{/if}</div>{/if}
+                {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-ask`)}><span class="cue-badge cue-ask">Ask</span><span class="e-sec-chevron">{collapsedSecs[`${i}-ask`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-ask`]}<div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div>{/if}</div>{/if}
 
               {:else if eIsMotiv}
-                {#if parsed.company}<div class="e-sec e-sec-company"><span class="cue-badge cue-company">Company</span><span class="affirm-text">{parsed.company}</span></div>{/if}
+                {#if parsed.acknowledge}<div class="e-sec e-sec-ack"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-ack`)}><span class="cue-badge cue-ack">Acknowledge</span><span class="e-sec-chevron">{collapsedSecs[`${i}-ack`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-ack`]}<span class="affirm-text">{parsed.acknowledge}</span>{/if}</div>{/if}
+                {#if parsed.company}<div class="e-sec e-sec-company"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-company`)}><span class="cue-badge cue-company">Company</span><span class="e-sec-chevron">{collapsedSecs[`${i}-company`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-company`]}<span class="affirm-text">{parsed.company}</span>{/if}</div>{/if}
                 {#if parsed.transition1}<div class="e-transition">{parsed.transition1}</div>{/if}
-                {#if parsed.role}<div class="e-sec e-sec-role"><span class="cue-badge cue-role">Role</span><span class="affirm-text">{parsed.role}</span></div>{/if}
+                {#if parsed.role}<div class="e-sec e-sec-role"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-role`)}><span class="cue-badge cue-role">Role</span><span class="e-sec-chevron">{collapsedSecs[`${i}-role`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-role`]}<span class="affirm-text">{parsed.role}</span>{/if}</div>{/if}
                 {#if parsed.transition2}<div class="e-transition">{parsed.transition2}</div>{/if}
-                {#if parsed.self}<div class="e-sec e-sec-self"><span class="cue-badge cue-self">Self</span><span class="affirm-text">{parsed.self}</span></div>{/if}
+                {#if parsed.self}<div class="e-sec e-sec-self"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-self`)}><span class="cue-badge cue-self">Self</span><span class="e-sec-chevron">{collapsedSecs[`${i}-self`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-self`]}<span class="affirm-text">{parsed.self}</span>{/if}</div>{/if}
                 {#if parsed.transition3}<div class="e-transition">{parsed.transition3}</div>{/if}
-                {#if parsed.close}<div class="e-sec e-sec-close"><span class="cue-badge cue-close">Close</span><span class="affirm-text">{parsed.close}</span></div>{/if}
-                {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
+                {#if parsed.close}<div class="e-sec e-sec-close"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-close`)}><span class="cue-badge cue-close">Close</span><span class="e-sec-chevron">{collapsedSecs[`${i}-close`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-close`]}<span class="affirm-text">{parsed.close}</span>{/if}</div>{/if}
+                {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-ask`)}><span class="cue-badge cue-ask">Ask</span><span class="e-sec-chevron">{collapsedSecs[`${i}-ask`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-ask`]}<div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div>{/if}</div>{/if}
 
               {:else if eIsFit}
-                {#if parsed.acknowledge}<div class="e-sec e-sec-acknowledge"><span class="cue-badge cue-ack">Acknowledge</span><span class="affirm-text">{parsed.acknowledge}</span></div>{/if}
-                {#if parsed.reframe}<div class="e-sec e-sec-reframe"><span class="cue-badge cue-reframe">Reframe</span><span class="affirm-text">{parsed.reframe}</span></div>{/if}
+                {#if parsed.acknowledge}<div class="e-sec e-sec-acknowledge"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-fit-ack`)}><span class="cue-badge cue-ack">Acknowledge</span><span class="e-sec-chevron">{collapsedSecs[`${i}-fit-ack`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-fit-ack`]}<span class="affirm-text">{parsed.acknowledge}</span>{/if}</div>{/if}
+                {#if parsed.reframe}<div class="e-sec e-sec-reframe"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-reframe`)}><span class="cue-badge cue-reframe">Reframe</span><span class="e-sec-chevron">{collapsedSecs[`${i}-reframe`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-reframe`]}<span class="affirm-text">{parsed.reframe}</span>{/if}</div>{/if}
                 {#if parsed.transition1}<div class="e-transition">{parsed.transition1}</div>{/if}
-                {#if parsed.gap}<div class="e-sec e-sec-gap"><span class="cue-badge cue-gap">Gap</span><span class="affirm-text">{parsed.gap}</span></div>{/if}
+                {#if parsed.gap}<div class="e-sec e-sec-gap"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-gap`)}><span class="cue-badge cue-gap">Gap</span><span class="e-sec-chevron">{collapsedSecs[`${i}-gap`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-gap`]}<span class="affirm-text">{parsed.gap}</span>{/if}</div>{/if}
                 {#if parsed.transition2}<div class="e-transition">{parsed.transition2}</div>{/if}
-                {#if parsed.choice}<div class="e-sec e-sec-choice"><span class="cue-badge cue-choice">Choice</span><span class="affirm-text">{parsed.choice}</span></div>{/if}
+                {#if parsed.choice}<div class="e-sec e-sec-choice"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-choice`)}><span class="cue-badge cue-choice">Choice</span><span class="e-sec-chevron">{collapsedSecs[`${i}-choice`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-choice`]}<span class="affirm-text">{parsed.choice}</span>{/if}</div>{/if}
                 {#if parsed.transition3}<div class="e-transition">{parsed.transition3}</div>{/if}
-                {#if parsed.bring}<div class="e-sec e-sec-bring"><span class="cue-badge cue-bring">Bring</span><span class="affirm-text">{parsed.bring}</span></div>{/if}
-                {#if parsed.close}<div class="e-sec e-sec-close"><span class="cue-badge cue-close">Close</span><span class="affirm-text">{parsed.close}</span></div>{/if}
-                {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
+                {#if parsed.bring}<div class="e-sec e-sec-bring"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-bring`)}><span class="cue-badge cue-bring">Bring</span><span class="e-sec-chevron">{collapsedSecs[`${i}-bring`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-bring`]}<span class="affirm-text">{parsed.bring}</span>{/if}</div>{/if}
+                {#if parsed.close}<div class="e-sec e-sec-close"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-close`)}><span class="cue-badge cue-close">Close</span><span class="e-sec-chevron">{collapsedSecs[`${i}-close`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-close`]}<span class="affirm-text">{parsed.close}</span>{/if}</div>{/if}
+                {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-ask`)}><span class="cue-badge cue-ask">Ask</span><span class="e-sec-chevron">{collapsedSecs[`${i}-ask`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-ask`]}<div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div>{/if}</div>{/if}
 
               {:else if eIsFutureTy}
-                {#if parsed.direction}<div class="e-sec e-sec-direction"><span class="cue-badge cue-direction">Direction</span><span class="affirm-text">{parsed.direction}</span></div>{/if}
+                {#if parsed.acknowledge}<div class="e-sec e-sec-ack"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-ack`)}><span class="cue-badge cue-ack">Acknowledge</span><span class="e-sec-chevron">{collapsedSecs[`${i}-ack`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-ack`]}<span class="affirm-text">{parsed.acknowledge}</span>{/if}</div>{/if}
+                {#if parsed.direction}<div class="e-sec e-sec-direction"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-direction`)}><span class="cue-badge cue-direction">Direction</span><span class="e-sec-chevron">{collapsedSecs[`${i}-direction`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-direction`]}<span class="affirm-text">{parsed.direction}</span>{/if}</div>{/if}
                 {#if parsed.transition1}<div class="e-transition">{parsed.transition1}</div>{/if}
-                {#if parsed.alignment}<div class="e-sec e-sec-alignment"><span class="cue-badge cue-alignment">Alignment</span><span class="affirm-text">{parsed.alignment}</span></div>{/if}
+                {#if parsed.alignment}<div class="e-sec e-sec-alignment"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-alignment`)}><span class="cue-badge cue-alignment">Alignment</span><span class="e-sec-chevron">{collapsedSecs[`${i}-alignment`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-alignment`]}<span class="affirm-text">{parsed.alignment}</span>{/if}</div>{/if}
                 {#if parsed.transition2}<div class="e-transition">{parsed.transition2}</div>{/if}
-                {#if parsed.contribution}<div class="e-sec e-sec-contribution"><span class="cue-badge cue-contribution">Contribution</span><span class="affirm-text">{parsed.contribution}</span></div>{/if}
+                {#if parsed.contribution}<div class="e-sec e-sec-contribution"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-contribution`)}><span class="cue-badge cue-contribution">Contribution</span><span class="e-sec-chevron">{collapsedSecs[`${i}-contribution`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-contribution`]}<span class="affirm-text">{parsed.contribution}</span>{/if}</div>{/if}
                 {#if parsed.transition3}<div class="e-transition">{parsed.transition3}</div>{/if}
-                {#if parsed.close}<div class="e-sec e-sec-close"><span class="cue-badge cue-close">Close</span><span class="affirm-text">{parsed.close}</span></div>{/if}
-                {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><span class="cue-badge cue-ask">Ask</span><div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div></div>{/if}
+                {#if parsed.close}<div class="e-sec e-sec-close"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-close`)}><span class="cue-badge cue-close">Close</span><span class="e-sec-chevron">{collapsedSecs[`${i}-close`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-close`]}<span class="affirm-text">{parsed.close}</span>{/if}</div>{/if}
+                {#if parsed.asks.length > 0}<div class="e-sec e-sec-ask"><button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-ask`)}><span class="cue-badge cue-ask">Ask</span><span class="e-sec-chevron">{collapsedSecs[`${i}-ask`] ? '▸' : '▾'}</span></button>{#if !collapsedSecs[`${i}-ask`]}<div class="tp-ask-list">{#each parsed.asks as ask}<div class="tp-ask-item"><div class="tp-ask-content">{#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}<span class="tp-ask-question">{ask.question}</span>{#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}</div></div>{/each}</div>{/if}</div>{/if}
 
               {:else if eIsClosing}
                 <div class="e-closing-wrap">
@@ -996,19 +1170,28 @@
               <!-- ACKNOWLEDGE -->
               {@const esl = getSectionLabels(eMode === 'compound' ? undefined : entry.tag)}
               {#if parsed.acknowledge}
-                <div class="e-sec e-sec-ack">
+                <div class="e-sec e-sec-ack" style={sectionStyle(esl.ack)}>
                   <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-ack`)}>
-                    <span class="cue-badge cue-ack">{esl.ack}</span>
+                    <span class="cue-badge cue-ack {lblClass(esl.ack)}">{esl.ack}</span>
                     <span class="e-sec-chevron">{collapsedSecs[`${i}-ack`] ? '▸' : '▾'}</span>
                   </button>
                   {#if !collapsedSecs[`${i}-ack`]}<span class="affirm-text">{parsed.acknowledge}</span>{/if}
                 </div>
               {/if}
+              {#if parsed.impact}
+                <div class="e-sec e-sec-impact">
+                  <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-impact`)}>
+                    <span class="cue-badge cue-impact">Impact</span>
+                    <span class="e-sec-chevron">{collapsedSecs[`${i}-impact`] ? '▸' : '▾'}</span>
+                  </button>
+                  {#if !collapsedSecs[`${i}-impact`]}<span class="affirm-text">{parsed.impact}</span>{/if}
+                </div>
+              {/if}
               <!-- SOLVE -->
               {#if parsed.solve}
-                <div class="e-sec e-sec-solve">
+                <div class="e-sec e-sec-solve" style={sectionStyle(esl.solve)}>
                   <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-solve`)}>
-                    <span class="cue-badge cue-solve">{esl.solve}</span>
+                    <span class="cue-badge cue-solve {lblClass(esl.solve)}">{esl.solve}</span>
                     <span class="e-sec-chevron">{collapsedSecs[`${i}-solve`] ? '▸' : '▾'}</span>
                   </button>
                   {#if !collapsedSecs[`${i}-solve`]}
@@ -1041,9 +1224,9 @@
               {/if}
               <!-- BRIDGE -->
               {#if parsed.bridge}
-                <div class="e-sec e-sec-bridge">
+                <div class="e-sec e-sec-bridge" style={sectionStyle(esl.bridge)}>
                   <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-bridge`)}>
-                    <span class="cue-badge cue-bridge">{esl.bridge}</span>
+                    <span class="cue-badge cue-bridge {lblClass(esl.bridge)}">{esl.bridge}</span>
                     <span class="e-sec-chevron">{collapsedSecs[`${i}-bridge`] ? '▸' : '▾'}</span>
                   </button>
                   {#if !collapsedSecs[`${i}-bridge`]}<span class="affirm-text">{parsed.bridge}</span>{/if}
@@ -1055,7 +1238,7 @@
               {#if parsed.tell || parsed.strategies.length > 1 || parsed.strategies[0]?.keyword || bodyCues.length > 0 || eModeStreaming}
               <div class="e-sec e-sec-say" class:e-sec-say-example={_eSayEx} class:e-sec-say-pivot={_eSayPi}>
                 <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-say`)}>
-                  <span class="cue-badge" class:cue-say={parsed.cue !== 'Ask'} class:cue-ask={parsed.cue === 'Ask'}>{esl.answer}</span>
+                  <span class="cue-badge {lblClass(esl.answer)}" class:cue-say={parsed.cue !== 'Ask'} class:cue-ask={parsed.cue === 'Ask'}>{esl.answer}</span>
                   <span class="e-sec-chevron">{collapsedSecs[`${i}-say`] ? '▸' : '▾'}</span>
                   {#if parsed.tell && !eModeStreaming}
                     {@const secs = estimateSecs(parsed)}
@@ -1067,7 +1250,7 @@
                   {#if eModeStreaming && !parsed.body}
                     {parsed.tell}<span class="cursor">|</span>
                   {:else if parsed.strategies.length > 1 || parsed.strategies[0]?.keyword}
-                    {#each parsed.strategies as strategy, si}
+                    {#each parsed.strategies.filter(s => s.keyword) as strategy, si}
                       {@const stratKey = `strat-entry-${i}-${si}`}
                       {@const isStratOpen = !!openCues[stratKey]}
                       <div class="tp-strat-block" class:tp-strat-open={isStratOpen}>
@@ -1138,26 +1321,33 @@
               <!-- CLOSE -->
               {#if parsed.close}
                 <div class="e-sec e-sec-close">
-                  <span class="cue-badge cue-close">{esl.close}</span>
-                  <span class="affirm-text">{parsed.close}</span>
+                  <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-close`)}>
+                    <span class="cue-badge cue-close">{esl.close}</span>
+                    <span class="e-sec-chevron">{collapsedSecs[`${i}-close`] ? '▸' : '▾'}</span>
+                  </button>
+                  {#if !collapsedSecs[`${i}-close`]}<span class="affirm-text">{parsed.close}</span>{/if}
                 </div>
               {/if}
-              <!-- ASK — always visible -->
+              <!-- ASK -->
               {#if parsed.asks.length > 0}
                 <div class="e-sec e-sec-ask">
-                  <span class="cue-badge cue-ask">Ask</span>
-                  <div class="tp-ask-list">
-                    {#each parsed.asks as ask}
-                      {@const askKey = '[Ask] ' + ask.topic}
-                      <div class="tp-ask-item">
-                        <div class="tp-ask-content">
-                          {#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}
-                          <span class="tp-ask-question">{ask.question}</span>
-                          {#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}
+                  <button class="e-sec-header e-sec-header-toggle" onclick={() => toggleSec(`${i}-ask`)}>
+                    <span class="cue-badge cue-ask">Ask</span>
+                    <span class="e-sec-chevron">{collapsedSecs[`${i}-ask`] ? '▸' : '▾'}</span>
+                  </button>
+                  {#if !collapsedSecs[`${i}-ask`]}
+                    <div class="tp-ask-list">
+                      {#each parsed.asks as ask}
+                        <div class="tp-ask-item">
+                          <div class="tp-ask-content">
+                            {#if ask.topic}<span class="tp-ask-topic">{ask.topic}</span>{/if}
+                            <span class="tp-ask-question">{ask.question}</span>
+                            {#if ask.followUp}<span class="tp-ask-followup">↳ {ask.followUp}</span>{/if}
+                          </div>
                         </div>
-                      </div>
-                    {/each}
-                  </div>
+                      {/each}
+                    </div>
+                  {/if}
                 </div>
               {/if}
             {/if}
@@ -1221,13 +1411,15 @@
     border-left: 3px solid transparent;
     flex-shrink: 0;
   }
-  .tp-sec-ack    { background: var(--bg-ack);    border-left-color: var(--border-ack); }
-  .tp-sec-solve  { background: #071a1a;          border-left-color: #0e7490; }
-  .tp-sec-bridge { background: #0d0d07;          border-left-color: #78716c; }
+  .tp-sec-ack          { background: #0a0f18; border-left-color: #334155; }
+  .tp-sec-acknowledge  { background: #0a0f18; border-left-color: #334155; }
+  .tp-sec-impact       { background: #120800; border-left-color: #92400e; }
+  .tp-sec-solve        { background: #0a0f18; border-left-color: #334155; }
+  .tp-sec-bridge { background: #0a0f18;          border-left-color: #334155; }
   .tp-sec-say    { background: var(--bg-say);    border-left-color: var(--border-say); }
   .tp-sec-say.tp-sec-say-example { border-left-color: #0891b2; }
   .tp-sec-say.tp-sec-say-pivot   { border-left-color: #ea580c; }
-  .tp-sec-close  { background: #080d1a;          border-left-color: #3b82f6; }
+  .tp-sec-close  { background: #0a1020;           border-left-color: #3b82f6; }
   .tp-sec-ask    { background: var(--bg-ask);    border-left-color: var(--border-ask); }
 
   /* CUE badges */
@@ -1246,11 +1438,17 @@
     flex-shrink: 0;
     margin-top: 0.1rem;
   }
-  .cue-badge.cue-ask    { background: #422006; color: #fbbf24; }
-  .cue-badge.cue-ack    { background: #2e1065; color: #c084fc; }
-  .cue-badge.cue-solve  { background: #292524; color: #a8a29e; }
-  .cue-badge.cue-bridge { background: #292524; color: #a8a29e; }
+  .cue-badge.cue-ask    { background: #1e3a5f; color: #93c5fd; }
+  .cue-badge.cue-ack    { background: #1e293b; color: #64748b; }
+  .cue-badge.cue-impact { background: #422006; color: #fbbf24; }
+  .cue-badge.cue-solve  { background: #1e293b; color: #64748b; }
+  .cue-badge.cue-bridge { background: #1e293b; color: #64748b; }
   .cue-badge.cue-close  { background: #1e3a5f; color: #93c5fd; }
+  /* Label-based color overrides */
+  .cue-badge.cue-lbl-blue   { background: #1e3a5f; color: #93c5fd; }
+  .cue-badge.cue-lbl-amber  { background: #422006; color: #fbbf24; }
+  .cue-badge.cue-lbl-purple { background: #2e1065; color: #c084fc; }
+  .cue-badge.cue-lbl-green  { background: #14532d; color: #4ade80; }
 
   /* Acknowledge text (purple section) */
   .tp-ack-text {
@@ -1303,7 +1501,7 @@
   .tp-ask-list { display: flex; flex-direction: column; gap: 0.35rem; }
   .tp-ask-item { display: flex; align-items: flex-start; gap: 0.4rem; }
   .tp-ask-content { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; }
-  .tp-ask-topic { font-size: var(--fs-sm); color: #f59e0b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .tp-ask-topic { font-size: var(--fs-sm); color: #93c5fd; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
   .tp-ask-question { font-size: var(--fs-lg); color: #e2e8f0; line-height: 1.2; overflow-wrap: break-word; }
   .tp-ask-followup { font-size: var(--fs-sm); color: #94a3b8; line-height: 1.2; overflow-wrap: break-word;  }
 
@@ -1437,7 +1635,7 @@
   .cue-loading { color: #334155; }
 
   /* Ask cue-block theming (amber) */
-  .cue-label-ask { color: #fbbf24 !important; }
+  .cue-label-ask { color: #93c5fd !important; }
   .tp-ask-preview {
     color: #94a3b8 !important;
     white-space: normal !important;
@@ -1445,7 +1643,7 @@
     text-overflow: unset !important;
   }
   .ask-sentence {
-    padding: 0.3rem 0.4rem; background: #060300; border-left: 2px solid #92400e;
+    padding: 0.3rem 0.4rem; background: #050d1a; border-left: 2px solid #3b82f6;
     border-radius: 0 0.25rem 0.25rem 0; color: #f1f5f9;
     font-size: var(--fs-lg); line-height: 1.2; font-weight: 400; overflow-wrap: break-word;
   }
@@ -1554,13 +1752,15 @@
     padding: 0.45rem 0.6rem; border-radius: 0.4rem;
     border-left: 2px solid transparent;
   }
-  .e-sec-ack    { background: var(--bg-ack);    border-left-color: var(--border-ack); }
-  .e-sec-solve  { background: #071a1a;          border-left-color: #0e7490; }
-  .e-sec-bridge { background: #0d0d07;          border-left-color: #78716c; }
+  .e-sec-ack          { background: #0a0f18; border-left-color: #334155; }
+  .e-sec-acknowledge  { background: #0a0f18; border-left-color: #334155; }
+  .e-sec-impact       { background: #120800; border-left-color: #92400e; }
+  .e-sec-solve        { background: #0a0f18; border-left-color: #334155; }
+  .e-sec-bridge { background: #0a0f18;          border-left-color: #334155; }
   .e-sec-say    { background: var(--bg-say);    border-left-color: var(--border-say); }
   .e-sec-say.e-sec-say-example { border-left-color: #0891b2; }
   .e-sec-say.e-sec-say-pivot   { border-left-color: #ea580c; }
-  .e-sec-close  { background: #080d1a;          border-left-color: #3b82f6; }
+  .e-sec-close  { background: #0a1020;           border-left-color: #3b82f6; }
   .e-sec-ask    { background: var(--bg-ask);    border-left-color: var(--border-ask); }
   .affirm-text, .tell-text {
     color: #f1f5f9; font-size: var(--fs-lg); font-weight: 400;
@@ -1597,21 +1797,27 @@
   /* === New question type sections === */
 
   /* Introduction */
-  .tp-sec-present      { background: #071020; border-left-color: #2563eb; }
+  .tp-sec-present      { background: #0d0820; border-left-color: #6d28d9; }
   .tp-sec-thread       { background: #0d0a20; border-left-color: #7c3aed; }
   .e-sec-thread        { background: #0d0a20; border-left-color: #7c3aed; }
-  .tp-sec-past         { background: #120a00; border-left-color: #b45309; }
+  .tp-sec-past         { background: #120800; border-left-color: #92400e; }
   .tp-sec-future       { background: #071a0d; border-left-color: #059669; }
 
   /* Motivation */
-  .tp-sec-company      { background: #0d0720; border-left-color: #7c3aed; }
-  .tp-sec-role         { background: #071a1a; border-left-color: #0e7490; }
-  .tp-sec-self         { background: #071622; border-left-color: #0ea5e9; }
+  .tp-sec-company      { background: #0a1020; border-left-color: #3b82f6; }
+  .tp-sec-role         { background: #0a0f18; border-left-color: #334155; }
+  .tp-sec-self         { background: #0a0f18; border-left-color: #334155; }
 
   /* Future growth */
   .tp-sec-direction    { background: #071a0d; border-left-color: #059669; }
-  .tp-sec-alignment    { background: #071a1a; border-left-color: #0e7490; }
-  .tp-sec-contribution { background: #120a00; border-left-color: #b45309; }
+  .tp-sec-alignment    { background: #060e0a; border-left-color: #166534; }
+  .tp-sec-contribution { background: #060e0a; border-left-color: #166534; }
+
+  /* Fit */
+  .tp-sec-reframe      { background: #060e0a; border-left-color: #166534; }
+  .tp-sec-gap          { background: #120800; border-left-color: #92400e; }
+  .tp-sec-choice       { background: #0a1020; border-left-color: #3b82f6; }
+  .tp-sec-bring        { background: #060e0a; border-left-color: #166534; }
 
   /* Narrative text (used in all new type sections) */
   .tp-narrative-text {
@@ -1623,23 +1829,25 @@
   }
 
   /* CUE badge colors for new types */
-  .cue-badge.cue-present      { background: #1e3a8a; color: #93c5fd; }
+  /* Open → purple */
+  .cue-badge.cue-present      { background: #2e1065; color: #c084fc; }
   .cue-badge.cue-thread       { background: #3b0764; color: #d8b4fe; }
-  .cue-badge.cue-past         { background: #451a03; color: #fcd34d; }
+  .cue-badge.cue-company      { background: #1e3a5f; color: #93c5fd; }
+  /* Develop → gray */
+  .cue-badge.cue-past         { background: #422006; color: #fbbf24; }
+  .cue-badge.cue-role         { background: #1e293b; color: #64748b; }
+  .cue-badge.cue-self         { background: #1e293b; color: #64748b; }
+  .cue-badge.cue-reframe      { background: #14532d; color: #4ade80; }
+  .cue-badge.cue-gap          { background: #422006; color: #fbbf24; }
+  .cue-badge.cue-choice       { background: #1e3a5f; color: #93c5fd; }
+  .cue-badge.cue-trade        { background: #1e293b; color: #64748b; }
+  /* Land → green */
   .cue-badge.cue-future       { background: #14532d; color: #4ade80; }
-  .cue-badge.cue-company      { background: #3b0764; color: #d8b4fe; }
-  .cue-badge.cue-role         { background: #164e63; color: #67e8f9; }
-  .cue-badge.cue-self         { background: #0c4a6e; color: #7dd3fc; }
-  .cue-badge.cue-acknowledge  { background: #1e293b; color: #64748b; }
-  .cue-badge.cue-reframe      { background: #334155; color: #94a3b8; }
-  .cue-badge.cue-gap          { background: #451a03; color: #fb923c; }
-  .cue-badge.cue-choice       { background: #164e63; color: #22d3ee; }
-  .cue-badge.cue-bring        { background: #0f3d2e; color: #6ee7b7; }
-  .cue-badge.cue-trade        { background: #1e3a5f; color: #93c5fd; }
-  .cue-badge.cue-value        { background: #0f3d2e; color: #6ee7b7; }
-  .cue-badge.cue-direction    { background: #14532d; color: #86efac; }
-  .cue-badge.cue-alignment    { background: #134e4a; color: #5eead4; }
-  .cue-badge.cue-contribution { background: #451a03; color: #fca5a5; }
+  .cue-badge.cue-bring        { background: #14532d; color: #4ade80; }
+  .cue-badge.cue-value        { background: #14532d; color: #4ade80; }
+  .cue-badge.cue-direction    { background: #14532d; color: #4ade80; }
+  .cue-badge.cue-alignment    { background: #14532d; color: #4ade80; }
+  .cue-badge.cue-contribution { background: #14532d; color: #4ade80; }
 
   /* Closing question collapsible sections */
   .closing-sec { display: flex; flex-direction: column; }
@@ -1673,28 +1881,32 @@
     border-radius: 0.45rem; border-left: 3px solid #3b82f6; flex-shrink: 0;
   }
   .tp-closing-num {
-    font-size: var(--fs-lg); font-weight: 800; color: #3b82f6;
+    font-size: var(--fs-lg); font-weight: 800; color: #93c5fd;
     flex-shrink: 0; min-width: 1.2rem; text-align: right;
   }
   .tp-closing-content { display: flex; flex-direction: column; gap: 0.2rem; flex: 1; }
   .tp-closing-topic {
     font-size: var(--fs-sm); font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.06em; color: #6495e4;
+    letter-spacing: 0.06em; color: #93c5fd;
   }
   .tp-closing-question {
     font-size: var(--fs-lg); color: #e2e8f0; line-height: 1.2; overflow-wrap: break-word;
   }
 
   /* Standard panel equivalents for new types */
-  .e-sec-present      { background: #071020; border-left-color: #2563eb; }
-  .e-sec-past         { background: #120a00; border-left-color: #b45309; }
+  .e-sec-present      { background: #0d0820; border-left-color: #6d28d9; }
+  .e-sec-past         { background: #120800; border-left-color: #92400e; }
   .e-sec-future       { background: #071a0d; border-left-color: #059669; }
-  .e-sec-company      { background: #0d0720; border-left-color: #7c3aed; }
-  .e-sec-role         { background: #071a1a; border-left-color: #0e7490; }
-  .e-sec-self         { background: #071622; border-left-color: #0ea5e9; }
+  .e-sec-company      { background: #0a1020; border-left-color: #3b82f6; }
+  .e-sec-role         { background: #0a0f18; border-left-color: #334155; }
+  .e-sec-self         { background: #0a0f18; border-left-color: #334155; }
   .e-sec-direction    { background: #071a0d; border-left-color: #059669; }
-  .e-sec-alignment    { background: #071a1a; border-left-color: #0e7490; }
-  .e-sec-contribution { background: #120a00; border-left-color: #b45309; }
+  .e-sec-alignment    { background: #060e0a; border-left-color: #166534; }
+  .e-sec-contribution { background: #060e0a; border-left-color: #166534; }
+  .e-sec-reframe      { background: #060e0a; border-left-color: #166534; }
+  .e-sec-gap          { background: #120800; border-left-color: #92400e; }
+  .e-sec-choice       { background: #0a1020; border-left-color: #3b82f6; }
+  .e-sec-bring        { background: #060e0a; border-left-color: #166534; }
   .e-closing-wrap     { display: flex; flex-direction: column; gap: 0.4rem; }
 
   /* Strategy collapsible rows (inside tp-tell and tell-text) */

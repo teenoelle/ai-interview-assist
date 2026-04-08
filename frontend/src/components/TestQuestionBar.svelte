@@ -121,7 +121,7 @@
     <div class="tqb-groups">
       {#each PRESET_GROUPS as group}
         <div class="tqb-group">
-          <span class="tqb-group-label" style="color: {TAG_COLOR[group.tag]}">{group.label}</span>
+          <span class="tqb-group-label">{group.label}</span>
           <div class="tqb-presets">
             {#each group.questions as p}
               <button class="tqb-preset" onclick={() => send(p)} disabled={sending}>{p}</button>
@@ -195,7 +195,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    opacity: 0.8;
+    color: #475569;
   }
 
   .tqb-presets {

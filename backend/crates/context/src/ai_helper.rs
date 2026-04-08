@@ -1,6 +1,27 @@
 use anyhow::Result;
 use serde_json::{json, Value};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
+
+static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+fn client() -> &'static reqwest::Client {
+    CLIENT.get_or_init(reqwest::Client::new)
+}
+
+/// Pre-warm the TLS connection used by call_ai / call_ai_fast (Anthropic endpoint).
+pub async fn prewarm(api_key: &str) {
+    let _ = client()
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .json(&serde_json::json!({
+            "model": "claude-haiku-4-5-20251001",
+            "max_tokens": 1,
+            "messages": [{ "role": "user", "content": "hi" }]
+        }))
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await;
+}
 
 /// Safely truncate a UTF-8 string to at most `chars` characters.
 /// Prevents panics when slicing strings containing multi-byte Unicode characters.
@@ -38,7 +59,7 @@ async fn try_groq_text(key: &str, prompt: &str, max_tokens: u32) -> Option<Strin
         "max_tokens": max_tokens,
         "messages": [{ "role": "user", "content": prompt }]
     });
-    let resp = reqwest::Client::new()
+    let resp = client()
         .post("https://api.groq.com/openai/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", key))
         .json(&body)
@@ -63,7 +84,7 @@ async fn try_groq_text_with_system(key: &str, system: &str, user: &str, max_toke
             { "role": "user", "content": user }
         ]
     });
-    let resp = reqwest::Client::new()
+    let resp = client()
         .post("https://api.groq.com/openai/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", key))
         .json(&body)
@@ -85,7 +106,7 @@ async fn try_ollama_text(url: &str, model: &str, prompt: &str, max_tokens: u32) 
         "max_tokens": max_tokens,
         "messages": [{ "role": "user", "content": prompt }]
     });
-    let resp = reqwest::Client::new()
+    let resp = client()
         .post(format!("{}/v1/chat/completions", url))
         .json(&body)
         .timeout(std::time::Duration::from_secs(60))
@@ -109,7 +130,7 @@ async fn try_ollama_text_with_system(url: &str, model: &str, system: &str, user:
             { "role": "user", "content": user }
         ]
     });
-    let resp = reqwest::Client::new()
+    let resp = client()
         .post(format!("{}/v1/chat/completions", url))
         .json(&body)
         .timeout(std::time::Duration::from_secs(60))
@@ -122,6 +143,77 @@ async fn try_ollama_text_with_system(url: &str, model: &str, system: &str, user:
     let j: Value = resp.json().await.ok()?;
     let text = j["choices"][0]["message"]["content"].as_str()?.trim().to_string();
     if text.is_empty() { None } else { Some(text) }
+}
+
+/// Claude-first AI call for important one-shot generation (debrief, analysis).
+/// Order: Claude → Groq key1 → Groq key2 → Gemini. Skips Ollama (too slow for long outputs).
+pub async fn call_ai_quality(cfg: &AiConfig<'_>, prompt: &str, max_tokens: u32) -> Result<String> {
+    // Claude first — pre-warmed at startup, fast, no TPM rate limit
+    if let Some(key) = cfg.anthropic_key {
+        let body = json!({
+            "model": "claude-haiku-4-5-20251001",
+            "max_tokens": max_tokens,
+            "messages": [{ "role": "user", "content": prompt }]
+        });
+        if let Ok(resp) = client()
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", key)
+            .header("anthropic-version", "2023-06-01")
+            .json(&body)
+            .timeout(std::time::Duration::from_secs(30))
+            .send()
+            .await
+        {
+            if resp.status().is_success() {
+                if let Ok(j) = resp.json::<Value>().await {
+                    let text = j["content"][0]["text"].as_str().unwrap_or("").trim().to_string();
+                    if !text.is_empty() {
+                        inc(&cfg.usage, "Claude");
+                        return Ok(text);
+                    }
+                }
+            } else {
+                tracing::debug!("Claude quality returned {}, trying Groq", resp.status());
+            }
+        }
+    }
+
+    // Groq fallback
+    if let Some(key) = cfg.groq_key {
+        if let Some(text) = try_groq_text(key, prompt, max_tokens).await {
+            inc(&cfg.usage, "Groq");
+            return Ok(text);
+        }
+    }
+    if let Some(key) = cfg.groq_key_2 {
+        if let Some(text) = try_groq_text(key, prompt, max_tokens).await {
+            inc(&cfg.usage, "Groq #2");
+            return Ok(text);
+        }
+    }
+
+    // Gemini final fallback
+    let body = json!({
+        "contents": [{ "parts": [{ "text": prompt }] }],
+        "generationConfig": { "maxOutputTokens": max_tokens }
+    });
+    let url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={}",
+        cfg.gemini_key
+    );
+    let resp = client()
+        .post(&url)
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(30))
+        .send()
+        .await?;
+    let j: Value = resp.json().await?;
+    inc(&cfg.usage, "Gemini");
+    Ok(j["candidates"][0]["content"]["parts"][0]["text"]
+        .as_str()
+        .unwrap_or("")
+        .trim()
+        .to_string())
 }
 
 /// Call AI providers in order: Groq key1 → Groq key2 → Ollama → Claude → Gemini.
@@ -155,7 +247,7 @@ pub async fn call_ai(cfg: &AiConfig<'_>, prompt: &str, max_tokens: u32) -> Resul
             "max_tokens": max_tokens,
             "messages": [{ "role": "user", "content": prompt }]
         });
-        let resp = reqwest::Client::new()
+        let resp = client()
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", key)
             .header("anthropic-version", "2023-06-01")
@@ -180,7 +272,7 @@ pub async fn call_ai(cfg: &AiConfig<'_>, prompt: &str, max_tokens: u32) -> Resul
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={}",
         cfg.gemini_key
     );
-    let resp = reqwest::Client::new()
+    let resp = client()
         .post(&url)
         .json(&body)
         .timeout(std::time::Duration::from_secs(30))
@@ -210,7 +302,7 @@ pub async fn call_ai_fast(cfg: &AiConfig<'_>, system_prompt: &str, user_prompt: 
                 { "role": "user", "content": user_prompt }
             ]
         });
-        let resp = reqwest::Client::new()
+        let resp = client()
             .post("https://api.groq.com/openai/v1/chat/completions")
             .header("Authorization", format!("Bearer {}", key))
             .json(&body)
@@ -242,7 +334,7 @@ pub async fn call_ai_fast(cfg: &AiConfig<'_>, system_prompt: &str, user_prompt: 
                 { "role": "user", "content": user_prompt }
             ]
         });
-        let resp = reqwest::Client::new()
+        let resp = client()
             .post("https://api.groq.com/openai/v1/chat/completions")
             .header("Authorization", format!("Bearer {}", key))
             .json(&body)
@@ -270,7 +362,7 @@ pub async fn call_ai_fast(cfg: &AiConfig<'_>, system_prompt: &str, user_prompt: 
             "system": [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
             "messages": [{ "role": "user", "content": user_prompt }]
         });
-        let resp = reqwest::Client::new()
+        let resp = client()
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", key)
             .header("anthropic-version", "2023-06-01")
@@ -303,7 +395,7 @@ pub async fn call_ai_fast(cfg: &AiConfig<'_>, system_prompt: &str, user_prompt: 
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={}",
         cfg.gemini_key
     );
-    let resp = reqwest::Client::new()
+    let resp = client()
         .post(&url)
         .json(&body)
         .timeout(std::time::Duration::from_secs(30))
@@ -330,7 +422,7 @@ pub async fn call_ai_simple(cfg: &AiConfig<'_>, system_prompt: &str, user_prompt
             "system": [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}],
             "messages": [{ "role": "user", "content": user_prompt }]
         });
-        let resp = reqwest::Client::new()
+        let resp = client()
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", key)
             .header("anthropic-version", "2023-06-01")
@@ -379,7 +471,7 @@ pub async fn call_ai_simple(cfg: &AiConfig<'_>, system_prompt: &str, user_prompt
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={}",
         cfg.gemini_key
     );
-    let resp = reqwest::Client::new()
+    let resp = client()
         .post(&url)
         .json(&body)
         .timeout(std::time::Duration::from_secs(30))
@@ -401,7 +493,7 @@ pub async fn predict_questions(system_prompt: &str, cfg: &AiConfig<'_>) -> Vec<S
         trunc(&system_prompt, 8000)
     );
 
-    match call_ai(cfg, &prompt, 600).await {
+    match call_ai_quality(cfg, &prompt, 600).await {
         Ok(text) => text
             .lines()
             .filter_map(|l| {
@@ -431,19 +523,32 @@ pub struct DebriefResult {
     pub followup_email_draft: String,
 }
 
-/// Generate a post-interview debrief from transcript and suggestions.
+/// Generate a post-interview debrief from transcript, suggestions, and session stats.
+/// Does NOT generate the email draft (call generate_followup_email separately for that).
 pub async fn generate_debrief(
     transcript_text: &str,
     suggestions_text: &str,
+    session_context: &str,
     cfg: &AiConfig<'_>,
 ) -> Result<DebriefResult> {
+    let has_real_transcript = transcript_text.lines()
+        .any(|l| l.starts_with("You:") && l.len() > 10);
+
+    let focus_note = if !has_real_transcript {
+        "Note: This appears to be a preparation/practice session — no live interview transcript was captured. Focus your feedback on the questions reviewed and the preparation quality rather than actual spoken answers."
+    } else {
+        "This is a live interview session."
+    };
+
     let prompt = format!(
-        "You are analyzing a completed job interview. Based on the transcript and AI suggestions below, write a concise debrief.\n\nRespond in EXACTLY this format (use these exact section headers):\n\nSUMMARY:\n[2-3 sentence overall assessment]\n\nSTRONG:\n• [specific thing done well]\n• [specific thing done well]\n\nIMPROVE:\n• [specific area to improve]\n• [specific area to improve]\n\nFOLLOWUP:\n• [point to include in thank-you email]\n• [point to include in thank-you email]\n\nEMAIL:\n[Complete thank-you email, ready to copy and send. Include: Subject line on the first line starting with 'Subject: ', then a blank line, then a proper greeting, 2-3 warm paragraphs referencing specific topics from the interview, a forward-looking close, and a sign-off. Use [Your Name] and [Interviewer Name] as placeholders.]\n\n---\nTRANSCRIPT:\n{}\n\nAI SUGGESTIONS PROVIDED:\n{}",
-        trunc(&transcript_text, 4000),
-        trunc(&suggestions_text, 2000)
+        "You are analyzing a job interview session. {}\n\nRespond in EXACTLY this format (use these exact section headers, no extra text outside them):\n\nSUMMARY:\n[2-3 sentence overall assessment. If no live transcript, assess preparation quality and readiness.]\n\nSTRONG:\n• [specific strength observed]\n• [specific strength observed]\n\nIMPROVE:\n• [specific, actionable improvement]\n• [specific, actionable improvement]\n\nFOLLOWUP:\n• [key point to reference in thank-you email]\n• [key point to reference in thank-you email]\n\n---\nSESSION DATA:\n{}\n\nTRANSCRIPT:\n{}\n\nQUESTIONS & AI SUGGESTIONS:\n{}",
+        focus_note,
+        trunc(session_context, 800),
+        trunc(transcript_text, 3000),
+        trunc(suggestions_text, 1500)
     );
 
-    let text = call_ai(cfg, &prompt, 1400).await?;
+    let text = call_ai_quality(cfg, &prompt, 650).await?;
     Ok(parse_debrief(&text))
 }
 
@@ -511,6 +616,26 @@ fn parse_debrief(text: &str) -> DebriefResult {
         followup_email: followup,
         followup_email_draft: email_draft,
     }
+}
+
+/// Generate a follow-up/thank-you email draft. Called lazily after the initial debrief.
+pub async fn generate_followup_email(
+    transcript_text: &str,
+    followup_bullets: &[String],
+    cfg: &AiConfig<'_>,
+) -> Result<String> {
+    let bullets = if followup_bullets.is_empty() {
+        "Reference specific topics from the interview.".to_string()
+    } else {
+        followup_bullets.iter().map(|b| format!("• {b}")).collect::<Vec<_>>().join("\n")
+    };
+    let transcript_snippet = trunc(transcript_text, 600);
+    let prompt = format!(
+        "Write a concise professional thank-you email after a job interview. Use [Your Name] and [Interviewer Name] as placeholders.\n\nKey points:\n{}\n\nInterview context:\n{}\n\nOutput format — line 1: Subject: ..., blank line, then the email body. Be warm but brief (3 short paragraphs max).",
+        bullets,
+        transcript_snippet
+    );
+    call_ai_quality(cfg, &prompt, 420).await
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]

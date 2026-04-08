@@ -33,6 +33,11 @@
     return '#ef4444';
   }
 
+  function fillColor(provider: string, p: number): string {
+    if (provider === 'Claude' || provider === 'Anthropic') return '#475569';
+    return barColor(p);
+  }
+
   function computeRate(history: Array<{ r: number; t: number }>): number | null {
     if (history.length < 2) return null;
     const oldest = history[0];
@@ -117,11 +122,11 @@
           </div>
 
           <div class="bar-track">
-            <div class="bar-fill" style="width: {p}%; background: {barColor(p)}"></div>
+            <div class="bar-fill" style="width: {p}%; background: {fillColor(provider, p)}"></div>
           </div>
 
           <div class="provider-meta">
-            <span class="pct" style="color: {barColor(p)}">{p.toFixed(1)}% remaining</span>
+            <span class="pct" style="color: {fillColor(provider, p)}">{p.toFixed(1)}% remaining</span>
             <span class="rate">
               {#if rate !== null}
                 {rate.toFixed(1)} req/min · {timeLeft(entry.remaining, rate)}
@@ -182,7 +187,7 @@
   .service-provider {
     font-size: var(--fs-xs);
     font-weight: 600;
-    color: #7eb8f7;
+    color: #94a3b8;
   }
   .service-local {
     color: #4ade80;

@@ -26,7 +26,7 @@
   import { SK, loadSectionLayout, saveLayoutPreset, loadLayoutPreset, deleteLayoutPreset, listLayoutPresets } from './lib/storageKeys';
   import { applyDrop, moveToPanel } from './lib/dragLayout';
   import { EventWebSocket } from './lib/websocket';
-  import { countFillers, totalFillers } from './lib/filler';
+  import { countFillers, totalFillers, countHedges } from './lib/filler';
   import { saveInterview } from './lib/interviewHistory';
   import { tagQuestion } from './lib/questionTagger';
   import { detectRedFlag } from './lib/redFlagDetector';
@@ -43,30 +43,25 @@
   import { parseSuggestion, parseCues } from './lib/parseSuggestion';
   import { EMOTION_COLORS, EMOTION_CONFIG, emotionColor, POSITIVE_EMOTIONS, NEGATIVE_EMOTIONS } from './lib/emotions';
   import { tooltip } from './lib/tooltip';
-  import '@fontsource/inter/400.css';
-  import '@fontsource/inter/600.css';
-  import '@fontsource/inter/700.css';
-  import '@fontsource/dm-sans/400.css';
-  import '@fontsource/dm-sans/600.css';
-  import '@fontsource/dm-sans/700.css';
-  import '@fontsource/plus-jakarta-sans/400.css';
-  import '@fontsource/plus-jakarta-sans/600.css';
-  import '@fontsource/plus-jakarta-sans/700.css';
+  import '@fontsource-variable/inter';
+  import '@fontsource-variable/dm-sans';
+  import '@fontsource-variable/plus-jakarta-sans';
+  import '@fontsource-variable/outfit';
+  import '@fontsource-variable/inter-tight';
   import '@fontsource/ibm-plex-sans/400.css';
+  import '@fontsource/ibm-plex-sans/500.css';
   import '@fontsource/ibm-plex-sans/600.css';
   import '@fontsource/ibm-plex-sans/700.css';
-  import '@fontsource/outfit/400.css';
-  import '@fontsource/outfit/600.css';
-  import '@fontsource/outfit/700.css';
   import '@fontsource/ibm-plex-sans-condensed/400.css';
+  import '@fontsource/ibm-plex-sans-condensed/500.css';
   import '@fontsource/ibm-plex-sans-condensed/600.css';
   import '@fontsource/ibm-plex-sans-condensed/700.css';
-  import '@fontsource/inter-tight/400.css';
-  import '@fontsource/inter-tight/600.css';
-  import '@fontsource/inter-tight/700.css';
   import '@fontsource/barlow-condensed/400.css';
+  import '@fontsource/barlow-condensed/500.css';
   import '@fontsource/barlow-condensed/600.css';
   import '@fontsource/barlow-condensed/700.css';
+  import '@fontsource/barlow-condensed/800.css';
+  import '@fontsource/barlow-condensed/900.css';
 
   type Phase = 'setup' | 'practice' | 'interview';
 
@@ -92,8 +87,13 @@
   let focusCardFs = $state(Number(localStorage.getItem('focus-card-fs') ?? 100));
   let focusCardDx = $state(0);
   let focusCardDy = $state(0);
-  let focusMoveStart: { mx: number; my: number; dx: number; dy: number } | null = null;
-  let focusResizeStart: { mx: number; w: number } | null = null;
+  let focusVidDx = $state(0);
+  let focusVidDy = $state(0);
+  let focusVidW = $state(Number(localStorage.getItem('focus-vid-w') || '480'));
+  let focusLocked = $state(false);
+  let focusMoveStart: { mx: number; my: number; dx: number; dy: number; vdx: number; vdy: number } | null = null;
+  let focusVidMoveStart: { mx: number; my: number; vdx: number; vdy: number; cdx: number; cdy: number } | null = null;
+  let focusResizeStart: { mx: number; w: number; wOther: number; isVid: boolean } | null = null;
   let showPastInterviews = $state(false);
   let showReviewPanel = $state(false);
   let reviewReport = $state<ReviewReport | null>(null);
@@ -221,6 +221,9 @@
   let selfviewH = $state(Number(localStorage.getItem(SK.selfviewW) || '120') || 120);
   let iVidResizing = false, iVidResizeStartY = 0, iVidResizeStartH = 0;
   let selfviewResizing = false, selfviewResizeStartY = 0, selfviewResizeStartH = 0;
+  let focusVidH = $state(200);
+  let focusVidResizing = false, focusVidResizeStartY = 0, focusVidResizeStartH = 0;
+  let focusVidShellEl = $state<HTMLElement | undefined>();
 
   function iVidResizeDown(e: PointerEvent) {
     iVidResizing = true;
@@ -238,6 +241,18 @@
     iVidResizing = false;
     localStorage.setItem(SK.interviewerVidH, String(interviewerVidH));
   }
+  function focusVidResizeDown(e: PointerEvent) {
+    focusVidResizing = true;
+    focusVidResizeStartY = e.clientY;
+    focusVidResizeStartH = focusVidH || focusVidShellEl?.getBoundingClientRect().height || 200;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    e.preventDefault(); e.stopPropagation();
+  }
+  function focusVidResizeMove(e: PointerEvent) {
+    if (!focusVidResizing) return;
+    focusVidH = Math.max(60, Math.min(500, focusVidResizeStartH + (e.clientY - focusVidResizeStartY)));
+  }
+  function focusVidResizeUp() { focusVidResizing = false; }
   function selfviewResizeDown(e: PointerEvent) {
     selfviewResizing = true;
     selfviewResizeStartY = e.clientY;
@@ -264,6 +279,14 @@
   });
   $effect(() => { if (pickerVideoEl) { pickerVideoEl.srcObject = screenStream ?? null; if (screenStream) pickerVideoEl.play().catch(() => {}); } });
   $effect(() => { if (focusVideoEl) { focusVideoEl.srcObject = screenStream ?? null; if (screenStream) focusVideoEl.play().catch(() => {}); } });
+  // Svelte 5 onwheel is passive by default; use imperative non-passive listener so e.preventDefault() works
+  $effect(() => {
+    const el = focusVidShellEl;
+    if (!el) return;
+    const handler = (e: WheelEvent) => vidWheel(iVid, e);
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  });
 
   // Column widths (resizable, persisted)
   let leftW = $state(Number(localStorage.getItem(SK.colLeft) ?? 240));
@@ -680,37 +703,84 @@
     { id: 'Outfit',                  label: 'Outfit' },
     { id: 'system-ui',               label: 'System Default' },
   ] as const;
-  let appFont = $state(localStorage.getItem('app-font') ?? 'Inter');
-  const PANEL_FONTS: string[] = FONTS.map(f => f.id);
+  let appFont = $state(localStorage.getItem('app-font') ?? 'inter-400');
+  const VARIABLE_FONT_NAMES: Record<string, string> = {
+    'Inter':             'Inter Variable',
+    'Inter Tight':       'Inter Tight Variable',
+    'DM Sans':           'DM Sans Variable',
+    'Plus Jakarta Sans': 'Plus Jakarta Sans Variable',
+    'Outfit':            'Outfit Variable',
+  };
+  const PANEL_FONT_WEIGHTS = [
+    { id: 'inter-300',        font: 'Inter',                    weight: 300, label: 'Inter · Light'         },
+    { id: 'inter-400',        font: 'Inter',                    weight: 400, label: 'Inter · Regular'       },
+    { id: 'inter-500',        font: 'Inter',                    weight: 500, label: 'Inter · Medium'        },
+    { id: 'inter-tight-400',  font: 'Inter Tight',              weight: 400, label: 'Inter Tight · Regular' },
+    { id: 'inter-tight-500',  font: 'Inter Tight',              weight: 500, label: 'Inter Tight · Medium'  },
+    { id: 'ibm-plex-400',     font: 'IBM Plex Sans',            weight: 400, label: 'IBM Plex · Regular'    },
+    { id: 'ibm-plex-500',     font: 'IBM Plex Sans',            weight: 500, label: 'IBM Plex · Medium'     },
+    { id: 'ibm-cond-400',     font: 'IBM Plex Sans Condensed',  weight: 400, label: 'IBM Plex Cond · Reg'   },
+    { id: 'ibm-cond-500',     font: 'IBM Plex Sans Condensed',  weight: 500, label: 'IBM Plex Cond · Med'   },
+    { id: 'barlow-400',       font: 'Barlow Condensed',         weight: 400, label: 'Barlow · Regular'      },
+    { id: 'barlow-500',       font: 'Barlow Condensed',         weight: 500, label: 'Barlow · Medium'       },
+    { id: 'barlow-600',       font: 'Barlow Condensed',         weight: 600, label: 'Barlow · SemiBold'     },
+    { id: 'dm-sans-300',      font: 'DM Sans',                  weight: 300, label: 'DM Sans · Light'       },
+    { id: 'dm-sans-400',      font: 'DM Sans',                  weight: 400, label: 'DM Sans · Regular'     },
+    { id: 'dm-sans-500',      font: 'DM Sans',                  weight: 500, label: 'DM Sans · Medium'      },
+    { id: 'jakarta-400',      font: 'Plus Jakarta Sans',        weight: 400, label: 'Jakarta · Regular'     },
+    { id: 'jakarta-500',      font: 'Plus Jakarta Sans',        weight: 500, label: 'Jakarta · Medium'      },
+    { id: 'outfit-300',       font: 'Outfit',                   weight: 300, label: 'Outfit · Light'        },
+    { id: 'outfit-400',       font: 'Outfit',                   weight: 400, label: 'Outfit · Regular'      },
+    { id: 'outfit-500',       font: 'Outfit',                   weight: 500, label: 'Outfit · Medium'       },
+    { id: 'system-ui',        font: 'system-ui',                weight: 400, label: 'System Default'        },
+  ];
   let fontLeft   = $state(localStorage.getItem('font-left')   ?? '');
   let fontHist   = $state(localStorage.getItem('font-hist')   ?? '');
   let fontCenter = $state(localStorage.getItem('font-center') ?? '');
   let fontRight  = $state(localStorage.getItem('font-right')  ?? '');
   function panelFontStack(font: string): string {
     if (!font) return '';
-    return font === 'system-ui' ? 'system-ui, -apple-system, sans-serif' : `'${font}', system-ui, sans-serif`;
+    if (font === 'system-ui') return 'system-ui, -apple-system, sans-serif';
+    const cssName = VARIABLE_FONT_NAMES[font] ?? font;
+    return `'${cssName}', system-ui, sans-serif`;
+  }
+  function panelFontStyle(id: string): string {
+    if (!id) return '';
+    const entry = PANEL_FONT_WEIGHTS.find(f => f.id === id);
+    if (!entry) return '';
+    const stack = entry.font === 'system-ui'
+      ? 'system-ui, -apple-system, sans-serif'
+      : `'${VARIABLE_FONT_NAMES[entry.font] ?? entry.font}', system-ui, sans-serif`;
+    return `font-family: ${stack}; font-weight: ${entry.weight};`;
   }
   function cyclePanelFont(col: 'left' | 'hist' | 'center' | 'right') {
     const cur = col === 'left' ? fontLeft : col === 'hist' ? fontHist : col === 'center' ? fontCenter : fontRight;
-    const idx = PANEL_FONTS.indexOf(cur);
-    // idx === -1 means cur is '' (global) → advance to first font (idx+1 = 0)
-    // idx === last → wrap back to '' (global)
-    const next = idx === PANEL_FONTS.length - 1 ? '' : (PANEL_FONTS[idx + 1] ?? '');
+    const ids = PANEL_FONT_WEIGHTS.map(f => f.id);
+    const idx = ids.indexOf(cur);
+    const next = idx === ids.length - 1 ? '' : (ids[idx + 1] ?? '');
     localStorage.setItem(`font-${col}`, next);
     if (col === 'left') fontLeft = next;
     else if (col === 'hist') fontHist = next;
     else if (col === 'center') fontCenter = next;
     else fontRight = next;
   }
+  function panelFontLabel(id: string): string {
+    return PANEL_FONT_WEIGHTS.find(f => f.id === id)?.label ?? 'Global';
+  }
   $effect(() => {
-    const stack = appFont === 'system-ui'
+    const entry = PANEL_FONT_WEIGHTS.find(f => f.id === appFont);
+    const fontName = entry?.font ?? 'Inter';
+    const weight = entry?.weight ?? 400;
+    const cssName = VARIABLE_FONT_NAMES[fontName] ?? fontName;
+    const stack = cssName === 'system-ui'
       ? 'system-ui, -apple-system, sans-serif'
-      : `'${appFont}', system-ui, sans-serif`;
+      : `'${cssName}', system-ui, sans-serif`;
     document.documentElement.style.setProperty('--ff-base', stack);
+    document.documentElement.style.setProperty('--fw-base', String(weight));
     localStorage.setItem('app-font', appFont);
   });
 
-  let ttsEnabled = $state(false);
+  let ttsEnabled = $state(localStorage.getItem('tts-enabled') === 'true');
   let ttsVoices = $state<CombinedVoice[]>([]);
   let ttsVoiceId = $state(localStorage.getItem('tts-voice-id') ?? localStorage.getItem(SK.ttsVoice) ?? '');
   let ttsRate = $state(Number(localStorage.getItem(SK.ttsRate) ?? 1.5));
@@ -737,6 +807,7 @@
   });
   $effect(() => { localStorage.setItem(SK.ttsRate, String(ttsRate)); });
   $effect(() => { localStorage.setItem(SK.ttsVolume, String(ttsVolume)); });
+  $effect(() => { localStorage.setItem('tts-enabled', String(ttsEnabled)); });
   $effect(() => { if (ttsVoiceId) localStorage.setItem('tts-voice-id', ttsVoiceId); });
   $effect(() => {
     localStorage.setItem('tts-output-device', ttsOutputDeviceId);
@@ -837,6 +908,34 @@
   let youSegments = $state(0);
   let interviewerSegments = $state(0);
   let allFillerCounts = $state<FillerCount[]>([]);
+  let allHedgeCounts = $state<FillerCount[]>([]);
+  let hedgePopover = $state<{ word: string; top: number; left: number } | null>(null);
+  $effect(() => {
+    if (!hedgePopover) return;
+    const close = () => { hedgePopover = null; };
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  });
+  const HEDGE_ALTS: Record<string, string[]> = {
+    'i think':       ['State it directly', 'My view is…', 'From my experience…'],
+    'i believe':     ['State it directly', 'From my experience…', 'The data shows…'],
+    'i guess':       ['Commit to the answer', 'My best estimate is…', 'Typically…'],
+    'i feel like':   ['My take is…', 'In my experience…', 'State it directly'],
+    'kind of':       ['Be specific', 'Somewhat', 'Approximately'],
+    'sort of':       ['Be specific', 'Somewhat', 'Roughly'],
+    'basically':     ['Drop it', 'In short…', 'The key point is…'],
+    'probably':      ['Commit: "it is"', 'Typically…', 'In most cases…'],
+    'maybe':         ['Commit to the answer', 'One option is…', 'It depends on…'],
+    'perhaps':       ['Commit to the answer', 'One option is…', 'It depends on…'],
+    'hopefully':     ['The plan is…', 'The goal is…', 'We expect…'],
+    'just':          ['Drop it entirely', 'State directly'],
+    'a little bit':  ['Be specific: how much?', 'Somewhat', 'Drop it'],
+    'you know':      ['Pause instead', 'Drop it'],
+    'like':          ['Pause instead', 'Drop it'],
+    'actually':      ['Drop it', 'State directly'],
+    'honestly':      ['Drop it', 'State directly'],
+    'to be honest':  ['Drop it', 'State directly'],
+  };
 
   // Answer feedback tracking
   let currentQuestionIdx = $state(-1);
@@ -1182,6 +1281,11 @@
           for (const f of allFillerCounts) merged[f.word] = f.count;
           for (const f of newCounts) merged[f.word] = (merged[f.word] ?? 0) + f.count;
           allFillerCounts = Object.entries(merged).map(([word, count]) => ({ word, count }));
+          const newHedges = countHedges(event.text);
+          const mergedH: Record<string, number> = {};
+          for (const f of allHedgeCounts) mergedH[f.word] = f.count;
+          for (const f of newHedges) mergedH[f.word] = (mergedH[f.word] ?? 0) + f.count;
+          allHedgeCounts = Object.entries(mergedH).map(([word, count]) => ({ word, count }));
         } else if (event.speaker === 'Interviewer') {
           interviewerSegments++;
           // Vocal delivery feedback — capture before timer reset
@@ -1532,7 +1636,7 @@
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       switch (e.key) {
-        case 'f': case 'F': focusMode = !focusMode; if (focusMode) { focusCardDx = 0; focusCardDy = 0; } break;
+        case 'f': case 'F': focusMode = !focusMode; if (focusMode) { focusCardDx = 0; focusCardDy = 0; focusVidDx = 0; focusVidDy = 0; } break;
         case 'Escape':
           if (focusMode) { focusMode = false; break; }
           suggestions = suggestions.map(s => s.streaming ? s : { ...s, suggestion: '' });
@@ -1600,23 +1704,48 @@
 
   function onFocusMoveDown(e: MouseEvent) {
     e.stopPropagation();
-    focusMoveStart = { mx: e.clientX, my: e.clientY, dx: focusCardDx, dy: focusCardDy };
+    focusMoveStart = { mx: e.clientX, my: e.clientY, dx: focusCardDx, dy: focusCardDy, vdx: focusVidDx, vdy: focusVidDy };
+  }
+  function onFocusVidMoveDown(e: MouseEvent) {
+    e.stopPropagation();
+    focusVidMoveStart = { mx: e.clientX, my: e.clientY, vdx: focusVidDx, vdy: focusVidDy, cdx: focusCardDx, cdy: focusCardDy };
   }
   function onFocusResizeDown(e: MouseEvent) {
     e.stopPropagation();
-    focusResizeStart = { mx: e.clientX, w: focusCardW };
+    focusResizeStart = { mx: e.clientX, w: focusCardW, wOther: focusVidW, isVid: false };
+  }
+  function onFocusVidResizeDown(e: MouseEvent) {
+    e.stopPropagation();
+    focusResizeStart = { mx: e.clientX, w: focusVidW, wOther: focusCardW, isVid: true };
   }
   function onFocusMouseMove(e: MouseEvent) {
     if (focusMoveStart) {
-      focusCardDx = focusMoveStart.dx + (e.clientX - focusMoveStart.mx);
-      focusCardDy = focusMoveStart.dy + (e.clientY - focusMoveStart.my);
+      const dx = e.clientX - focusMoveStart.mx, dy = e.clientY - focusMoveStart.my;
+      focusCardDx = focusMoveStart.dx + dx;
+      focusCardDy = focusMoveStart.dy + dy;
+      if (focusLocked) { focusVidDx = focusMoveStart.vdx + dx; focusVidDy = focusMoveStart.vdy + dy; }
+    }
+    if (focusVidMoveStart) {
+      const dx = e.clientX - focusVidMoveStart.mx, dy = e.clientY - focusVidMoveStart.my;
+      focusVidDx = focusVidMoveStart.vdx + dx;
+      focusVidDy = focusVidMoveStart.vdy + dy;
+      if (focusLocked) { focusCardDx = focusVidMoveStart.cdx + dx; focusCardDy = focusVidMoveStart.cdy + dy; }
     }
     if (focusResizeStart) {
-      focusCardW = Math.round(Math.max(280, Math.min(window.innerWidth * 0.95, focusResizeStart.w + (e.clientX - focusResizeStart.mx))));
-      localStorage.setItem('focus-card-w', String(focusCardW));
+      const delta = e.clientX - focusResizeStart.mx;
+      const clamp = (w: number) => Math.round(Math.max(160, Math.min(window.innerWidth * 0.95, w)));
+      const newW = clamp(focusResizeStart.w + delta);
+      const newWOther = focusLocked ? clamp(focusResizeStart.wOther + delta) : null;
+      if (focusResizeStart.isVid) {
+        focusVidW = newW; localStorage.setItem('focus-vid-w', String(newW));
+        if (newWOther !== null) { focusCardW = newWOther; localStorage.setItem('focus-card-w', String(newWOther)); }
+      } else {
+        focusCardW = newW; localStorage.setItem('focus-card-w', String(newW));
+        if (newWOther !== null) { focusVidW = newWOther; localStorage.setItem('focus-vid-w', String(newWOther)); }
+      }
     }
   }
-  function onFocusMouseUp() { focusMoveStart = null; focusResizeStart = null; }
+  function onFocusMouseUp() { focusMoveStart = null; focusVidMoveStart = null; focusResizeStart = null; }
   function focusFsAdj(delta: number) {
     focusCardFs = Math.max(60, Math.min(200, focusCardFs + delta));
     localStorage.setItem('focus-card-fs', String(focusCardFs));
@@ -1649,7 +1778,7 @@
         <div class="setup-font-row">
           <label class="setup-font-label">Font</label>
           <select class="font-select" bind:value={appFont} title="App font">
-            {#each FONTS as f}
+            {#each PANEL_FONT_WEIGHTS as f}
               <option value={f.id}>{f.label}</option>
             {/each}
           </select>
@@ -1769,7 +1898,7 @@
               </div>
             {/if}
             <select class="font-select" bind:value={appFont} title="App font">
-              {#each FONTS as f}
+              {#each PANEL_FONT_WEIGHTS as f}
                 <option value={f.id}>{f.label}</option>
               {/each}
             </select>
@@ -1820,12 +1949,13 @@
           </div>
           <button class="end-main-btn"
             onclick={() => {
-              reviewInitialTab = 'ai-review'; reviewIsLive = true; showReviewPanel = true;
+              reviewInitialTab = 'review'; reviewIsLive = true; showReviewPanel = true;
               if (!savingLiveReport) {
                 savingLiveReport = true;
                 authFetch('/api/review/from-live', { method: 'POST' })
                   .then(r => r.ok ? r.json() : null)
                   .then(d => { if (d) reviewReport = d; })
+                  .catch(() => {})
                   .finally(() => { savingLiveReport = false; });
               }
             }}
@@ -1833,7 +1963,7 @@
           <button class="history-btn" onclick={() => showPastInterviews = true}>Reports</button>
           <CaptureButton
             initialCapture={captureInst}
-            onCapture={(v) => { capturing = v; if (v) { connectWs(); ttsEnabled = true; ttsClient.getAudioOutputs().then(o => { ttsOutputDevices = o; }); } if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); captureMicLevel = 0; captureSystemLevel = 0; } }}
+            onCapture={(v) => { capturing = v; if (v) { connectWs(); if (!localStorage.getItem('tts-enabled')) ttsEnabled = true; ttsClient.getAudioOutputs().then(o => { ttsOutputDevices = o; }); } if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); captureMicLevel = 0; captureSystemLevel = 0; } }}
             onStreams={(screen, webcam) => { screenStream = screen; webcamStream = webcam; }}
             onReady={(cap) => { captureInst = cap; }}
             onLevel={(mic, sys) => { captureMicLevel = mic; captureSystemLevel = sys; updateSysEnergy(sys); }}
@@ -1879,7 +2009,7 @@
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('left', -10)} title="Decrease font size">A−</button>
                     <button class="zoom-btn" onclick={() => adjustZoom('left', +10)} title="Increase font size">A+</button>
-                    <button class="zoom-btn" onclick={() => cyclePanelFont('left')} title={fontLeft || 'Font: global'} class:zoom-btn-active={!!fontLeft}>Ff</button>
+                    <button class="zoom-btn" onclick={() => cyclePanelFont('left')} title={fontLeft ? panelFontLabel(fontLeft) : 'Font: global'} class:zoom-btn-active={!!fontLeft}>Ff</button>
                     <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('left')} title="Collapse">▾</button>
                   </div>
                 {:else}
@@ -1888,7 +2018,7 @@
               </div>
               {#if !collapsedCols.has('left')}
                 <div class="col-body">
-                  <div class="col-body-scroll" style="zoom: {leftZoom/100}; {fontLeft ? `font-family: ${panelFontStack(fontLeft)};` : ''}">
+                  <div class="col-body-scroll" style="zoom: {leftZoom/100}; {panelFontStyle(fontLeft)}">
                     <TranscriptPanel entries={transcript} onFlipSpeaker={flipSpeaker} {jdKeywords} />
                   </div>
                 </div>
@@ -1906,7 +2036,7 @@
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('hist', -10)} title="Decrease font size">A−</button>
                     <button class="zoom-btn" onclick={() => adjustZoom('hist', +10)} title="Increase font size">A+</button>
-                    <button class="zoom-btn" onclick={() => cyclePanelFont('hist')} title={fontHist || 'Font: global'} class:zoom-btn-active={!!fontHist}>Ff</button>
+                    <button class="zoom-btn" onclick={() => cyclePanelFont('hist')} title={fontHist ? panelFontLabel(fontHist) : 'Font: global'} class:zoom-btn-active={!!fontHist}>Ff</button>
                     <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('hist')} title="Collapse">▾</button>
                   </div>
                 {:else}
@@ -1915,7 +2045,7 @@
               </div>
               {#if !collapsedCols.has('hist')}
                 <div class="col-body hist-col-body" bind:this={histColBodyEl}>
-                  <div class="col-body-scroll" style="zoom: {histZoom/100}; padding: 0.3rem 0.4rem 0; display: flex; flex-direction: column; gap: 0.4rem; {fontHist ? `font-family: ${panelFontStack(fontHist)};` : ''}">
+                  <div class="col-body-scroll" style="zoom: {histZoom/100}; padding: 0.3rem 0.4rem 0; display: flex; flex-direction: column; gap: 0.4rem; {panelFontStyle(fontHist)}">
                     <TestQuestionBar {capturing} onSimulate={(q) => pendingSimulated.add(q.trim())} />
                     <PracticeQuestionsBar questions={predictedQuestions} {capturing} onPredict={fetchPredictedQuestions} loadingPredict={loadingPredict} onSimulate={(q) => pendingSimulated.add(q.trim())} />
                     <QuestionsHistoryPanel
@@ -1999,7 +2129,7 @@
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('center', -10)} title="Decrease font size">A−</button>
                     <button class="zoom-btn" onclick={() => adjustZoom('center', +10)} title="Increase font size">A+</button>
-                    <button class="zoom-btn" onclick={() => cyclePanelFont('center')} title={fontCenter || 'Font: global'} class:zoom-btn-active={!!fontCenter}>Ff</button>
+                    <button class="zoom-btn" onclick={() => cyclePanelFont('center')} title={fontCenter ? panelFontLabel(fontCenter) : 'Font: global'} class:zoom-btn-active={!!fontCenter}>Ff</button>
                     <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('center')} title="Collapse">▾</button>
                   </div>
                 {:else}
@@ -2008,8 +2138,8 @@
               </div>
               {#if !collapsedCols.has('center')}
                 <div class="col-body col-split-body" bind:this={centerColBodyEl}>
-                  <div class="col-body-scroll" style="zoom: {centerZoom/100}; padding: 0.25rem 0.5rem 0.5rem; {fontCenter ? `font-family: ${panelFontStack(fontCenter)};` : ''}">
-                    <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} lockOnNew={true} {jumpSignal} {cueExpandSignal} onPinnedChange={(p) => (suggestionPinned = p)} {onClosingSectionOpen} {salaryTactics} />
+                  <div class="col-body-scroll" style="zoom: {centerZoom/100}; padding: 0.25rem 0.5rem 0.5rem; {panelFontStyle(fontCenter)}">
+                    <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} lockOnNew={true} {jumpSignal} {cueExpandSignal} onPinnedChange={(p) => (suggestionPinned = p)} {onClosingSectionOpen} {salaryTactics} {capturing} />
                   </div>
                 </div>
               {/if}
@@ -2060,12 +2190,12 @@
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('rightTop', -10)} title="Decrease font size">A−</button>
                     <button class="zoom-btn" onclick={() => adjustZoom('rightTop', +10)} title="Increase font size">A+</button>
-                    <button class="zoom-btn" onclick={() => cyclePanelFont('right')} title={fontRight || 'Font: global'} class:zoom-btn-active={!!fontRight}>Ff</button>
+                    <button class="zoom-btn" onclick={() => cyclePanelFont('right')} title={fontRight ? panelFontLabel(fontRight) : 'Font: global'} class:zoom-btn-active={!!fontRight}>Ff</button>
                     <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('right')} title="Collapse">▾</button>
                   </div>
                 </div>
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <div class="right-panel-scroll" style="zoom: {rightTopZoom/100}; {fontRight ? `font-family: ${panelFontStack(fontRight)};` : ''}" ondragover={(e) => { e.preventDefault(); }} ondrop={(e) => onPanelEmptyDrop('sentiment', e)}>
+                <div class="right-panel-scroll" style="zoom: {rightTopZoom/100}; {panelFontStyle(fontRight)}" ondragover={(e) => { e.preventDefault(); }} ondrop={(e) => onPanelEmptyDrop('sentiment', e)}>
                   {#if answerNudgeVisible}
                     <div class="answer-nudge">
                       <span class="answer-nudge-icon">🧘</span>
@@ -2296,8 +2426,24 @@
                     </div>
                     {#if allFillerCounts.length > 0}
                       <div class="filler-list">
-                        {#each allFillerCounts.sort((a, b) => b.count - a.count) as f}
+                        {#each [...allFillerCounts].sort((a, b) => b.count - a.count) as f}
                           <span class="filler-tag">"{f.word}" <strong>×{f.count}</strong></span>
+                        {/each}
+                      </div>
+                    {/if}
+                    <div class="side-stat" title="Hedging phrases weaken your answers — click a phrase for alternatives.">
+                      <span class="side-label">Hedges</span>
+                      <span class="side-value" style="color: {allHedgeCounts.reduce((s,f)=>s+f.count,0) > 0 ? '#818cf8' : '#475569'}">{allHedgeCounts.reduce((s,f)=>s+f.count,0) > 0 ? allHedgeCounts.reduce((s,f)=>s+f.count,0) : '—'}</span>
+                    </div>
+                    {#if allHedgeCounts.length > 0}
+                      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                      <div class="filler-list" onclick={() => hedgePopover = null}>
+                        {#each [...allHedgeCounts].sort((a, b) => b.count - a.count) as f}
+                          {@const alts = HEDGE_ALTS[f.word.toLowerCase()] ?? []}
+                          <button class="filler-tag hedge-tag" class:hedge-open={hedgePopover?.word === f.word}
+                            onclick={(e) => { e.stopPropagation(); if (hedgePopover?.word === f.word) { hedgePopover = null; return; } const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); const popW = 220; const left = r.right + popW > window.innerWidth ? r.right - popW : r.left; hedgePopover = alts.length ? { word: f.word, top: r.bottom + 5, left } : null; }}>
+                            "{f.word}" <strong>×{f.count}</strong>{alts.length ? ' ▾' : ''}
+                          </button>
                         {/each}
                       </div>
                     {/if}
@@ -2440,7 +2586,7 @@
             </div>
           </div>
           <div class="keywords-bar-content" style="zoom: {kwZoom/100}">
-            <KeywordTrackerPanel keywords={jdKeywords} mentionedSet={mentionedKeywords} flashSet={flashingKeywords} interviewerRaisedSet={interviewerRaisedKeywords} {keywordQuestionMap} horizontal={true} />
+            <KeywordTrackerPanel keywords={jdKeywords} mentionedSet={mentionedKeywords} flashSet={flashingKeywords} interviewerRaisedSet={interviewerRaisedKeywords} {keywordQuestionMap} horizontal={true} popupBottom={kwBarH + 8} />
           </div>
         </div>
       {/if}
@@ -2452,17 +2598,64 @@
         onmousemove={onFocusMouseMove} onmouseup={onFocusMouseUp} onmouseleave={onFocusMouseUp}>
         {#if screenStream}
           <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-          <div class="focus-video-wrap" onclick={(e) => e.stopPropagation()}>
-            {#if cropRect}
-              <div class="focus-crop-shell" style="aspect-ratio:{cropRect.w * videoNaturalAR / cropRect.h};overflow:hidden;position:relative;">
-                <!-- svelte-ignore a11y_media_has_caption -->
-                <video bind:this={focusVideoEl} autoplay muted playsinline
-                  style="position:absolute;width:{100/cropRect.w}%;height:auto;transform:translate({-cropRect.x*100}%,{-cropRect.y*100}%);"></video>
+          <div class="focus-video-wrap" onclick={(e) => e.stopPropagation()}
+            style="transform:translate({focusVidDx}px,{focusVidDy}px);width:{focusVidW}px">
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="focus-vid-drag-bar" onmousedown={onFocusVidMoveDown}>
+              <span class="focus-drag-dots">⠿</span>
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div class="focus-vid-bar-btns" onmousedown={(e) => e.stopPropagation()}>
+                <button class="focus-lock-btn"
+                  onclick={(e) => { e.stopPropagation(); focusVidW = focusCardW; localStorage.setItem('focus-vid-w', String(focusCardW)); }}
+                  title="Match suggestions width">⇔ Match</button>
+                <button class="focus-lock-btn"
+                  onclick={(e) => { e.stopPropagation(); focusLocked = !focusLocked; }}
+                  title={focusLocked ? 'Locked — click to move independently' : 'Unlocked — click to move together'}>
+                  {focusLocked ? '🔗' : '🔓'}
+                </button>
               </div>
-            {:else}
-              <!-- svelte-ignore a11y_media_has_caption -->
-              <video bind:this={focusVideoEl} class="focus-video" autoplay muted playsinline></video>
-            {/if}
+            </div>
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="focus-resize-handle" onmousedown={onFocusVidResizeDown}></div>
+            <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+            <div class="vid-zoom-shell"
+              bind:this={focusVidShellEl}
+              onpointerdown={(e) => vidDown(iVid, iPan, e)}
+              onpointermove={(e) => vidMove(iVid, iPan, e)}
+              onpointerup={() => vidUp(iPan)}
+              ondblclick={() => vidReset(iVid)}
+              style="cursor:{iVid.zoom > 1 ? 'grab' : 'default'};height:{focusVidH}px;width:100%"
+              title="Scroll to zoom · drag to pan · double-click to reset"
+            >
+              <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;transform:translate({iVid.panX}px,{iVid.panY}px) scale({iVid.zoom});transform-origin:center;pointer-events:none;">
+                {#if cropRect}
+                  <div class="face-crop-wrap" style="aspect-ratio:{cropRect.w * videoNaturalAR / cropRect.h};height:100%;width:auto;max-width:100%;overflow:hidden;position:relative;">
+                    <!-- svelte-ignore a11y_media_has_caption -->
+                    <video bind:this={focusVideoEl} autoplay muted playsinline
+                      style="position:absolute;width:{100/cropRect.w}%;height:auto;transform:translate({-cropRect.x*100}%,{-cropRect.y*100}%);"></video>
+                  </div>
+                {:else}
+                  <!-- svelte-ignore a11y_media_has_caption -->
+                  <video bind:this={focusVideoEl} autoplay muted playsinline
+                    style="width:100%;height:100%;object-fit:contain;display:block;background:#0a1525;"></video>
+                {/if}
+              </div>
+            </div>
+            <div class="face-pick-row">
+              <button class="face-pick-btn" onclick={() => { showCropPicker = true; pickerPendingRect = cropRect ? { ...cropRect } : null; }}>
+                {cropRect ? '✎ Adjust' : '⊞ Pick face'}
+              </button>
+              {#if cropRect}
+                <button class="face-pick-btn" onclick={clearFaceCrop}>Full screen</button>
+              {/if}
+            </div>
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="vid-resize-handle"
+              onpointerdown={focusVidResizeDown}
+              onpointermove={focusVidResizeMove}
+              onpointerup={focusVidResizeUp}
+              onpointercancel={focusVidResizeUp}
+            ></div>
           </div>
         {/if}
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -2478,19 +2671,19 @@
               <button class="focus-fs-btn" onclick={() => focusFsAdj(+10)}>+</button>
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <select class="focus-font-select" bind:value={appFont} onmousedown={(e) => e.stopPropagation()} title="Font">
-                {#each FONTS as f}
+                {#each PANEL_FONT_WEIGHTS as f}
                   <option value={f.id}>{f.label}</option>
                 {/each}
               </select>
             </div>
           </div>
           <div class="focus-panel-wrap" style="zoom:{focusCardFs/100}">
-            <SuggestionPanel {suggestions} onClear={() => {}} teleprompter={true} lockOnNew={true} {jumpSignal} {onClosingSectionOpen} {salaryTactics} />
+            <SuggestionPanel {suggestions} onClear={() => {}} teleprompter={true} lockOnNew={true} {jumpSignal} {onClosingSectionOpen} {salaryTactics} {capturing} />
           </div>
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="focus-resize-handle" onmousedown={onFocusResizeDown}></div>
         </div>
-        <div class="focus-hint">drag bar to move · drag edge to resize · F or click outside to exit</div>
+        <div class="focus-hint">drag bars to move · 🔗/🔓 to link panels · drag edge to resize · F or click outside to exit</div>
       </div>
     {/if}
 
@@ -2550,6 +2743,8 @@
     liveSuggestions={reviewIsLive ? suggestions : undefined}
     liveTranscript={reviewIsLive ? transcript : undefined}
     practiceAnswers={reviewIsLive ? practiceAnswers : undefined}
+    fillerCounts={reviewIsLive ? allFillerCounts : undefined}
+    hedgeCounts={reviewIsLive ? allHedgeCounts : undefined}
     recordingUrl={reviewIsLive ? recordingUrl : undefined}
     onSave={reviewIsLive ? (r) => saveInterview({
       summary: r.summary,
@@ -2584,12 +2779,23 @@
     }) : undefined}
   />
 {/if}
+
+{#if hedgePopover}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div class="hedge-popover-fixed" style="top:{hedgePopover.top}px;left:{hedgePopover.left}px" onclick={(e) => e.stopPropagation()}>
+    <div class="hedge-popover-title">Instead of "{hedgePopover.word}"</div>
+    {#each HEDGE_ALTS[hedgePopover.word.toLowerCase()] ?? [] as alt}
+      <div class="hedge-popover-alt">{alt}</div>
+    {/each}
+  </div>
+{/if}
 </main>
 
 <style>
   :root {
     /* Typography */
-    --ff-base: 'Inter', system-ui, sans-serif;
+    --ff-base: 'Inter Variable', system-ui, sans-serif;
+    --fw-base: 400;
     --ff-mono: 'JetBrains Mono', 'Fira Code', monospace;
     --fs-xs:   0.62rem;
     --fs-sm:   0.74rem;
@@ -2618,12 +2824,12 @@
     --bg-entry-them: #1a0a0a;
 
     /* Section block colors (Acknowledge / Say / Ask) */
-    --bg-ack:     #110823;
-    --border-ack: #6d28d9;
+    --bg-ack:     #0a0f18;
+    --border-ack: #334155;
     --bg-say:     #060e0a;
     --border-say: #166534;
-    --bg-ask:     #0e0700;
-    --border-ask: #92400e;
+    --bg-ask:     #0a1020;
+    --border-ask: #3b82f6;
 
     /* Borders */
     --border-subtle: #1e293b;
@@ -2639,9 +2845,10 @@
   main {
     min-height: 100dvh;
     font-family: var(--ff-base);
+    font-weight: var(--fw-base);
   }
 
-  .app { font-family: var(--ff-base); }
+  .app { font-family: var(--ff-base); font-weight: var(--fw-base); }
 
   /* Ensure form elements inherit the chosen font */
   :global(input), :global(select), :global(button), :global(textarea) {
@@ -3718,9 +3925,21 @@
     font-size: var(--fs-base); color: #92400e;
     background: #1c1006; border: 1px solid #78350f;
     border-radius: 0.25rem; padding: 0.1rem 0.5rem;
-    white-space: nowrap;
+    white-space: nowrap; font-family: inherit;
   }
   .filler-tag strong { color: #fbbf24; font-weight: 800; font-size: 1.05em; }
+  .hedge-tag { color: #6366f1; background: #0d0b1f; border-color: #4338ca; cursor: pointer; }
+  .hedge-tag:hover, .hedge-tag.hedge-open { background: #13103a; border-color: #6366f1; color: #818cf8; }
+  .hedge-tag strong { color: #818cf8; }
+  .hedge-popover-fixed {
+    position: fixed; z-index: 500;
+    background: #07101e; border: 1px solid #1e3a5f; border-radius: 0.5rem;
+    padding: 0.5rem 0.7rem; min-width: 190px; max-width: 260px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+  }
+  .hedge-popover-title { font-size: var(--fs-xs); color: #475569; margin-bottom: 0.35rem; font-style: italic; }
+  .hedge-popover-alt { font-size: var(--fs-sm); color: #94a3b8; padding: 0.2rem 0; border-bottom: 1px solid #0d1f35; line-height: 1.4; }
+  .hedge-popover-alt:last-child { border-bottom: none; }
   .side-ratelimits { flex: 1; overflow-y: auto; min-height: 0; }
 
   /* Focus overlay */
@@ -3728,14 +3947,25 @@
     position: fixed; inset: 0; background: rgba(0,0,0,0.93);
     z-index: 1000; display: flex; flex-direction: column;
     align-items: center; padding: 1.5rem 2rem 2rem; cursor: pointer;
-    overflow-y: auto;
-    gap: 0.75rem; overflow-y: auto;
+    gap: 0.75rem; overflow: hidden;
   }
   .focus-video-wrap {
-    width: 100%; max-width: 680px; cursor: default;
-    border-radius: 0.75rem; overflow: hidden;
-    border: 1px solid #1a2d4a;
+    cursor: default; border-radius: 0.75rem; overflow: hidden;
+    border: 1px solid #1a2d4a; flex-shrink: 0;
   }
+  .focus-vid-drag-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.3rem 0.75rem; cursor: grab; background: #060e1a;
+    border-bottom: 1px solid #1a2d4a;
+  }
+  .focus-vid-drag-bar:active { cursor: grabbing; }
+  .focus-vid-bar-btns { display: flex; align-items: center; gap: 0.35rem; }
+  .focus-lock-btn {
+    font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 0.3rem;
+    background: #0d1f35; border: 1px solid #1e3a5f; color: #94a3b8;
+    cursor: pointer; white-space: nowrap;
+  }
+  .focus-lock-btn:hover { background: #162d4a; color: #cbd5e1; }
   .focus-video { width: 100%; display: block; }
   .focus-crop-shell { width: 100%; }
   .focus-card {
@@ -3743,9 +3973,9 @@
     border: 1px solid #1e3a5f; border-radius: 1rem; padding: 0 0 0.5rem;
     cursor: default; box-shadow: 0 0 60px rgba(59,130,246,0.08);
     display: flex; flex-direction: column; gap: 0; max-width: 95vw;
-    flex-shrink: 0; overflow: hidden;
+    flex-shrink: 1; overflow: hidden; min-height: 0;
   }
-  .focus-panel-wrap { display: flex; flex-direction: column; }
+  .focus-panel-wrap { display: flex; flex-direction: column; overflow-y: auto; min-height: 0; }
   .focus-drag-bar {
     display: flex; align-items: center; justify-content: space-between;
     padding: 0.4rem 0; margin: 0 -2rem; padding: 0.4rem 0.75rem;

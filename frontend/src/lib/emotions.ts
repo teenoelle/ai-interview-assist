@@ -3,14 +3,14 @@
 
 export const EMOTION_COLORS: Record<string, string> = {
   engaged:       '#22c55e',
-  curious:       '#3b82f6',
+  curious:       '#22c55e',
   neutral:       '#94a3b8',
   skeptical:     '#f59e0b',
-  confused:      '#f97316',
-  bored:         '#ef4444',
-  pleased:       '#a78bfa',
+  confused:      '#f59e0b',
+  bored:         '#f59e0b',
+  pleased:       '#22c55e',
   enthusiastic:  '#10b981',
-  'wrapping up': '#6366f1',
+  'wrapping up': '#94a3b8',
 };
 
 export function emotionColor(e: string): string {

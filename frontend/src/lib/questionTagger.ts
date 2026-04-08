@@ -80,7 +80,7 @@ export const TAG_CONFIG: Record<QuestionTag, { label: string; color: string; bg:
   character:   { label: 'Q: Character',   color: '#e879f9', bg: '#1a0520' },
   weaknesses:  { label: 'Q: Weakness',    color: '#f87171', bg: '#1a0505' },
   situational: { label: 'Q: Situational', color: '#a3e635', bg: '#0f1a00' },
-  behavioral:  { label: 'Q: Story',       color: '#a78bfa', bg: '#1a0f33' },
+  behavioral:  { label: 'Q: Behavioral',  color: '#a78bfa', bg: '#1a0f33' },
   technical:   { label: 'Q: Technical',   color: '#60a5fa', bg: '#0a1525' },
   culture:     { label: 'Q: Culture',     color: '#34d399', bg: '#0a1f15' },
   values:      { label: 'Q: Values',      color: '#f0abfc', bg: '#1a0a1f' },

@@ -1,5 +1,6 @@
 export interface ParsedSuggestion {
   acknowledge: string;
+  impact: string;      // Impact: moment where weakness had a real cost (weaknesses type)
   solve: string;
   bridge: string;
   close: string;
@@ -41,7 +42,7 @@ export interface ParsedSuggestion {
 export function parseSuggestion(text: string | null | undefined, streaming = false): ParsedSuggestion {
   if (typeof text !== 'string') { text = String(text ?? ''); }
   const lines = text.split('\n');
-  let acknowledge = '', solve = '', bridge = '', close = '', affirm = '', tell = '', cue = 'Answer';
+  let acknowledge = '', impact = '', solve = '', bridge = '', close = '', affirm = '', tell = '', cue = 'Answer';
   let present = '', thread = '', past = '', future = '';
   let company = '', role = '', self = '';
   let reframe = '', gap = '', choice = '', bring = '', trade = '', value = '';
@@ -56,7 +57,7 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
   // Strip markdown bold markers e.g. **Affirm:** → Affirm:
   const clean = (s: string) => s.replace(/^\*+([^*]+)\*+\s*/, '$1 ').trim();
   const isCueLabel = (s: string) =>
-    /^(Principle|Context|Action|Result|Point|Metric|General|Example|Story|Pivot|Acknowledge|Affirm|Solve|Bridge|Close|Answer|Say|Tell|Ask|Present|Summary|Thread|Past|Story|Future|Next|Company|Role|Self|Reframe|Gap|Choice|Bring|Trade|Value|Direction|Alignment|Contribution|Transition1|Transition2|Transition3|Section):/i.test(s);
+    /^(Principle|Context|Action|Result|Point|Metric|General|Example|Story|Pivot|Acknowledge|Affirm|Impact|Solve|Bridge|Close|Answer|Say|Tell|Ask|Present|Summary|Thread|Past|Story|Future|Next|Company|Role|Self|Reframe|Gap|Choice|Bring|Trade|Value|Direction|Alignment|Contribution|Transition1|Transition2|Transition3|Section):/i.test(s);
 
   for (const line of lines) {
     const t = line.trim();
@@ -80,6 +81,7 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
         else if (field === 'choice') choice = val;
         else if (field === 'bring') bring = val;
         else if (field === 'trade') trade = val;
+        else if (field === 'impact') impact = val;
         else if (field === 'value') value = val;
         else if (field === 'direction') direction = val;
         else if (field === 'alignment') alignment = val;
@@ -94,6 +96,8 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
       pendingTell = false; pendingNewField = null;
       acknowledge = c.replace(/^Acknowledge:\s*/i, '').trim();
       pendingAskTopic = '';
+    } else if (c.match(/^Impact:/i)) {
+      setNF('impact', c.replace(/^Impact:\s*/i, '').trim());
     } else if (c.match(/^Solve:/i)) {
       pendingTell = false; pendingNewField = null;
       solve = c.replace(/^Solve:\s*/i, '').trim();
@@ -197,6 +201,7 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
       else if (f === 'choice') choice = choice ? choice + ' ' + t : t;
       else if (f === 'bring') bring = bring ? bring + ' ' + t : t;
       else if (f === 'trade') trade = trade ? trade + ' ' + t : t;
+      else if (f === 'impact') impact = impact ? impact + ' ' + t : t;
       else if (f === 'value') value = value ? value + ' ' + t : t;
       else if (f === 'direction') direction = direction ? direction + ' ' + t : t;
       else if (f === 'alignment') alignment = alignment ? alignment + ' ' + t : t;
@@ -299,7 +304,7 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
 
   const sc = streaming ? (s: string) => s : stripClicheWords;
   return {
-    acknowledge: sc(acknowledge), solve: sc(solve), bridge: sc(bridge), close: sc(close),
+    acknowledge: sc(acknowledge), impact: sc(impact), solve: sc(solve), bridge: sc(bridge), close: sc(close),
     affirm: sc(affirm), cue, tell: sc(tell), body, cues: [], asks, strategies,
     solveStrategies: solveStrategies.map(s => ({ keyword: sc(s.keyword), text: sc(s.text) })),
     present: sc(present), thread: sc(thread), past: sc(past), future: sc(future),
@@ -354,28 +359,31 @@ export function getAnswerType(
   tag?: string,
 ): { framework: string; label: string } {
   // Tag-specific overrides for types that share STAR fields but have distinct coaching frames
-  if (tag === 'smalltalk')   return { framework: 'A: Small Talk',  label: '' };
-  if (tag === 'fit')         return { framework: 'A: Fit',         label: 'Acknowledge → Reframe → Gap → Choice → Bring' };
-  if (tag === 'weaknesses')  return { framework: 'A: Weakness',    label: 'Real → Growth → Evidence → Redirect' };
-  if (tag === 'situational') return { framework: 'A: Situational', label: 'Stakes → Approach → Reasoning → Answer' };
-  if (tag === 'strengths')   return { framework: 'A: Strengths',   label: 'Acknowledge → Strengths → Close' };
-  if (tag === 'technical')   return { framework: 'A: Technical',   label: 'Problem → Experience → Method → Design' };
-  if (tag === 'culture')     return { framework: 'A: Culture',     label: 'Context → Style → Example → Impact' };
-  if (tag === 'character')   return { framework: 'A: Character',   label: 'Acknowledge → Trait → Context → Relevance' };
-  if (tag === 'values')      return { framework: 'A: Values',      label: 'Context → Preferences → Bridge → Connect' };
+  if (tag === 'smalltalk')   return { framework: 'A: Rapport',   label: '' };
+  if (tag === 'salary')      return { framework: 'A: Deflect',   label: 'Deflect → Anchor → Negotiate' };
+  if (tag === 'fit')         return { framework: 'A: Reframe',   label: 'Acknowledge → Reframe → Gap → Choice → Bring' };
+  if (tag === 'behavioral')  return { framework: 'A: Story',     label: 'Story (STAR Method)' };
+  if (tag === 'weaknesses')  return { framework: 'A: Growth',    label: 'Real → Growth → Evidence → Redirect' };
+  if (tag === 'situational') return { framework: 'A: Scenario',  label: 'Stakes → Approach → Reasoning → Answer' };
+  if (tag === 'strengths')   return { framework: 'A: Evidence',  label: 'Acknowledge → Strengths → Close' };
+  if (tag === 'technical')   return { framework: 'A: Design',    label: 'Problem → Experience → Method → Design' };
+  if (tag === 'culture')     return { framework: 'A: Style',     label: 'Context → Style → Example → Impact' };
+  if (tag === 'character')   return { framework: 'A: Trait',     label: 'Acknowledge → Trait → Context → Relevance' };
+  if (tag === 'values')      return { framework: 'A: Align',     label: 'Context → Preferences → Bridge → Connect' };
+  if (tag === 'closing')     return { framework: 'A: Engage',    label: 'Questions to Ask' };
 
   if (parsed.present || parsed.thread || parsed.past || parsed.future)
-    return { framework: 'A: Intro', label: 'Summary → Story → Next' };
+    return { framework: 'A: Career Arc', label: 'Summary → Story → Next' };
   if (parsed.company || parsed.role || parsed.self)
-    return { framework: 'A: Motivation', label: 'Company → Role → Self' };
+    return { framework: 'A: Why',        label: 'Company → Role → Self' };
   if (parsed.reframe || parsed.gap || parsed.choice || parsed.bring || parsed.trade || parsed.value)
-    return { framework: 'A: Fit', label: 'Acknowledge → Reframe → Gap → Choice → Bring' };
+    return { framework: 'A: Reframe',    label: 'Acknowledge → Reframe → Gap → Choice → Bring' };
   if (parsed.direction || parsed.alignment || parsed.contribution)
-    return { framework: 'A: Future', label: 'Direction → Alignment → Contribution' };
+    return { framework: 'A: Vision',     label: 'Direction → Alignment → Contribution' };
   if (parsed.asks.length >= 3 && !parsed.acknowledge && !parsed.tell)
-    return { framework: 'A: Closing', label: 'Questions to Ask' };
+    return { framework: 'A: Engage',     label: 'Questions to Ask' };
   if (parsed.tell || parsed.acknowledge)
-    return { framework: 'A: STAR', label: 'Acknowledge → Solve → Bridge → Answer → Close' };
+    return { framework: 'A: STAR',       label: 'Acknowledge → Solve → Bridge → Answer → Close' };
   return { framework: '', label: '' };
 }
 

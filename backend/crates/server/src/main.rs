@@ -151,6 +151,20 @@ async fn main() -> anyhow::Result<()> {
         tokio::spawn(async move { wait_for_whisper(&url, &model).await });
     }
 
+    // Pre-warm Claude TLS connections so the first suggestion/test-question isn't slow
+    if let Some(ref key) = config.anthropic_api_key {
+        let key1 = key.clone();
+        let key2 = key.clone();
+        tokio::spawn(async move {
+            suggestion::claude_llm::prewarm(&key1).await;
+            tracing::info!("Claude connection pre-warmed (suggestion path)");
+        });
+        tokio::spawn(async move {
+            context::ai_helper::prewarm(&key2).await;
+            tracing::info!("Claude connection pre-warmed (ai_helper path)");
+        });
+    }
+
     let (audio_tx, audio_rx) = mpsc::channel::<Vec<u8>>(256);
     let (mic_audio_tx, mic_audio_rx) = mpsc::channel::<Vec<u8>>(256);
     let (video_tx, video_rx) = mpsc::channel::<Vec<u8>>(32);
@@ -315,6 +329,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/setup/finalize", post(http_handler::handle_setup_finalize))
         .route("/api/extract-file", post(http_handler::handle_extract_file))
         .route("/api/debrief", post(http_handler::handle_debrief))
+        .route("/api/followup-email", post(http_handler::handle_followup_email))
         .route("/api/practice-question", post(http_handler::handle_practice_question))
         .route("/api/answer-feedback", post(http_handler::handle_answer_feedback))
         .route("/api/next-question", post(http_handler::handle_next_question))

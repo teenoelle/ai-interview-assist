@@ -100,16 +100,16 @@
   .card-muted .card-label { color: #475569; }
 
   /* Negotiate — reveal */
-  .card-negotiate { background: #0d1020; border-left-color: #4f46e5; }
-  .card-negotiate .card-label { color: #a5b4fc; }
+  .card-negotiate { background: #0a1020; border-left-color: #3b82f6; }
+  .card-negotiate .card-label { color: #93c5fd; }
 
   /* Confident — direct ask */
   .card-confident { background: #0a1a0d; border-left-color: #166534; }
   .card-confident .card-label { color: #4ade80; }
 
   /* Neutral — total package */
-  .card-neutral { background: #0d0f1a; border-left-color: #1e3a5f; }
-  .card-neutral .card-label { color: #60a5fa; }
+  .card-neutral { background: #080d18; border-left-color: #334155; }
+  .card-neutral .card-label { color: #64748b; }
 
   /* Careful — counter */
   .card-careful { background: #150e00; border-left-color: #78350f; }

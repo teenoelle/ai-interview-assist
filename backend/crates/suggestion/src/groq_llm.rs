@@ -60,7 +60,7 @@ pub async fn stream_openai_compat_timeout(
             { "role": "system", "content": system_prompt },
             { "role": "user",   "content": user_prompt }
         ],
-        "max_tokens": 1500,
+        "max_tokens": 2000,
         "temperature": 0.3,
         "stream": true
     });

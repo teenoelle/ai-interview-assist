@@ -6,6 +6,8 @@ use std::process::Stdio;
 use serde_json::Value;
 use common::messages::{WsEvent, SuggestionMode};
 
+const CLAUDE_CLI_TIMEOUT_SECS: u64 = 30;
+
 pub async fn stream_suggestions(
     system_prompt: &str,
     user_prompt: &str,
@@ -38,8 +40,19 @@ pub async fn stream_suggestions(
     let mut lines = reader.lines();
     let mut full_text = String::new();
     let mut last_error: Option<String> = None;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(CLAUDE_CLI_TIMEOUT_SECS);
 
-    while let Some(line) = lines.next_line().await? {
+    loop {
+        let line_fut = lines.next_line();
+        let line = match tokio::time::timeout_at(deadline, line_fut).await {
+            Ok(Ok(Some(l))) => l,
+            Ok(Ok(None)) => break,
+            Ok(Err(e)) => return Err(e.into()),
+            Err(_) => {
+                let _ = child.kill().await;
+                anyhow::bail!("claude CLI timed out after {}s", CLAUDE_CLI_TIMEOUT_SECS);
+            }
+        };
         if line.is_empty() { continue; }
         let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
         match v["type"].as_str() {

@@ -40,7 +40,7 @@ pub async fn stream_openai_compat(
     mode: SuggestionMode,
     event_tx: broadcast::Sender<WsEvent>,
 ) -> Result<()> {
-    stream_openai_compat_timeout(api_key, base_url, model, provider, system_prompt, user_prompt, mode, event_tx, 60).await
+    stream_openai_compat_timeout(api_key, base_url, model, provider, system_prompt, user_prompt, mode, event_tx, 20).await
 }
 
 pub async fn stream_openai_compat_timeout(

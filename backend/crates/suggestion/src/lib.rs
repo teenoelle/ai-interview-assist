@@ -512,6 +512,14 @@ pub async fn run_single(
     call_counts: &Option<CallCounts>,
 ) -> anyhow::Result<()> {
     let (primary_type, secondary_type) = prompt::classify_question(question);
+
+    // Smalltalk: return instant pre-written response, skip LLM entirely
+    if matches!(primary_type, prompt::QuestionType::Smalltalk) {
+        let full_text = prompt::smalltalk_response(question);
+        let _ = event_tx.send(WsEvent::SuggestionComplete { full_text, mode });
+        return Ok(());
+    }
+
     let ctx = prompt::make_ctx_prefix(transcript);
     let user_prompt = match mode {
         SuggestionMode::Secondary => {

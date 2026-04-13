@@ -18,8 +18,6 @@ pub async fn stream_suggestions(
             "--output-format", "stream-json",
             "--verbose",
             "--model", "claude-haiku-4-5-20251001",
-            "--tools", "",           // disable all tools — we only want text output
-            "--permission-mode", "bypassPermissions",
         ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

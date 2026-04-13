@@ -3,6 +3,29 @@ use serde_json::{json, Value};
 use tokio::sync::broadcast;
 use common::messages::{WsEvent, SuggestionMode};
 use futures::StreamExt;
+use std::sync::OnceLock;
+
+static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+fn client() -> &'static reqwest::Client {
+    CLIENT.get_or_init(reqwest::Client::new)
+}
+
+/// Pre-warm the TLS connection to api.anthropic.com so the first real suggestion
+/// request doesn't pay the full DNS + TCP + TLS handshake cost (~10-20s on Windows).
+pub async fn prewarm(api_key: &str) {
+    let _ = client()
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .json(&serde_json::json!({
+            "model": "claude-haiku-4-5-20251001",
+            "max_tokens": 1,
+            "messages": [{ "role": "user", "content": "hi" }]
+        }))
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await;
+}
 
 pub async fn stream_suggestions(
     api_key: &str,
@@ -13,13 +36,13 @@ pub async fn stream_suggestions(
 ) -> Result<()> {
     let body = json!({
         "model": "claude-haiku-4-5-20251001",
-        "max_tokens": 1000,
+        "max_tokens": 1500,
         "stream": true,
         "system": system_prompt,
         "messages": [{ "role": "user", "content": user_prompt }]
     });
 
-    let resp = reqwest::Client::new()
+    let resp = client()
         .post("https://api.anthropic.com/v1/messages")
         .header("x-api-key", api_key)
         .header("anthropic-version", "2023-06-01")
@@ -71,12 +94,12 @@ pub async fn stream_suggestions(
         }
     }
 
-    tracing::info!("suggestion ✓ Claude (claude-haiku-4-5-20251001) — {} chars", full_text.len());
+    tracing::info!("suggestion ✓ Claude API (claude-haiku-4-5-20251001) — {} chars", full_text.len());
     let _ = event_tx.send(WsEvent::SuggestionComplete { full_text, mode });
 
     if let (Some(remaining), Some(limit)) = (requests_remaining, requests_limit) {
         let _ = event_tx.send(WsEvent::RateLimit {
-            provider: "Claude".to_string(),
+            provider: "Claude API".to_string(),
             requests_remaining: remaining,
             requests_limit: limit,
         });

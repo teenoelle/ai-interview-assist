@@ -24,6 +24,7 @@ export const SK = {
   ttsRate: 'tts-rate',
   ttsVolume: 'tts-volume',
   fontSize: 'font-size',
+  uiFontSize: 'ui-font-size',
   cropRect: 'crop-rect',
   interviewerVidH: 'interviewer-vid-h',
   selfviewW: 'selfview-w',

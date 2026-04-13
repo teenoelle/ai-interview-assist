@@ -60,37 +60,110 @@ fn spawn_detached(cmd: &str, args: &[String]) {
     }
 }
 
-/// Poll the Whisper URL root until it responds, or give up after ~30 s.
-/// Once reachable, fire a silent dummy transcription to pre-load the model
-/// so the first real segment doesn't incur a 60 s model-loading delay.
+/// Extract the port number from a URL like "http://localhost:8000".
+fn extract_port(url: &str) -> u16 {
+    url.split(':')
+        .last()
+        .and_then(|s| s.split('/').next())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(8000)
+}
+
+/// Return the first port in [start, start+4] that is not already in use.
+fn find_free_port(start: u16) -> u16 {
+    for port in start..start + 5 {
+        if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
+            return port;
+        }
+    }
+    start
+}
+
+/// Kill whatever process is currently listening on `port` (Windows only).
+#[cfg(windows)]
+fn kill_port_owner(port: u16) {
+    let Ok(out) = std::process::Command::new("netstat").args(["-ano"]).output() else { return };
+    let text = String::from_utf8_lossy(&out.stdout);
+    for line in text.lines() {
+        if !line.contains("LISTENING") { continue; }
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        // netstat -ano: Proto  Local  Foreign  State  PID
+        let addr_match = parts.get(1).map(|a| a.ends_with(&format!(":{}", port))).unwrap_or(false);
+        if addr_match {
+            if let Some(pid_str) = parts.last() {
+                if let Ok(pid) = pid_str.parse::<u32>() {
+                    if pid > 0 {
+                        let _ = std::process::Command::new("taskkill")
+                            .args(["/F", "/PID", &pid.to_string()])
+                            .output();
+                        tracing::info!("Killed PID {} that was holding whisper port {}", pid, port);
+                    }
+                }
+            }
+        }
+    }
+}
+#[cfg(not(windows))]
+fn kill_port_owner(_port: u16) {}
+
+/// Poll the Whisper URL until it responds, or give up after ~60 s.
+/// Waits 8 s before first attempt so the model has time to start loading,
+/// then polls every 5 s (fewer hung connections vs rapid 2-s polling).
+/// Once reachable, fires a silent warmup transcription to pre-load the model.
 async fn wait_for_whisper(url: &str, whisper_model: &str) {
-    let client = reqwest::Client::new();
-    let check = format!("{}/", url.trim_end_matches('/'));
     tracing::info!("Waiting for local Whisper at {} …", url);
-    for attempt in 1u32..=15 {
-        let result = client
+    // Initial delay — CPU model loading typically takes 15-30 s
+    tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+
+    let client = reqwest::Client::new();
+    let check = format!("{}/v1/models", url.trim_end_matches('/'));
+    for attempt in 1u32..=12 {
+        match client
             .get(&check)
-            .timeout(std::time::Duration::from_secs(2))
+            .timeout(std::time::Duration::from_secs(5))
             .send()
-            .await;
-        match result {
-            // Any HTTP response (even 404) means the server is up
+            .await
+        {
             Ok(_) => {
                 tracing::info!("Local Whisper ready (attempt {})", attempt);
                 warmup_whisper(url, whisper_model).await;
                 return;
             }
             Err(_) => {
-                if attempt < 15 {
-                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                tracing::debug!("Whisper not ready yet (attempt {}/12), retrying in 5 s…", attempt);
+                if attempt < 12 {
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                 }
             }
         }
     }
     tracing::warn!(
-        "Local Whisper at {} did not respond within 30 s — will fall back to Groq/Gemini",
+        "Local Whisper at {} did not respond — will fall back to cloud providers",
         url
     );
+}
+
+/// Send a minimal chat request to Ollama to load a model into RAM before the interview starts.
+async fn warmup_ollama(base_url: &str, model: &str) {
+    let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
+    let body = serde_json::json!({
+        "model": model,
+        "messages": [{ "role": "user", "content": "hi" }],
+        "max_tokens": 1,
+        "stream": false,
+        "keep_alive": "60m",
+    });
+    tracing::info!("Warming up Ollama model {}…", model);
+    match reqwest::Client::new()
+        .post(&url)
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(120))
+        .send()
+        .await
+    {
+        Ok(_) => tracing::info!("Ollama {} warm", model),
+        Err(e) => tracing::warn!("Ollama {} warmup failed: {}", model, e),
+    }
 }
 
 /// Send a tiny silent WAV to Whisper to trigger model loading before any real audio arrives.
@@ -140,15 +213,42 @@ async fn main() -> anyhow::Result<()> {
         .with(stdout_layer)
         .init();
 
-    let config = Config::from_env()?;
+    let mut config = Config::from_env()?;
 
-    // Optionally start the local Whisper / Ollama process (non-blocking — server binds immediately)
+    // Resolve whisper port: kill any existing owner, fall back to next free port if needed.
+    if config.whisper_spawn_cmd.is_some() {
+        if let Some(ref url) = config.whisper_url.clone() {
+            let preferred = extract_port(url);
+            kill_port_owner(preferred);
+            // Brief pause so the OS releases the port before we check availability
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            let actual = find_free_port(preferred);
+            if actual != preferred {
+                tracing::info!("Port {} still in use — whisper will use backup port {}", preferred, actual);
+                config.whisper_url = Some(
+                    url.replacen(&format!(":{}", preferred), &format!(":{}", actual), 1)
+                );
+                config.whisper_spawn_args = config.whisper_spawn_args.iter().map(|a| {
+                    if a == &preferred.to_string() { actual.to_string() } else { a.clone() }
+                }).collect();
+            }
+        }
+    }
+
+    // Optionally start the local Whisper process (non-blocking — server binds immediately)
     if let Some(ref cmd) = config.whisper_spawn_cmd {
         spawn_detached(cmd, &config.whisper_spawn_args);
     }
     if let Some(url) = config.whisper_url.clone() {
         let model = config.whisper_model.clone();
         tokio::spawn(async move { wait_for_whisper(&url, &model).await });
+    }
+
+    // Pre-warm Ollama models so they're loaded into RAM before the first interview question
+    for model in &config.ollama_models {
+        let url = config.ollama_url.clone();
+        let model = model.clone();
+        tokio::spawn(async move { warmup_ollama(&url, &model).await });
     }
 
     // Pre-warm Claude TLS connections so the first suggestion/test-question isn't slow
@@ -191,8 +291,8 @@ async fn main() -> anyhow::Result<()> {
         config.ollama_model,
     );
     tracing::info!(
-        "Suggestion order: {} Groq (8b-instant) → Cerebras → OpenRouter → Qwen → Mistral → Ollama ({}) → Gemini",
-        if config.anthropic_api_key.is_some() { "Claude Haiku →" } else { "" },
+        "Suggestion order: {} Claude CLI → Claude API → Ollama ({}) → Mistral → Groq → OpenRouter → Qwen → Cerebras → DeepSeek → Gemma → Gemini",
+        if let Some(ref u) = config.bonsai_url { format!("Bonsai ({} @ {}) →", config.bonsai_model, u) } else { String::new() },
         config.ollama_models.join(", "),
     );
     tracing::info!(
@@ -200,8 +300,7 @@ async fn main() -> anyhow::Result<()> {
         config.whisper_url.as_deref().map(|u| format!("Local Whisper ({u}) →")).unwrap_or_default()
     );
     tracing::info!(
-        "Sentiment: {} → Ollama Vision ({}) → Gemini Vision",
-        if config.anthropic_api_key.is_some() { "Claude Haiku" } else { "Ollama Vision" },
+        "Sentiment: Ollama Vision ({}) → Gemini Vision → Claude API",
         config.ollama_vision_model,
     );
     tracing::info!(
@@ -237,10 +336,13 @@ async fn main() -> anyhow::Result<()> {
         groq_key: config.groq_api_key.clone(),
         groq_key_2: config.groq_api_key_2.clone(),
         deepgram_key: config.deepgram_api_key.clone(),
+        deepseek_key: config.deepseek_api_key.clone(),
         openrouter_key: config.openrouter_api_key.clone(),
         mistral_key: config.mistral_api_key.clone(),
         cerebras_key: config.cerebras_api_key.clone(),
         qwen_key: config.qwen_api_key.clone(),
+        bonsai_url: config.bonsai_url.clone(),
+        bonsai_model: config.bonsai_model.clone(),
         ollama_url: config.ollama_url.clone(),
         ollama_model: config.ollama_model.clone(),
         ollama_models: config.ollama_models.clone(),
@@ -309,9 +411,12 @@ async fn main() -> anyhow::Result<()> {
         config.groq_api_key.clone(),
         config.groq_api_key_2.clone(),
         config.openrouter_api_key.clone(),
+        config.deepseek_api_key.clone(),
         config.mistral_api_key.clone(),
         config.cerebras_api_key.clone(),
         config.qwen_api_key.clone(),
+        config.bonsai_url.clone(),
+        config.bonsai_model.clone(),
         config.ollama_url.clone(),
         config.ollama_models.clone(),
         suggestion_rl,

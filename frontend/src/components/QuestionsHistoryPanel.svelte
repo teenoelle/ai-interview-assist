@@ -88,7 +88,7 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 0.3rem;
+    gap: 0.15rem;
     padding: 0.25rem 0;
     scrollbar-width: thin;
     scrollbar-color: #1e293b transparent;
@@ -97,8 +97,8 @@
   .qhist-item {
     display: flex;
     flex-direction: column;
-    gap: 0.2rem;
-    padding: 0.5rem 0.6rem;
+    gap: 0.15rem;
+    padding: 0.3rem 0.6rem;
     background: #080d18;
     border: 1px solid #0f172a;
     border-radius: 0.4rem;
@@ -172,7 +172,7 @@
   .qhist-q {
     font-size: var(--fs-sm);
     color: #c87070;
-    line-height: 1.35;
+    line-height: 1.2;
     overflow-wrap: break-word;
     word-break: break-word;
   }
@@ -205,8 +205,8 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #fb923c;
-    background: #431407;
+    color: #fbbf24;
+    background: #1c1200;
     border-radius: 0.2em;
     padding: 0.05em 0.35em;
   }

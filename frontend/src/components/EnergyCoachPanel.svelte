@@ -1,8 +1,9 @@
 <script lang="ts">
-  const { wpm, status, tip } = $props<{
+  const { wpm, status, tip, hideLabel = false } = $props<{
     wpm: number;
     status: 'good' | 'fast' | 'slow' | 'idle';
     tip: string;
+    hideLabel?: boolean;
   }>();
 
   const GOOD_MIN = 90;
@@ -22,6 +23,7 @@
 </script>
 
 <div class="energy-panel">
+  {#if !hideLabel}
   <div class="pace-row">
     <span class="pace-label">Pace</span>
     {#if status !== 'idle'}
@@ -30,6 +32,11 @@
       <span class="pace-idle">—</span>
     {/if}
   </div>
+  {:else if status !== 'idle'}
+  <div class="pace-row pace-row-compact">
+    <span class="pace-wpm" style="color: {color}">{wpm} wpm</span>
+  </div>
+  {/if}
 
   <!-- Pace bar: gradient track + moving marker; click to reveal tip -->
   <button class="pace-bar-wrap" class:pace-bar-clickable={hasTip} onclick={() => { if (hasTip) tipExpanded = !tipExpanded; }}>
@@ -53,6 +60,7 @@
 <style>
   .energy-panel { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.25rem 0; width: 100%; }
   .pace-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .pace-row-compact { justify-content: flex-end; }
   .pace-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #475569; min-width: 2.5rem; }
   .pace-wpm { font-size: var(--fs-sm); font-weight: 700; font-variant-numeric: tabular-nums; margin-left: auto; }
   .pace-idle { font-size: var(--fs-sm); color: #1e293b; margin-left: auto; }

@@ -13,7 +13,7 @@ export type WsEvent =
 
 export type Emotion = 'engaged' | 'curious' | 'neutral' | 'skeptical' | 'confused' | 'bored' | 'pleased';
 
-export type QuestionTag = 'behavioral' | 'technical' | 'culture' | 'salary' | 'closing' | 'personal' | 'motivation' | 'fit' | 'future' | 'strengths' | 'weaknesses' | 'situational' | 'general';
+export type QuestionTag = 'behavioral' | 'technical' | 'culture' | 'salary' | 'candidate_questions' | 'wrap_up' | 'personal' | 'motivation' | 'fit' | 'future' | 'strengths' | 'weaknesses' | 'situational' | 'general';
 
 export interface DebriefResult {
   summary: string;

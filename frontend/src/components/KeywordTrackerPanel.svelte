@@ -1,22 +1,24 @@
 <script lang="ts">
-  const { keywords, mentionedSet, flashSet = new Set(), interviewerRaisedSet = new Set(), keywordQuestionMap = {}, horizontal = false } = $props<{
+  const { keywords, mentionedSet, flashSet = new Set(), interviewerRaisedSet = new Set(), keywordQuestionMap = {}, horizontal = false, popupBottom = 60, onLoad, loading = false } = $props<{
     keywords: string[];
     mentionedSet: Set<string>;
     flashSet?: Set<string>;
     interviewerRaisedSet?: Set<string>;
     keywordQuestionMap?: Record<string, string>;
     horizontal?: boolean;
+    popupBottom?: number;
+    onLoad?: () => void;
+    loading?: boolean;
   }>();
 
   const mentioned = $derived(keywords.filter(k => mentionedSet.has(k)));
   const notYet = $derived(keywords.filter(k => !mentionedSet.has(k)));
-  const pct = $derived(keywords.length > 0 ? Math.round((mentioned.length / keywords.length) * 100) : 0);
 
   let selectedKw = $state<string | null>(null);
   let definitions = $state<Record<string, { definition: string; tip: string }>>({});
   let loadingKw = $state<string | null>(null);
   let fetching = new Set<string>();
-  let popupPos = $state<{ x: number; y: number } | null>(null);
+  let popupOpen = $state(false);
   let chipStyle = $state<'highlight' | 'invert'>(
     (localStorage.getItem('kw-chip-style') as 'highlight' | 'invert') ?? 'highlight'
   );
@@ -51,20 +53,17 @@
   });
 
   async function showDefinition(kw: string, e?: MouseEvent) {
-    if (selectedKw === kw) { selectedKw = null; popupPos = null; return; }
+    if (selectedKw === kw) { selectedKw = null; popupOpen = false; return; }
     selectedKw = kw;
-    if (horizontal && e) {
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      const POPUP_MAX_W = 320;
-      const x = Math.max(8, Math.min(rect.left, window.innerWidth - POPUP_MAX_W - 8));
-      popupPos = { x, y: window.innerHeight - rect.top + 6 };
-    }
+    if (horizontal) popupOpen = true;
     if (!definitions[kw]) {
       loadingKw = kw;
       await fetchDefinition(kw);
       loadingKw = null;
     }
   }
+
+  function closePopup() { selectedKw = null; popupOpen = false; }
 </script>
 
 {#if horizontal}
@@ -72,40 +71,50 @@
   <div class="kw-hbar">
     <div class="kw-hbar-row">
       <div class="kw-hbar-chips">
-        {#each mentioned as kw}
-          <button class="kw-chip kw-done"
-            class:kw-flash={flashSet.has(kw)}
-            class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
-            class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
-            onclick={(e) => showDefinition(kw, e)}>✓ {kw}{#if selectedKw === kw} ▾{/if}</button>
-        {/each}
-        {#each notYet.filter(k => interviewerRaisedSet.has(k)) as kw}
-          <button class="kw-chip kw-raised"
-            class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
-            class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
-            onclick={(e) => showDefinition(kw, e)}>↑ {kw}{#if selectedKw === kw} ▾{/if}</button>
-        {/each}
-        {#each notYet.filter(k => !interviewerRaisedSet.has(k)) as kw}
-          <button class="kw-chip kw-todo"
-            class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
-            class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
-            onclick={(e) => showDefinition(kw, e)}>{kw}{#if selectedKw === kw} ▾{/if}</button>
-        {/each}
+        {#if keywords.length === 0}
+          {#if loading}
+            <span class="kw-empty">Loading…</span>
+          {:else if onLoad}
+            <button class="kw-load-btn" onclick={onLoad}>↻ Load keywords</button>
+          {/if}
+        {:else}
+          {#each mentioned as kw}
+            <button class="kw-chip kw-done"
+              class:kw-flash={flashSet.has(kw)}
+              class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
+              class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
+              onclick={(e) => showDefinition(kw, e)}>✓ {kw}{#if selectedKw === kw} ▾{/if}</button>
+          {/each}
+          {#each notYet.filter(k => interviewerRaisedSet.has(k)) as kw}
+            <button class="kw-chip kw-raised"
+              class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
+              class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
+              onclick={(e) => showDefinition(kw, e)}>↑ {kw}{#if selectedKw === kw} ▾{/if}</button>
+          {/each}
+          {#each notYet.filter(k => !interviewerRaisedSet.has(k)) as kw}
+            <button class="kw-chip kw-todo"
+              class:kw-active-highlight={selectedKw === kw && chipStyle === 'highlight'}
+              class:kw-active-invert={selectedKw === kw && chipStyle === 'invert'}
+              onclick={(e) => showDefinition(kw, e)}>{kw}{#if selectedKw === kw} ▾{/if}</button>
+          {/each}
+        {/if}
       </div>
       <div class="kw-hbar-meta">
-        <span class="kw-hbar-stats">{mentioned.length}/{keywords.length}</span>
-        <button class="kw-style-toggle" onclick={toggleChipStyle} title="Toggle selected chip style">
-          {chipStyle === 'highlight' ? '1' : '3'}
-        </button>
+        {#if keywords.length > 0}
+          <span class="kw-hbar-stats">{mentioned.length}/{keywords.length}</span>
+          <button class="kw-style-toggle" onclick={toggleChipStyle} title="Toggle selected chip style">
+            {chipStyle === 'highlight' ? '1' : '3'}
+          </button>
+        {/if}
       </div>
     </div>
   </div>
-  {#if selectedKw && popupPos}
+  {#if selectedKw && popupOpen}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="kw-popup-fixed" style="left: {popupPos.x}px; bottom: {popupPos.y}px" onclick={(e) => e.stopPropagation()}>
+    <div class="kw-popup-fixed" style="bottom:{popupBottom}px" onclick={(e) => e.stopPropagation()}>
       <div class="kw-def-header">
         <span class="kw-def-word">{selectedKw}</span>
-        <button class="kw-def-close" onclick={() => { selectedKw = null; popupPos = null; }}>✕</button>
+        <button class="kw-def-close" onclick={closePopup}>✕</button>
       </div>
       {#if loadingKw === selectedKw}
         <p class="kw-def-text kw-def-loading">Loading…</p>
@@ -120,17 +129,20 @@
 {:else}
   <div class="kw-panel">
     {#if keywords.length === 0}
-      <p class="kw-empty">No keywords loaded. Add a job description in setup.</p>
+      {#if loading}
+        <p class="kw-empty">Loading…</p>
+      {:else if onLoad}
+        <button class="kw-load-btn" onclick={onLoad}>↻ Load keywords</button>
+      {:else}
+        <p class="kw-empty">No keywords loaded. Add a job description in setup.</p>
+      {/if}
     {:else}
-      <div class="kw-progress">
-        <div class="kw-bar" style="width: {pct}%"></div>
+      <!-- Header row: count + hover-reveal style toggle -->
+      <div class="kw-header">
+        <span class="kw-count">{mentioned.length}/{keywords.length}</span>
+        <button class="kw-style-toggle kw-style-toggle-inline" onclick={toggleChipStyle} title="Toggle selected chip style — style 1 (highlight) vs style 3 (invert)">{chipStyle === 'highlight' ? '1' : '3'}</button>
       </div>
-      <div class="kw-stats-row">
-        <span class="kw-stats">{mentioned.length}/{keywords.length} keywords mentioned</span>
-        <button class="kw-style-toggle" onclick={toggleChipStyle} title="Toggle selected chip style — comparing style 1 (highlight) vs style 3 (invert)">
-          Style {chipStyle === 'highlight' ? '1' : '3'}
-        </button>
-      </div>
+      <!-- Chips-only row -->
       <div class="kw-list">
         {#each mentioned as kw}
           <button class="kw-chip kw-done"
@@ -197,9 +209,9 @@
   }
   .kw-hbar-meta {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 0.2rem;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.3rem;
     flex-shrink: 0;
   }
   .kw-hbar-stats {
@@ -207,7 +219,39 @@
     color: #475569;
     white-space: nowrap;
   }
-  .kw-stats-row { display: flex; align-items: center; justify-content: space-between; }
+
+  .kw-panel { display: flex; flex-direction: column; gap: 0.4rem; }
+  .kw-empty { font-size: var(--fs-sm); color: #334155; font-style: italic; margin: 0; }
+
+  /* Header row: count + hover-reveal style toggle */
+  .kw-header {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .kw-header:not(:hover) .kw-style-toggle-inline {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .kw-style-toggle-inline {
+    transition: opacity 0.15s;
+  }
+
+  /* Chips-only row */
+  .kw-list {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.3rem;
+  }
+
+  .kw-count {
+    font-size: var(--fs-xs);
+    color: #475569;
+    white-space: nowrap;
+    margin-right: 0.1rem;
+  }
+
   .kw-style-toggle {
     font-size: var(--fs-xs); color: #334155; background: none;
     border: 1px solid #1e293b; border-radius: 0.2rem;
@@ -215,13 +259,16 @@
     transition: all 0.15s;
   }
   .kw-style-toggle:hover { border-color: #334155; color: #64748b; }
+  .kw-style-toggle-inline { transition: opacity 0.15s, border-color 0.15s, color 0.15s; }
 
-  .kw-panel { display: flex; flex-direction: column; gap: 0.4rem; }
-  .kw-empty { font-size: var(--fs-sm); color: #334155; font-style: italic; margin: 0; }
-  .kw-progress { height: 3px; background: #1e293b; border-radius: 9999px; overflow: hidden; }
-  .kw-bar { height: 100%; background: #22c55e; border-radius: 9999px; transition: width 0.3s; }
-  .kw-stats { font-size: var(--fs-xs); color: #475569; }
-  .kw-list { display: flex; flex-wrap: wrap; gap: 0.25rem 0.3rem; }
+  .kw-load-btn {
+    font-size: var(--fs-xs); color: #475569; background: none;
+    border: 1px solid #1e293b; border-radius: 0.3rem;
+    padding: 0.15rem 0.5rem; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .kw-load-btn:hover { color: #94a3b8; border-color: #334155; }
+
   .kw-chip {
     font-size: var(--fs-sm); padding: 0.1rem 0.45rem;
     border-radius: 0.3rem; border: 1px solid;
@@ -250,6 +297,7 @@
   .kw-done.kw-active-invert  { background: #22c55e; color: #031a07; border-color: #22c55e; animation: none; }
   .kw-todo.kw-active-invert  { background: #475569; color: #f1f5f9; border-color: #475569; animation: none; }
   .kw-raised.kw-active-invert { background: #fbbf24; color: #1a1000; border-color: #fbbf24; animation: none; }
+
   .kw-def {
     background: #0a1020; border: 1px solid #1e293b; border-left: 2px solid #3b82f6;
     border-radius: 0.4rem; padding: 0.6rem 0.75rem;
@@ -269,6 +317,7 @@
   .kw-def-loading { color: #334155; font-style: italic; }
   .kw-popup-fixed {
     position: fixed;
+    left: 8px;
     z-index: 100;
     background: #0a1020;
     border: 1px solid #1e293b;

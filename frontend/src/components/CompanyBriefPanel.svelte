@@ -20,12 +20,11 @@
   const displayName = $derived(brief?.name || companyName);
 </script>
 
-{#if displayName}
-  <div class="brief-panel">
+<div class="brief-panel">
     <button class="brief-toggle" onclick={toggle}>
       <div class="brief-toggle-inner">
         <span class="brief-label-header">Company</span>
-        <span class="brief-company">{displayName}</span>
+        {#if displayName}<span class="brief-company">{displayName}</span>{/if}
       </div>
       <span class="brief-chevron">{expanded ? '▴' : '▾'}</span>
     </button>
@@ -62,7 +61,6 @@
       </div>
     {/if}
   </div>
-{/if}
 
 <style>
   .brief-panel { background: #060e1a; border: 1px solid #1a2d4a; border-radius: 0.5rem; overflow: hidden; }

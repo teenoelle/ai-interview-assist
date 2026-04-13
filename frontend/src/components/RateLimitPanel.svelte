@@ -27,16 +27,6 @@
     return entry.limit > 0 ? (entry.remaining / entry.limit) * 100 : 0;
   }
 
-  function barColor(p: number) {
-    if (p > 50) return '#22c55e';
-    if (p > 20) return '#f59e0b';
-    return '#ef4444';
-  }
-
-  function fillColor(provider: string, p: number): string {
-    if (provider === 'Claude' || provider === 'Anthropic') return '#475569';
-    return barColor(p);
-  }
 
   function computeRate(history: Array<{ r: number; t: number }>): number | null {
     if (history.length < 2) return null;
@@ -56,20 +46,27 @@
     return '<1m left';
   }
 
-  const entries = $derived(Object.entries(rateLimits));
-
   const PURPOSE: Record<string, string> = {
-    'Whisper (local)':    'transcription · local',
-    'Groq Whisper':       'transcription',
-    'Groq Whisper #2':    'transcription',
+    'Whisper (local)':      'transcription · local',
+    'Groq Whisper':         'transcription',
+    'Groq Whisper #2':      'transcription',
     'Gemini Transcription': 'transcription',
-    'Claude':             'suggestions · sentiment',
-    'Groq':               'suggestions · setup',
-    'Groq #2':            'suggestions · setup',
-    'Gemini':             'suggestions · setup',
-    'Ollama':             'suggestions · local',
-    'Gemini Vision':      'sentiment',
-    'Anthropic':          'suggestions · sentiment',
+    'Deepgram':             'transcription',
+    'Bonsai':               'suggestions · local',
+    'Claude CLI':           'suggestions · local',
+    'Claude API':           'suggestions · sentiment',
+    'Groq':                 'suggestions',
+    'Groq #2':              'suggestions',
+    'Cerebras':             'suggestions',
+    'OpenRouter':           'suggestions',
+    'Qwen':                 'suggestions',
+    'Mistral':              'suggestions',
+    'DeepSeek':             'suggestions',
+    'Ollama':               'suggestions · local',
+    'Gemini':               'suggestions',
+    'Gemma':                'suggestions',
+    'Gemini Vision':        'sentiment',
+    'Anthropic':            'suggestions · sentiment',
   };
 
   function purpose(name: string): string {
@@ -77,6 +74,31 @@
     if (name.startsWith('Ollama')) return 'suggestions · local';
     if (name.includes('Whisper')) return 'transcription';
     return '';
+  }
+
+  function serviceOrder(name: string): number {
+    const p = purpose(name);
+    if (p.startsWith('transcription')) return 0;
+    if (p.startsWith('suggestions')) return 1;
+    if (p.startsWith('sentiment')) return 2;
+    return 3;
+  }
+
+  type RowEntry =
+    | { kind: 'rate'; provider: string; entry: RateLimitEntry }
+    | { kind: 'count'; provider: string; count: number };
+
+  const allRows = $derived(
+    [
+      ...Object.entries(rateLimits).map(([provider, entry]): RowEntry => ({ kind: 'rate', provider, entry })),
+      ...Object.entries(callCounts)
+        .filter(([p]) => !rateLimits[p])
+        .map(([provider, count]): RowEntry => ({ kind: 'count', provider, count })),
+    ].sort((a, b) => serviceOrder(a.provider) - serviceOrder(b.provider))
+  );
+
+  function fillColor(_provider: string, _p: number): string {
+    return '#475569';
   }
 
   function minsLeft(remaining: number, rate: number | null): number {
@@ -105,54 +127,53 @@
         {/each}
       </div>
     {/if}
-    {#if entries.length === 0}
+    {#if allRows.length === 0}
       <p class="empty">API usage will appear here once the interview starts.</p>
     {:else}
-      {#each entries as [provider, entry]}
-        {@const p = pct(entry)}
-        {@const rate = computeRate(entry.history)}
-        {@const warn = isNearLimit(entry)}
-        <div class="provider-row" class:provider-warn={warn}>
-          <div class="provider-header">
-            <div class="provider-name-block">
-              <span class="provider-name">{provider}</span>
-              {#if purpose(provider)}<span class="provider-purpose">{purpose(provider)}</span>{/if}
+      {#each allRows as row}
+        {#if row.kind === 'rate'}
+          {@const p = pct(row.entry)}
+          {@const rate = computeRate(row.entry.history)}
+          {@const warn = isNearLimit(row.entry)}
+          <div class="provider-row" class:provider-warn={warn}>
+            <div class="provider-header">
+              <div class="provider-name-block">
+                <span class="provider-name">{row.provider}</span>
+                {#if purpose(row.provider)}<span class="provider-purpose">{purpose(row.provider)}</span>{/if}
+              </div>
+              <span class="counts">{row.entry.remaining.toLocaleString()} / {row.entry.limit.toLocaleString()}</span>
             </div>
-            <span class="counts">{entry.remaining.toLocaleString()} / {entry.limit.toLocaleString()}</span>
-          </div>
-
-          <div class="bar-track">
-            <div class="bar-fill" style="width: {p}%; background: {fillColor(provider, p)}"></div>
-          </div>
-
-          <div class="provider-meta">
-            <span class="pct" style="color: {fillColor(provider, p)}">{p.toFixed(1)}% remaining</span>
-            <span class="rate">
-              {#if rate !== null}
-                {rate.toFixed(1)} req/min · {timeLeft(entry.remaining, rate)}
-              {:else}
-                usage rate: tracking...
-              {/if}
-            </span>
-          </div>
-          {#if callCounts[provider] != null}
-            <div class="call-count">{callCounts[provider]} call{callCounts[provider] !== 1 ? 's' : ''} this session</div>
-          {/if}
-          {#if warn}
-            <div class="warn-badge">⚠ Rate limit low — responses may slow down</div>
-          {/if}
-        </div>
-      {/each}
-      {#each Object.entries(callCounts).filter(([p]) => !rateLimits[p]) as [provider, count]}
-        <div class="provider-row provider-row-counts-only">
-          <div class="provider-header">
-            <div class="provider-name-block">
-              <span class="provider-name">{provider}</span>
-              {#if purpose(provider)}<span class="provider-purpose">{purpose(provider)}</span>{/if}
+            <div class="bar-track">
+              <div class="bar-fill" style="width: {p}%; background: {fillColor(row.provider, p)}"></div>
             </div>
-            <span class="counts">{count} call{count !== 1 ? 's' : ''}</span>
+            <div class="provider-meta">
+              <span class="pct" style="color: {fillColor(row.provider, p)}">{p.toFixed(1)}% remaining</span>
+              <span class="rate">
+                {#if rate !== null}
+                  {rate.toFixed(1)} req/min · {timeLeft(row.entry.remaining, rate)}
+                {:else}
+                  usage rate: tracking...
+                {/if}
+              </span>
+            </div>
+            {#if callCounts[row.provider] != null}
+              <div class="call-count">{callCounts[row.provider]} call{callCounts[row.provider] !== 1 ? 's' : ''} this session</div>
+            {/if}
+            {#if warn}
+              <div class="warn-badge">⚠ Rate limit low — responses may slow down</div>
+            {/if}
           </div>
-        </div>
+        {:else}
+          <div class="provider-row provider-row-counts-only">
+            <div class="provider-header">
+              <div class="provider-name-block">
+                <span class="provider-name">{row.provider}</span>
+                {#if purpose(row.provider)}<span class="provider-purpose">{purpose(row.provider)}</span>{/if}
+              </div>
+              <span class="counts">{row.count} call{row.count !== 1 ? 's' : ''}</span>
+            </div>
+          </div>
+        {/if}
       {/each}
     {/if}
   </div>
@@ -179,18 +200,18 @@
     gap: 0.5rem;
   }
   .service-label {
-    font-size: var(--fs-xs);
+    font-size: var(--fs-sm);
     color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
   .service-provider {
-    font-size: var(--fs-xs);
+    font-size: var(--fs-sm);
     font-weight: 600;
     color: #94a3b8;
   }
   .service-local {
-    color: #4ade80;
+    color: #94a3b8;
   }
   .panel-inner {
     display: flex;
@@ -223,9 +244,9 @@
     font-size: var(--fs-sm);
     color: #94a3b8;
   }
-  .provider-purpose { font-size: var(--fs-xs); color: #475569; }
+  .provider-purpose { font-size: var(--fs-sm); color: #475569; }
   .counts {
-    font-size: var(--fs-base);
+    font-size: var(--fs-sm);
     color: #94a3b8;
     font-variant-numeric: tabular-nums;
   }
@@ -256,8 +277,8 @@
     color: #64748b;
     font-variant-numeric: tabular-nums;
   }
-  .call-count { font-size: var(--fs-xs); color: #475569; }
+  .call-count { font-size: var(--fs-sm); color: #475569; }
   .provider-row-counts-only { border-color: #1e293b; opacity: 0.7; }
-  .provider-warn { border-color: #92400e; }
-  .warn-badge { font-size: var(--fs-xs); color: #f59e0b; font-weight: 600; letter-spacing: 0.02em; }
+  .provider-warn { border-color: #334155; }
+  .warn-badge { font-size: var(--fs-sm); color: #94a3b8; font-weight: 600; letter-spacing: 0.02em; }
 </style>

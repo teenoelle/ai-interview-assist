@@ -52,7 +52,7 @@
   import type { TranscriptEntry, SuggestionEntry, PracticeAnswer, DebriefResult } from '../lib/types';
   import { TAG_CONFIG } from '../lib/questionTagger';
 
-  const { report, onClose, onDelete, onPractice, liveSuggestions, liveTranscript, practiceAnswers, recordingUrl, onSave, initialTab } = $props<{
+  const { report, onClose, onDelete, onPractice, liveSuggestions, liveTranscript, practiceAnswers, fillerCounts, hedgeCounts, recordingUrl, onSave, initialTab } = $props<{
     report?: ReviewReport;
     onClose: () => void;
     onDelete?: (id: string) => void;
@@ -60,12 +60,14 @@
     liveSuggestions?: SuggestionEntry[];
     liveTranscript?: TranscriptEntry[];
     practiceAnswers?: PracticeAnswer[];
+    fillerCounts?: { word: string; count: number }[];
+    hedgeCounts?: { word: string; count: number }[];
     recordingUrl?: string;
     onSave?: (result: DebriefResult) => void;
-    initialTab?: 'qa' | 'transcript' | 'ai-review' | 'timeline' | 'practice' | 'recording';
+    initialTab?: 'qa' | 'transcript' | 'review' | 'recording';
   }>();
 
-  type Tab = 'qa' | 'transcript' | 'ai-review' | 'timeline' | 'practice' | 'recording';
+  type Tab = 'qa' | 'transcript' | 'review' | 'recording';
   let activeTab = $state<Tab>(initialTab ?? 'qa');
   let mediaEl = $state<HTMLVideoElement | HTMLAudioElement | null>(null);
   let currentMs = $state(0);
@@ -83,6 +85,40 @@
     coaching: string; missedFollowup: boolean; missedMetric: boolean;
     confidenceScore?: number; loadingCoaching: boolean; suggestionOpen: boolean;
   }
+  // ── Hedge alternatives ────────────────────────────────────────────────────
+  const HEDGE_ALTS: Record<string, string[]> = {
+    'i think':       ['State it directly', 'My view is…', 'From my experience…'],
+    'i believe':     ['State it directly', 'From my experience…', 'The data shows…'],
+    'i guess':       ['Commit to the answer', 'My best estimate is…', 'Typically…'],
+    'i feel like':   ['My take is…', 'In my experience…', 'State it directly'],
+    'kind of':       ['Be specific about the nuance', 'Somewhat', 'Approximately'],
+    'sort of':       ['Be specific about the nuance', 'Somewhat', 'Roughly'],
+    'basically':     ['Drop it — just say the thing', 'In short…', 'The key point is…'],
+    'probably':      ['Commit: "it is"', 'Typically…', 'In most cases…'],
+    'maybe':         ['Commit to the answer', 'One option is…', 'It depends on X'],
+    'perhaps':       ['Commit to the answer', 'One option is…', 'It depends on X'],
+    'hopefully':     ['The plan is…', 'The goal is…', 'We expect…'],
+    'i just':        ['Drop "just" — "I wanted to…"', 'State directly'],
+    'just':          ['Drop it entirely', 'State directly'],
+    'a little bit':  ['Be specific: how much?', 'Somewhat', 'Drop it'],
+    'you know':      ['Pause instead', 'Drop it'],
+    'like':          ['Pause instead', 'Drop it'],
+    'um':            ['Pause silently', 'Breathe, then continue'],
+    'uh':            ['Pause silently', 'Breathe, then continue'],
+    'actually':      ['Drop it', 'State directly'],
+    'honestly':      ['Drop it — everything you say should be honest', 'State directly'],
+    'to be honest':  ['Drop it', 'State directly'],
+    "i'm not sure but": ["I don't know the exact figure, but typically…", 'Let me think… [pause]', "I'd estimate…"],
+    'i could be wrong': ['Own your answer', 'My best read is…', "I'd verify, but…"],
+  };
+  let hedgePopover = $state<{ word: string; top: number; left: number } | null>(null);
+  $effect(() => {
+    if (!hedgePopover) return;
+    const close = () => { hedgePopover = null; };
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  });
+
   let debriefLoading = $state(false);
   let debriefResult = $state<DebriefResult | null>(null);
   let debriefError = $state('');
@@ -91,6 +127,9 @@
   let debriefQa = $state<DebriefQaEntry[]>([]);
   let debriefFetched = $state(false);
   let debriefEmailCopied = $state(false);
+  let emailDraft = $state('');
+  let emailLoading = $state(false);
+  let emailGenerated = $state(false);
 
   const simulatedSuggestions = $derived(
     (liveSuggestions ?? [])
@@ -156,14 +195,37 @@
   async function fetchDebrief() {
     if (debriefFetched || !liveSuggestions) return;
     debriefFetched = true;
+
+    // Skip AI call if there's no real interview content to analyze
+    const hasRealContent =
+      (liveTranscript ?? []).some(e => e.speaker === 'You' && e.text.trim().length > 5) ||
+      liveSuggestions.some(s => s.suggestion && s.source !== 'simulated');
+    if (!hasRealContent) {
+      debriefResult = { summary: 'No interview activity to analyze — complete a live interview or practice answering questions to get feedback.', strong_points: [], improvement_areas: [], followup_email: [], followup_email_draft: '' };
+      onSave?.(debriefResult);
+      initDebriefQa();
+      return;
+    }
+
     debriefLoading = true;
     fetchNextSteps();
     initDebriefQa();
     try {
+      const allSuggestions = liveSuggestions.filter(s => s.suggestion);
+      const answeredCount = allSuggestions.filter(s =>
+        s.source !== 'simulated' && (liveTranscript ?? []).some(t =>
+          t.speaker === 'You' && s.detectedAt != null && t.timestamp_ms > s.detectedAt
+        )
+      ).length;
       const resp = await fetch('/api/debrief', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           transcript: (liveTranscript ?? []).map(e => ({ speaker: e.speaker, text: e.text })),
-          suggestions: liveSuggestions.filter(s => s.suggestion).map(s => ({ question: s.question, suggestion: s.suggestion })),
+          suggestions: allSuggestions.map(s => ({ question: s.question, suggestion: s.suggestion })),
+          filler_counts: (fillerCounts ?? []).map(f => ({ word: f.word, count: f.count })),
+          hedge_counts: (hedgeCounts ?? []).map(h => ({ word: h.word, count: h.count })),
+          practice_answers: (practiceAnswers ?? []).map(p => ({ question: p.question, answer: p.answerText ?? '' })),
+          answered_count: answeredCount,
+          viewed_count: allSuggestions.filter(s => s.source !== 'simulated').length,
         }) });
       if (!resp.ok) throw new Error(`Debrief failed: ${resp.status}`);
       debriefResult = await resp.json();
@@ -173,17 +235,30 @@
     fetchMissingCoaching();
   }
 
+  async function generateEmail() {
+    if (emailLoading || emailGenerated || !debriefResult) return;
+    emailLoading = true;
+    try {
+      const resp = await fetch('/api/followup-email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transcript: (liveTranscript ?? []).map(e => ({ speaker: e.speaker, text: e.text })),
+          followup_bullets: debriefResult.followup_email ?? [],
+        }) });
+      if (resp.ok) { const d = await resp.json(); emailDraft = d.email ?? ''; emailGenerated = true; }
+    } catch { /**/ }
+    emailLoading = false;
+  }
+
   // Auto-run debrief on mount when live — ensures saveInterview fires regardless of which tab user visits
   if (liveSuggestions) fetchDebrief();
 
   $effect(() => {
-    // If user navigates to timeline before debrief finishes, init Q&A entries immediately
-    if (activeTab === 'timeline' && !debriefFetched) { debriefFetched = true; initDebriefQa(); fetchMissingCoaching(); }
+    // If user navigates to review before debrief finishes, init Q&A entries immediately
+    if (activeTab === 'review' && !debriefFetched) { debriefFetched = true; initDebriefQa(); fetchMissingCoaching(); }
   });
 
   async function copyDebriefEmail() {
-    if (!debriefResult) return;
-    const text = debriefResult.followup_email_draft ?? debriefResult.followup_email.map(p => `• ${p}`).join('\n');
+    const text = emailDraft || (debriefResult?.followup_email ?? []).map(p => `• ${p}`).join('\n');
     await navigator.clipboard.writeText(text);
     debriefEmailCopied = true;
     setTimeout(() => { debriefEmailCopied = false; }, 2000);
@@ -438,15 +513,9 @@
         <button class="tab" class:active={activeTab === 'transcript'} onclick={() => activeTab = 'transcript'}>Transcript</button>
       {/if}
       {#if liveSuggestions}
-        <button class="tab" class:active={activeTab === 'ai-review'} onclick={() => activeTab = 'ai-review'}>AI Review</button>
-        <button class="tab" class:active={activeTab === 'timeline'} onclick={() => activeTab = 'timeline'}>
-          Timeline {debriefQa.length > 0 ? `(${debriefQa.length})` : ''}
+        <button class="tab" class:active={activeTab === 'review'} onclick={() => activeTab = 'review'}>
+          Review {debriefQa.length > 0 ? `(${debriefQa.length})` : ''}
         </button>
-        {#if totalPracticeCount > 0}
-          <button class="tab" class:active={activeTab === 'practice'} onclick={() => activeTab = 'practice'}>
-            Practice ({totalPracticeCount})
-          </button>
-        {/if}
         {#if recordingUrl}
           <button class="tab" class:active={activeTab === 'recording'} onclick={() => activeTab = 'recording'}>Recording</button>
         {/if}
@@ -566,63 +635,61 @@
           {/each}
         </div>
 
-      {:else if activeTab === 'ai-review'}
-        <!-- AI Review tab -->
+      {:else if activeTab === 'review'}
+        <!-- Combined Review tab: AI summary + questions + practice + follow-up -->
+
+        <!-- AI Summary -->
         {#if debriefLoading}
           <div class="deb-loading">Analyzing your interview…</div>
         {:else if debriefError}
           <div class="deb-error">{debriefError}</div>
         {:else if debriefResult}
-          <section class="deb-section">
-            <h3 class="deb-h3">Overall</h3>
-            <p class="deb-summary">{debriefResult.summary}</p>
-          </section>
-          <div class="deb-two-col">
-            <section class="deb-section">
-              <h3 class="deb-h3 deb-green">Strong Moments</h3>
-              <ul class="deb-list">{#each debriefResult.strong_points as p}<li>{p}</li>{/each}</ul>
-            </section>
-            <section class="deb-section">
-              <h3 class="deb-h3 deb-yellow">Areas to Improve</h3>
-              <ul class="deb-list">{#each debriefResult.improvement_areas as p}<li>{p}</li>{/each}</ul>
-            </section>
-          </div>
-          <section class="deb-section">
-            <h3 class="deb-h3 deb-amber">Next Steps</h3>
-            {#if loadingNextSteps}
-              <p class="deb-muted">Extracting next steps…</p>
-            {:else if nextSteps.length > 0}
-              <ul class="deb-list">{#each nextSteps as s}<li>{s}</li>{/each}</ul>
-            {:else}
-              <p class="deb-muted">No specific next steps mentioned.</p>
-            {/if}
-          </section>
-          <section class="deb-section">
-            <div class="deb-email-header">
-              <h3 class="deb-h3">Follow-up Email</h3>
-              <button class="deb-copy-btn" class:copied={debriefEmailCopied} onclick={copyDebriefEmail}>
-                {debriefEmailCopied ? '✓ Copied!' : 'Copy email'}
-              </button>
+          <p class="deb-summary">{debriefResult.summary}</p>
+          {#if debriefResult.strong_points.length > 0 || debriefResult.improvement_areas.length > 0}
+            <div class="deb-two-col">
+              <section class="deb-section">
+                <h3 class="deb-h3 deb-green">Strong Moments</h3>
+                <ul class="deb-list">{#each debriefResult.strong_points as p}<li>{p}</li>{/each}</ul>
+              </section>
+              <section class="deb-section">
+                <h3 class="deb-h3 deb-yellow">Areas to Improve</h3>
+                <ul class="deb-list">{#each debriefResult.improvement_areas as p}<li>{p}</li>{/each}</ul>
+              </section>
             </div>
-            {#if debriefResult.followup_email_draft}
-              <div class="deb-email-draft">
-                {#each debriefResult.followup_email_draft.split('\n') as line}
-                  {#if line.trim() === ''}<div class="deb-email-blank"></div>
-                  {:else}<div class="deb-email-line">{line}</div>{/if}
-                {/each}
-              </div>
-            {:else}
-              <ul class="deb-list">{#each debriefResult.followup_email as p}<li>{p}</li>{/each}</ul>
-            {/if}
-          </section>
+          {/if}
         {/if}
 
-      {:else if activeTab === 'timeline'}
-        <!-- Timeline tab -->
-        <div class="deb-timeline">
-          {#if debriefQa.length === 0}
-            <p class="deb-muted">No live questions detected this session.</p>
-          {:else}
+        <!-- Performance: filler + hedge chips -->
+        {#if (fillerCounts ?? []).length > 0 || (hedgeCounts ?? []).length > 0}
+          <div class="review-section-divider">Word Choice</div>
+          <div class="perf-chips-wrap">
+            {#if (fillerCounts ?? []).length > 0}
+              <div class="perf-group">
+                <span class="perf-group-label">Filler</span>
+                {#each (fillerCounts ?? []) as f}
+                  <span class="perf-chip perf-chip-filler">{f.word} ×{f.count}</span>
+                {/each}
+              </div>
+            {/if}
+            {#if (hedgeCounts ?? []).length > 0}
+              <div class="perf-group">
+                <span class="perf-group-label">Hedge</span>
+                {#each (hedgeCounts ?? []) as h}
+                  {@const alts = HEDGE_ALTS[h.word.toLowerCase()] ?? []}
+                  <button class="perf-chip perf-chip-hedge" class:active={hedgePopover?.word === h.word}
+                    onclick={(e) => { e.stopPropagation(); if (hedgePopover?.word === h.word) { hedgePopover = null; return; } const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); const popW = 240; const left = r.right + popW > window.innerWidth ? r.right - popW : r.left; hedgePopover = alts.length ? { word: h.word, top: r.bottom + 5, left } : null; }}>
+                    {h.word} ×{h.count}{alts.length ? ' ▾' : ''}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Live questions -->
+        {#if debriefQa.length > 0}
+          <div class="review-section-divider">Interview Questions ({debriefQa.length})</div>
+          <div class="deb-timeline">
             {#each debriefQa as qa, i}
               <div class="tl-item">
                 <div class="tl-q-row">
@@ -663,66 +730,91 @@
                 </div>
               </div>
             {/each}
-          {/if}
-        </div>
+          </div>
+        {/if}
 
-      {:else if activeTab === 'practice'}
-        <!-- Practice tab -->
-        <div class="deb-timeline">
-          {#if totalPracticeCount === 0}
-            <p class="deb-muted">No practice questions this session.</p>
-          {:else}
-            {#if simulatedSuggestions.length > 0}
-              <div class="practice-label">Example &amp; Predicted Questions</div>
-              {#each simulatedSuggestions as s, i}
-                <div class="tl-item tl-item-practice">
-                  <div class="tl-q-row">
-                    {#if s.tag}
-                      {@const tc = TAG_CONFIG[s.tag]}
-                      <span class="tl-tag" style="color: {tc.color}; background: {tc.bg}">{tc.label}</span>
-                    {/if}
-                    <span class="tl-num">{i + 1}</span>
-                    <span class="tl-q-text">"{s.question}"</span>
-                    <span class="tl-practice-badge">Practice</span>
-                  </div>
-                  {#if s.suggestion}
-                    <div class="tl-coaching">
-                      <p class="tl-suggestion">{s.suggestion}</p>
-                    </div>
+        <!-- Practice questions -->
+        {#if totalPracticeCount > 0}
+          <div class="review-section-divider">Practice Questions ({totalPracticeCount})</div>
+          <div class="deb-timeline">
+            {#each simulatedSuggestions as s, i}
+              <div class="tl-item tl-item-practice">
+                <div class="tl-q-row">
+                  {#if s.tag}
+                    {@const tc = TAG_CONFIG[s.tag]}
+                    <span class="tl-tag" style="color: {tc.color}; background: {tc.bg}">{tc.label}</span>
                   {/if}
+                  <span class="tl-num">{i + 1}</span>
+                  <span class="tl-q-text">"{s.question}"</span>
+                  <span class="tl-practice-badge">Practice</span>
                 </div>
-              {/each}
-            {/if}
-            {#if practiceAnswers && practiceAnswers.length > 0}
-              <div class="practice-label" style="margin-top: {simulatedSuggestions.length > 0 ? '1rem' : '0'}">Recorded Practice Answers</div>
-              {#each practiceAnswers as pa, i}
-                <div class="tl-item tl-item-practice">
-                  <div class="tl-q-row">
-                    <span class="tl-num">{simulatedSuggestions.length + i + 1}</span>
-                    <span class="tl-q-text">"{pa.question}"</span>
-                    <span class="tl-practice-badge tl-practice-badge-rec">Recorded</span>
-                  </div>
-                  {#if pa.answerText}
-                    <div class="tl-answer">
-                      <span class="tl-answer-label">You</span>
-                      <span class="tl-answer-text">{pa.answerText}</span>
-                    </div>
-                  {/if}
+                {#if s.suggestion}
                   <div class="tl-coaching">
-                    {#if pa.score !== undefined}
-                      <div class="tl-flags">
-                        <span class="tl-flag" style="color:{pa.score >= 70 ? '#22c55e' : pa.score >= 50 ? '#f59e0b' : '#ef4444'}; border-color:currentColor">Score: {pa.score}/100</span>
-                        {#if pa.vocalTone}<span class="tl-flag" style="color:#94a3b8; border-color:#334155">Tone: {pa.vocalTone}{pa.vocalConfidence !== undefined ? ` · ${pa.vocalConfidence}%` : ''}</span>{/if}
-                      </div>
-                    {/if}
-                    {#if pa.coaching}<p class="tl-coaching-note">{pa.coaching}</p>{/if}
-                    {#if pa.strong}<p class="tl-coaching-note" style="color:#4ade80">{pa.strong}</p>{/if}
+                    <p class="tl-suggestion">{s.suggestion}</p>
                   </div>
+                {/if}
+              </div>
+            {/each}
+            {#each practiceAnswers ?? [] as pa, i}
+              <div class="tl-item tl-item-practice">
+                <div class="tl-q-row">
+                  <span class="tl-num">{simulatedSuggestions.length + i + 1}</span>
+                  <span class="tl-q-text">"{pa.question}"</span>
+                  <span class="tl-practice-badge tl-practice-badge-rec">Recorded</span>
                 </div>
-              {/each}
+                {#if pa.answerText}
+                  <div class="tl-answer">
+                    <span class="tl-answer-label">You</span>
+                    <span class="tl-answer-text">{pa.answerText}</span>
+                  </div>
+                {/if}
+                <div class="tl-coaching">
+                  {#if pa.score !== undefined}
+                    <div class="tl-flags">
+                      <span class="tl-flag" style="color:{pa.score >= 70 ? '#22c55e' : pa.score >= 50 ? '#f59e0b' : '#ef4444'}; border-color:currentColor">Score: {pa.score}/100</span>
+                      {#if pa.vocalTone}<span class="tl-flag" style="color:#94a3b8; border-color:#334155">Tone: {pa.vocalTone}{pa.vocalConfidence !== undefined ? ` · ${pa.vocalConfidence}%` : ''}</span>{/if}
+                    </div>
+                  {/if}
+                  {#if pa.coaching}<p class="tl-coaching-note">{pa.coaching}</p>{/if}
+                  {#if pa.strong}<p class="tl-coaching-note" style="color:#4ade80">{pa.strong}</p>{/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Follow-up section -->
+        {#if debriefResult}
+          {#if nextSteps.length > 0 || loadingNextSteps}
+            <div class="review-section-divider">Next Steps</div>
+            {#if loadingNextSteps}
+              <p class="deb-muted">Extracting next steps…</p>
+            {:else}
+              <ul class="deb-list deb-list-pad">{#each nextSteps as s}<li>{s}</li>{/each}</ul>
             {/if}
           {/if}
-        </div>
+          <div class="review-section-divider">
+            Follow-up Email
+            {#if emailGenerated}
+              <button class="deb-copy-btn" class:copied={debriefEmailCopied} onclick={copyDebriefEmail}>
+                {debriefEmailCopied ? '✓ Copied!' : 'Copy'}
+              </button>
+            {/if}
+          </div>
+          {#if emailGenerated && emailDraft}
+            <div class="deb-email-draft">
+              {#each emailDraft.split('\n') as line}
+                {#if line.trim() === ''}<div class="deb-email-blank"></div>
+                {:else}<div class="deb-email-line">{line}</div>{/if}
+              {/each}
+            </div>
+          {:else if emailLoading}
+            <p class="deb-muted">Drafting email…</p>
+          {:else}
+            <ul class="deb-list deb-list-pad">{#each debriefResult.followup_email as p}<li>{p}</li>{/each}</ul>
+            <button class="deb-gen-email-btn" onclick={generateEmail}>Write full draft ›</button>
+          {/if}
+        {/if}
 
       {:else if activeTab === 'recording'}
         <!-- Recording tab -->
@@ -777,6 +869,16 @@
 
   </div>
 </div>
+
+{#if hedgePopover}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div class="hedge-popover-fixed" style="top:{hedgePopover.top}px;left:{hedgePopover.left}px" onclick={(e) => e.stopPropagation()}>
+    <div class="hedge-popover-title">Instead of "{hedgePopover.word}"</div>
+    {#each HEDGE_ALTS[hedgePopover.word.toLowerCase()] ?? [] as alt}
+      <div class="hedge-popover-alt">{alt}</div>
+    {/each}
+  </div>
+{/if}
 
 <style>
   .modal-backdrop {
@@ -941,6 +1043,28 @@
   .deb-copy-btn { padding: 0.22rem 0.65rem; background: transparent; border: 1px solid #334155; border-radius: 0.25rem; color: #64748b; font-size: var(--fs-sm); cursor: pointer; transition: all 0.15s; }
   .deb-copy-btn:hover { border-color: #60a5fa; color: #60a5fa; }
   .deb-copy-btn.copied { border-color: #4ade80; color: #4ade80; }
+  .deb-gen-email-btn { margin-top: 0.75rem; padding: 0.3rem 0.8rem; background: transparent; border: 1px solid #334155; border-radius: 0.25rem; color: #94a3b8; font-size: var(--fs-sm); cursor: pointer; transition: all 0.15s; }
+  .deb-gen-email-btn:hover { border-color: #818cf8; color: #818cf8; }
+  .review-section-divider { display: flex; align-items: center; gap: 0.75rem; font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #334155; padding: 1rem 0 0.4rem; }
+  .review-section-divider::after { content: ''; flex: 1; height: 1px; background: #1e293b; }
+  .perf-chips-wrap { display: flex; flex-direction: column; gap: 0.6rem; }
+  .perf-group { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
+  .perf-group-label { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #475569; width: 3.5rem; flex-shrink: 0; }
+  .perf-chip { font-size: 0.78rem; padding: 0.2rem 0.55rem; border-radius: 999px; white-space: nowrap; }
+  .perf-chip-filler { background: #1e293b; color: #64748b; }
+  .perf-chip-hedge { background: #1c1407; border: 1px solid #78350f; color: #fbbf24; cursor: pointer; }
+  .perf-chip-hedge:hover, .perf-chip-hedge.active { background: #292008; border-color: #f59e0b; color: #fde68a; }
+  .perf-chip-wrap { position: relative; }
+  .hedge-popover-fixed {
+    position: fixed; z-index: 500;
+    background: #07101e; border: 1px solid #1e3a5f; border-radius: 0.5rem;
+    padding: 0.6rem 0.75rem; min-width: 200px; max-width: 280px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+  }
+  .hedge-popover-title { font-size: var(--fs-xs); color: #475569; margin-bottom: 0.4rem; font-style: italic; }
+  .hedge-popover-alt { font-size: 0.82rem; color: #94a3b8; padding: 0.25rem 0; border-bottom: 1px solid #0d1f35; line-height: 1.4; }
+  .hedge-popover-alt:last-child { border-bottom: none; }
+  .deb-list-pad { padding-left: 1.25rem; }
   .deb-email-draft { background: #060e1a; border: 1px solid #1a2d4a; border-radius: 0.5rem; padding: 0.85rem 1.1rem; }
   .deb-email-line { font-size: var(--fs-base); color: #cbd5e1; line-height: 1.7; }
   .deb-email-blank { height: 0.6rem; }

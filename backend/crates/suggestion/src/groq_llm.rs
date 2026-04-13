@@ -40,13 +40,28 @@ pub async fn stream_openai_compat(
     mode: SuggestionMode,
     event_tx: broadcast::Sender<WsEvent>,
 ) -> Result<()> {
+    stream_openai_compat_timeout(api_key, base_url, model, provider, system_prompt, user_prompt, mode, event_tx, 60).await
+}
+
+pub async fn stream_openai_compat_timeout(
+    api_key: &str,
+    base_url: &str,
+    model: &str,
+    provider: &str,
+    system_prompt: &str,
+    user_prompt: &str,
+    mode: SuggestionMode,
+    event_tx: broadcast::Sender<WsEvent>,
+    timeout_secs: u64,
+) -> Result<()> {
     let body = json!({
         "model": model,
         "messages": [
             { "role": "system", "content": system_prompt },
             { "role": "user",   "content": user_prompt }
         ],
-        "max_tokens": 1000,
+        "max_tokens": 1500,
+        "temperature": 0.3,
         "stream": true
     });
 
@@ -54,7 +69,7 @@ pub async fn stream_openai_compat(
         .post(base_url)
         .bearer_auth(api_key)
         .json(&body)
-        .timeout(std::time::Duration::from_secs(60))
+        .timeout(std::time::Duration::from_secs(timeout_secs))
         .send()
         .await?;
 

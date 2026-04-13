@@ -168,7 +168,7 @@ pub async fn call_ai_quality(cfg: &AiConfig<'_>, prompt: &str, max_tokens: u32) 
                 if let Ok(j) = resp.json::<Value>().await {
                     let text = j["content"][0]["text"].as_str().unwrap_or("").trim().to_string();
                     if !text.is_empty() {
-                        inc(&cfg.usage, "Claude");
+                        inc(&cfg.usage, "Claude API");
                         return Ok(text);
                     }
                 }
@@ -257,7 +257,7 @@ pub async fn call_ai(cfg: &AiConfig<'_>, prompt: &str, max_tokens: u32) -> Resul
             .await?;
         if resp.status().is_success() {
             let j: Value = resp.json().await?;
-            inc(&cfg.usage, "Claude");
+            inc(&cfg.usage, "Claude API");
             return Ok(j["content"][0]["text"].as_str().unwrap_or("").trim().to_string());
         }
         tracing::debug!("Claude returned {}, trying next provider", resp.status());
@@ -373,7 +373,7 @@ pub async fn call_ai_fast(cfg: &AiConfig<'_>, system_prompt: &str, user_prompt: 
             .await?;
         if resp.status().is_success() {
             let j: Value = resp.json().await?;
-            inc(&cfg.usage, "Claude");
+            inc(&cfg.usage, "Claude API");
             return Ok(j["content"][0]["text"].as_str().unwrap_or("").trim().to_string());
         }
         tracing::debug!("Claude returned {}, trying next provider", resp.status());
@@ -433,7 +433,7 @@ pub async fn call_ai_simple(cfg: &AiConfig<'_>, system_prompt: &str, user_prompt
             .await?;
         if resp.status().is_success() {
             let j: Value = resp.json().await?;
-            inc(&cfg.usage, "Claude");
+            inc(&cfg.usage, "Claude API");
             return Ok(j["content"][0]["text"].as_str().unwrap_or("").trim().to_string());
         }
         tracing::debug!("Claude returned {}, trying next provider", resp.status());
@@ -798,7 +798,25 @@ pub async fn extract_jd_keywords(job_description: &str, cfg: &AiConfig<'_>) -> V
     );
     match call_ai(cfg, &prompt, 300).await {
         Ok(text) => text.lines()
-            .map(|l| l.trim().to_string())
+            .map(|l| {
+                let l = l.trim();
+                // Strip bullet/number prefixes
+                let l = l.trim_start_matches(|c: char| c == '-' || c == '*' || c == '•' || c == '·' || c.is_ascii_digit() || c == '.' || c == ')');
+                let l = l.trim();
+                // Strip "Key skill: ", "Technical skill: ", "Soft skill: " etc.
+                // that the LLM adds despite being told not to
+                if let Some(colon) = l.find(':') {
+                    let prefix = l[..colon].to_lowercase();
+                    if prefix.contains("skill") || prefix.contains("keyword") || prefix.contains("competency")
+                        || prefix.contains("knowledge") || prefix.contains("responsibilit")
+                        || prefix.contains("experience") || prefix.contains("qualification")
+                        || prefix.contains("domain") || prefix.contains("role")
+                    {
+                        return l[colon + 1..].trim().to_string();
+                    }
+                }
+                l.to_string()
+            })
             .filter(|l| !l.is_empty() && l.len() < 60)
             .take(15)
             .collect(),

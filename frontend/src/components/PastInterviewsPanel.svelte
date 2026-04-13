@@ -2,7 +2,6 @@
   import { loadHistory, deleteRecord, type InterviewRecord } from '../lib/interviewHistory';
   import { authFetch } from '../lib/api';
   import type { ReviewReport, ReviewSummary } from './ReviewPanel.svelte';
-  import SessionDetailModal from './SessionDetailModal.svelte';
   import SessionDetailView from './SessionDetailView.svelte';
 
   const { onClose, onReport, onRehearsal } = $props<{
@@ -10,12 +9,6 @@
     onReport: (report: ReviewReport) => void;
     onRehearsal: (questions: string[]) => void;
   }>();
-
-  // ── Layout mode ────────────────────────────────────────────────────────────
-  let viewMode = $state<'modal' | 'split'>(
-    (localStorage.getItem('reports-view-mode') as 'modal' | 'split') ?? 'split'
-  );
-  $effect(() => { localStorage.setItem('reports-view-mode', viewMode); });
 
   // Tabs
   let tab = $state<'sessions' | 'recordings'>('sessions');
@@ -169,23 +162,11 @@
 </script>
 
 <div class="backdrop" onclick={onClose} role="none">
-  <div class="panel" class:split={viewMode === 'split'} onclick={(e) => e.stopPropagation()} role="dialog">
+  <div class="panel split" onclick={(e) => e.stopPropagation()} role="dialog">
 
     <div class="panel-header">
       <h2>Reports</h2>
       <div class="header-right">
-        <div class="view-toggle">
-          <button
-            class="toggle-btn"
-            class:active={viewMode === 'modal'}
-            onclick={() => { viewMode = 'modal'; selectedRecord = null; }}
-          >List</button>
-          <button
-            class="toggle-btn"
-            class:active={viewMode === 'split'}
-            onclick={() => viewMode = 'split'}
-          >Split</button>
-        </div>
         <button class="close-btn" onclick={onClose}>✕</button>
       </div>
     </div>
@@ -195,7 +176,7 @@
       <button class="tab" class:active={tab === 'recordings'} onclick={switchToRecordings}>Recordings</button>
     </div>
 
-    {#if tab === 'sessions' && viewMode === 'split'}
+    {#if tab === 'sessions'}
 
       <!-- ── Split layout ─────────────────────────────────────────────────── -->
       <div class="split-layout">
@@ -245,139 +226,94 @@
 
     {:else}
 
-      <!-- ── Standard body (modal mode or recordings tab) ───────────────────── -->
+      <!-- ── Recordings tab ──────────────────────────────────────────────────── -->
       <div class="body">
-
-        {#if tab === 'sessions'}
-          {#if records.length === 0}
-            <p class="empty">No sessions saved yet. Complete an interview and close the debrief to save.</p>
-          {:else}
-            {#if weakSpots.length > 0}
-              <div class="weak-section">
-                <div class="weak-title">Recurring Weak Spots</div>
-                {#each weakSpots as ws}
-                  <div class="weak-item">
-                    <span class="weak-text">{ws.key}</span>
-                    <span class="weak-count">×{ws.count}</span>
+        {#if showUpload}
+          <div class="upload-section">
+            {#if !uploading}
+              <div
+                class="dropzone"
+                class:dragging
+                ondragover={(e) => { e.preventDefault(); dragging = true; }}
+                ondragleave={() => dragging = false}
+                ondrop={onDrop}
+                role="none"
+              >
+                {#if uploadFile}
+                  <div class="file-info">
+                    <span class="file-name">{uploadFile.name}</span>
+                    <span class="file-size">{fmtSize(uploadFile.size)}</span>
                   </div>
-                {/each}
+                  <button class="change-btn" onclick={() => uploadFile = null}>Change file</button>
+                {:else}
+                  <span class="dz-icon">⬆</span>
+                  <span class="dz-label">Drop a video or audio file here</span>
+                  <label class="browse-btn">
+                    Browse files
+                    <input type="file" accept={ACCEPT} onchange={onFileChange} hidden />
+                  </label>
+                  <span class="dz-formats">MP4 · WebM · MOV · MP3 · M4A · WAV</span>
+                {/if}
               </div>
-            {/if}
-
-            {#each records as r (r.id)}
-              <button class="record" onclick={() => selectedRecord = r}>
-                <span class="record-label">
-                  {#if r.company || r.role}
-                    {[r.company, r.role].filter(Boolean).join(' · ')}
-                  {:else}
-                    {r.summary}
-                  {/if}
-                </span>
-                <span class="record-date">{r.date}</span>
-                <span class="record-chevron">▸</span>
-              </button>
-            {/each}
-          {/if}
-
-        {:else}
-
-          {#if showUpload}
-            <div class="upload-section">
-              {#if !uploading}
-                <div
-                  class="dropzone"
-                  class:dragging
-                  ondragover={(e) => { e.preventDefault(); dragging = true; }}
-                  ondragleave={() => dragging = false}
-                  ondrop={onDrop}
-                  role="none"
-                >
-                  {#if uploadFile}
-                    <div class="file-info">
-                      <span class="file-name">{uploadFile.name}</span>
-                      <span class="file-size">{fmtSize(uploadFile.size)}</span>
-                    </div>
-                    <button class="change-btn" onclick={() => uploadFile = null}>Change file</button>
-                  {:else}
-                    <span class="dz-icon">⬆</span>
-                    <span class="dz-label">Drop a video or audio file here</span>
-                    <label class="browse-btn">
-                      Browse files
-                      <input type="file" accept={ACCEPT} onchange={onFileChange} hidden />
-                    </label>
-                    <span class="dz-formats">MP4 · WebM · MOV · MP3 · M4A · WAV</span>
-                  {/if}
-                </div>
-                {#if uploadError}
-                  <div class="upload-error">{uploadError}</div>
-                {/if}
-                <div class="upload-actions">
-                  <button class="cancel-btn" onclick={cancelUpload}>Cancel</button>
-                  <button class="upload-btn" disabled={!uploadFile} onclick={upload}>Analyze Recording</button>
-                </div>
-              {:else}
-                <div class="progress-wrap">
-                  <div class="progress-step">{uploadStep || 'Processing…'}</div>
-                  <div class="progress-bar"><div class="progress-fill" style="width:{uploadPct}%"></div></div>
-                  <div class="progress-pct">{uploadPct}%</div>
-                </div>
-                {#if uploadError}
-                  <div class="upload-error">{uploadError}</div>
-                  <button class="cancel-btn" onclick={cancelUpload}>Close</button>
-                {/if}
+              {#if uploadError}
+                <div class="upload-error">{uploadError}</div>
               {/if}
-            </div>
-          {:else}
-            <div class="recordings-toolbar">
-              <input class="search-input" type="text" placeholder="Search recordings…" bind:value={recordingSearch} />
-              <button class="upload-open-btn" onclick={() => { showUpload = true; uploadFile = null; uploadError = ''; }}>
-                ⬆ Upload Recording
-              </button>
-            </div>
-
-            {#if recordingsLoading}
-              <p class="empty">Loading…</p>
-            {:else if filteredRecordings.length === 0}
-              <p class="empty">{recordingSearch ? 'No matching recordings.' : 'No recordings yet. Upload a recording to get started.'}</p>
-            {:else}
-              <div class="recordings-list">
-                {#each filteredRecordings as r}
-                  <div class="recording-item">
-                    <div class="recording-meta">
-                      <span class="recording-name">{r.source_filename ?? 'Untitled'}</span>
-                      <span class="recording-date">{r.created_at ? fmtDate(r.created_at) : ''}</span>
-                    </div>
-                    <div class="recording-stats">
-                      {#if r.duration_secs}<span>{fmtDuration(r.duration_secs)}</span>{/if}
-                      <span>{r.qa_count} Q&A</span>
-                      <span>{r.avg_wpm} wpm</span>
-                      <span>{Math.round(r.you_pct)}% you</span>
-                    </div>
-                    <div class="recording-actions">
-                      <button class="open-btn" onclick={() => openRecording(r.id)}>Open Report</button>
-                      <button class="delete-btn" onclick={() => deleteRecording(r.id)}>Delete</button>
-                    </div>
-                  </div>
-                {/each}
+              <div class="upload-actions">
+                <button class="cancel-btn" onclick={cancelUpload}>Cancel</button>
+                <button class="upload-btn" disabled={!uploadFile} onclick={upload}>Analyze Recording</button>
               </div>
+            {:else}
+              <div class="progress-wrap">
+                <div class="progress-step">{uploadStep || 'Processing…'}</div>
+                <div class="progress-bar"><div class="progress-fill" style="width:{uploadPct}%"></div></div>
+                <div class="progress-pct">{uploadPct}%</div>
+              </div>
+              {#if uploadError}
+                <div class="upload-error">{uploadError}</div>
+                <button class="cancel-btn" onclick={cancelUpload}>Close</button>
+              {/if}
             {/if}
-          {/if}
+          </div>
+        {:else}
+          <div class="recordings-toolbar">
+            <input class="search-input" type="text" placeholder="Search recordings…" bind:value={recordingSearch} />
+            <button class="upload-open-btn" onclick={() => { showUpload = true; uploadFile = null; uploadError = ''; }}>
+              ⬆ Upload Recording
+            </button>
+          </div>
 
+          {#if recordingsLoading}
+            <p class="empty">Loading…</p>
+          {:else if filteredRecordings.length === 0}
+            <p class="empty">{recordingSearch ? 'No matching recordings.' : 'No recordings yet. Upload a recording to get started.'}</p>
+          {:else}
+            <div class="recordings-list">
+              {#each filteredRecordings as r}
+                <div class="recording-item">
+                  <div class="recording-meta">
+                    <span class="recording-name">{r.source_filename ?? 'Untitled'}</span>
+                    <span class="recording-date">{r.created_at ? fmtDate(r.created_at) : ''}</span>
+                  </div>
+                  <div class="recording-stats">
+                    {#if r.duration_secs}<span>{fmtDuration(r.duration_secs)}</span>{/if}
+                    <span>{r.qa_count} Q&A</span>
+                    <span>{r.avg_wpm} wpm</span>
+                    <span>{Math.round(r.you_pct)}% you</span>
+                  </div>
+                  <div class="recording-actions">
+                    <button class="open-btn" onclick={() => openRecording(r.id)}>Open Report</button>
+                    <button class="delete-btn" onclick={() => deleteRecording(r.id)}>Delete</button>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
         {/if}
       </div>
 
     {/if}
   </div>
 </div>
-
-{#if selectedRecord && viewMode === 'modal'}
-  <SessionDetailModal
-    record={selectedRecord}
-    onClose={() => selectedRecord = null}
-    onDelete={(id) => { removeRecord(id); selectedRecord = null; }}
-    onRehearsal={(questions) => { onRehearsal(questions); onClose(); }}
-  />
-{/if}
 
 <style>
   .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 150; }
@@ -388,12 +324,7 @@
   h2 { font-size: 1rem; font-weight: 700; color: #f1f5f9; margin: 0; }
   .header-right { display: flex; align-items: center; gap: 0.5rem; }
 
-  .view-toggle { display: flex; gap: 1px; background: #1e293b; border-radius: 0.3rem; padding: 2px; }
-  .toggle-btn { background: none; border: none; color: #475569; font-size: 0.85rem; cursor: pointer; padding: 0.15rem 0.4rem; border-radius: 0.2rem; line-height: 1; transition: color 0.12s, background 0.12s; }
-  .toggle-btn:hover { color: #94a3b8; }
-  .toggle-btn.active { background: #334155; color: #e2e8f0; }
-
-  .close-btn { background: none; border: none; color: #64748b; font-size: 1rem; cursor: pointer; padding: 0.2rem 0.4rem; }
+.close-btn { background: none; border: none; color: #64748b; font-size: 1rem; cursor: pointer; padding: 0.2rem 0.4rem; }
   .close-btn:hover { color: #e2e8f0; }
 
   .tab-bar { display: flex; border-bottom: 1px solid #1e293b; padding: 0 1.25rem; flex-shrink: 0; }
@@ -421,7 +352,6 @@
   .record.selected { background: #0d1a30; border-color: #2563eb; }
   .record-label { font-size: var(--fs-sm); color: #94a3b8; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 1rem; }
   .record-date { font-size: var(--fs-xs); color: #475569; }
-  .record-chevron { position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); font-size: var(--fs-xs); color: #334155; }
 
   /* Recordings */
   .recordings-toolbar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.25rem; flex-shrink: 0; }

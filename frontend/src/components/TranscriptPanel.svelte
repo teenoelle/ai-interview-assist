@@ -2,7 +2,7 @@
   import { tick } from 'svelte';
   import type { TranscriptEntry } from '../lib/types';
   import PanelHeader from './PanelHeader.svelte';
-  import { fillerRe } from '../lib/filler';
+  import { fillerRe, hedgeRe } from '../lib/filler';
 
   const { entries, onFlipSpeaker, jdKeywords = [] } = $props<{
     entries: TranscriptEntry[];
@@ -59,6 +59,7 @@
     // Filler word highlighting (You speaker only)
     if (isYou) {
       html = html.replace(fillerRe(), '<mark class="filler-hit">$&</mark>');
+      html = html.replace(hedgeRe(), '<mark class="hedge-hit">$&</mark>');
     }
 
     return html;
@@ -66,6 +67,10 @@
 
   function fillerCount(text: string): number {
     return (text.match(fillerRe()) ?? []).length;
+  }
+
+  function hedgeCount(text: string): number {
+    return (text.match(hedgeRe()) ?? []).length;
   }
 
   function wpmLabel(text: string, durationMs: number): string {
@@ -89,6 +94,7 @@
         {@const durationMs = nextEntry ? nextEntry.timestamp_ms - entry.timestamp_ms : 0}
         {@const wpm = isYou ? wpmLabel(entry.text, durationMs) : ''}
         {@const fillers = isYou ? fillerCount(entry.text) : 0}
+        {@const hedges = isYou ? hedgeCount(entry.text) : 0}
         {@const words = isYou ? wordCount(entry.text) : 0}
         <div class="entry" class:interviewer={entry.speaker === 'Interviewer'} class:you={isYou}>
           <div class="meta">
@@ -102,6 +108,9 @@
             {/if}
             {#if fillers > 0}
               <span class="entry-stat entry-filler" title="{fillers} filler word{fillers > 1 ? 's' : ''}">{fillers} filler{fillers > 1 ? 's' : ''}</span>
+            {/if}
+            {#if hedges > 0}
+              <span class="entry-stat entry-hedge" title="{hedges} hedging phrase{hedges > 1 ? 's' : ''}">{hedges} hedge{hedges > 1 ? 's' : ''}</span>
             {/if}
             {#if onFlipSpeaker}
               <button class="flip-btn" title="Flip speaker" onclick={() => onFlipSpeaker(i)}>⇄</button>
@@ -147,6 +156,7 @@
   }
   .entry-wpm { color: #1e3a5f; }
   .entry-filler { color: #78350f; }
+  .entry-hedge { color: #312e81; }
 
   :global(.filler-hit) {
     background: transparent;
@@ -158,5 +168,11 @@
     background: transparent;
     color: #34d399;
     font-weight: 600;
+  }
+  :global(.hedge-hit) {
+    background: transparent;
+    color: #818cf8;
+    font-style: italic;
+    text-decoration: underline dotted #4f46e5;
   }
 </style>

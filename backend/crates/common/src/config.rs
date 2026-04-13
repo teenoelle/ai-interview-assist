@@ -7,12 +7,15 @@ pub struct Config {
     pub groq_api_key_2: Option<String>,
     pub deepgram_api_key: Option<String>,
     pub openrouter_api_key: Option<String>,
+    pub deepseek_api_key: Option<String>,
     pub mistral_api_key: Option<String>,
     pub cerebras_api_key: Option<String>,
     pub anthropic_api_key: Option<String>,
     pub qwen_api_key: Option<String>,
     pub whisper_url: Option<String>,
     pub whisper_model: String,
+    pub bonsai_url: Option<String>,
+    pub bonsai_model: String,
     pub ollama_url: String,
     pub ollama_model: String,
     pub ollama_models: Vec<String>,  // suggestion fallback chain (may include multiple)
@@ -31,13 +34,14 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> Result<Self> {
-        dotenvy::dotenv().ok();
+        dotenvy::dotenv_override().ok();
         let gemini_api_key = std::env::var("GEMINI_API_KEY")
             .context("GEMINI_API_KEY must be set in .env or environment")?;
         let groq_api_key = std::env::var("GROQ_API_KEY").ok();
         let groq_api_key_2 = std::env::var("GROQ_API_KEY_2").ok();
         let deepgram_api_key = std::env::var("DEEPGRAM_API_KEY").ok();
         let openrouter_api_key = std::env::var("OPENROUTER_API_KEY").ok();
+        let deepseek_api_key = std::env::var("DEEPSEEK_API_KEY").ok();
         let mistral_api_key = std::env::var("MISTRAL_API_KEY").ok();
         let cerebras_api_key = std::env::var("CEREBRAS_API_KEY").ok();
         let anthropic_api_key = std::env::var("ANTHROPIC_API_KEY").ok();
@@ -47,6 +51,9 @@ impl Config {
         let whisper_url = std::env::var("WHISPER_URL").ok();
         let whisper_model = std::env::var("WHISPER_MODEL")
             .unwrap_or_else(|_| "Systran/faster-whisper-large-v3".to_string());
+        let bonsai_url = std::env::var("BONSAI_URL").ok().filter(|s| !s.is_empty());
+        let bonsai_model = std::env::var("BONSAI_MODEL")
+            .unwrap_or_else(|_| "Bonsai-8B".to_string());
         let ollama_url = std::env::var("OLLAMA_URL")
             .unwrap_or_else(|_| "http://localhost:11434".to_string());
         let ollama_model = std::env::var("OLLAMA_MODEL")
@@ -79,6 +86,6 @@ impl Config {
             .split_whitespace()
             .map(|s| s.to_string())
             .collect();
-        Ok(Self { gemini_api_key, groq_api_key, groq_api_key_2, deepgram_api_key, openrouter_api_key, mistral_api_key, cerebras_api_key, anthropic_api_key, qwen_api_key, whisper_url, whisper_model, ollama_url, ollama_model, ollama_models, ollama_vision_model, diarize_url, port, piper_binary, piper_models_dir, app_token, ffmpeg_bin, whisper_spawn_cmd, whisper_spawn_args })
+        Ok(Self { gemini_api_key, groq_api_key, groq_api_key_2, deepgram_api_key, openrouter_api_key, deepseek_api_key, mistral_api_key, cerebras_api_key, anthropic_api_key, qwen_api_key, whisper_url, whisper_model, bonsai_url, bonsai_model, ollama_url, ollama_model, ollama_models, ollama_vision_model, diarize_url, port, piper_binary, piper_models_dir, app_token, ffmpeg_bin, whisper_spawn_cmd, whisper_spawn_args })
     }
 }

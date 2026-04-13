@@ -3,43 +3,31 @@ use serde_json::{json, Value};
 use tokio::sync::broadcast;
 use common::messages::{WsEvent, SuggestionMode};
 use futures::StreamExt;
-use std::sync::OnceLock;
 
-static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-fn client() -> &'static reqwest::Client {
-    CLIENT.get_or_init(|| {
-        reqwest::Client::builder()
-            .pool_max_idle_per_host(0)  // no connection reuse — Ollama closes idle connections
-            .build()
-            .expect("ollama client")
-    })
-}
-
-/// Stream suggestions from a local Ollama instance.
-/// Uses a short timeout (15 s) so a cold/unloaded model doesn't stall the fallback chain.
-/// Sends keep_alive: "60m" so the model stays in RAM between questions.
 pub async fn stream_suggestions(
-    base_url: &str,
-    model: &str,
+    api_key: &str,
     system_prompt: &str,
     user_prompt: &str,
     mode: SuggestionMode,
     event_tx: broadcast::Sender<WsEvent>,
 ) -> Result<()> {
-    let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
     let body = json!({
-        "model": model,
-        "messages": [
-            { "role": "system", "content": system_prompt },
-            { "role": "user",   "content": user_prompt }
-        ],
-        "max_tokens": 1500,
-        "temperature": 0.3,
-        "stream": true,
-        "keep_alive": "60m",
+        "system_instruction": {
+            "parts": [{ "text": system_prompt }]
+        },
+        "contents": [{
+            "role": "user",
+            "parts": [{ "text": user_prompt }]
+        }],
+        "generationConfig": { "maxOutputTokens": 1000 }
     });
 
-    let client = client();
+    let client = reqwest::Client::new();
+    let url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemma-4-27b-it:streamGenerateContent?key={}&alt=sse",
+        api_key
+    );
+
     let resp = client
         .post(&url)
         .json(&body)
@@ -50,7 +38,7 @@ pub async fn stream_suggestions(
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
-        return Err(anyhow!("Ollama {} error {}: {}", model, status, text));
+        return Err(anyhow!("Gemma API error {}: {}", status, text));
     }
 
     let mut full_text = String::new();
@@ -66,9 +54,9 @@ pub async fn stream_suggestions(
             buf = buf[pos + 2..].to_string();
             for line in event.lines() {
                 if let Some(data) = line.strip_prefix("data: ") {
-                    if data.trim() == "[DONE]" { continue; }
+                    if data == "[DONE]" { continue; }
                     if let Ok(json) = serde_json::from_str::<Value>(data) {
-                        if let Some(token) = json["choices"][0]["delta"]["content"].as_str() {
+                        if let Some(token) = json["candidates"][0]["content"]["parts"][0]["text"].as_str() {
                             full_text.push_str(token);
                             let _ = event_tx.send(WsEvent::SuggestionToken { token: token.to_string(), mode });
                         }
@@ -78,7 +66,11 @@ pub async fn stream_suggestions(
         }
     }
 
-    tracing::info!("suggestion ✓ Ollama ({}) — {} chars", model, full_text.len());
+    if full_text.is_empty() {
+        return Err(anyhow!("Gemma returned empty response"));
+    }
+
+    tracing::info!("suggestion ✓ Gemma (gemma-4-27b-it) — {} chars", full_text.len());
     let _ = event_tx.send(WsEvent::SuggestionComplete { full_text, mode });
     Ok(())
 }

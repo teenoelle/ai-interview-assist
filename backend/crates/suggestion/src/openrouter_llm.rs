@@ -4,6 +4,10 @@ use common::messages::{WsEvent, SuggestionMode};
 use crate::groq_llm::stream_openai_compat;
 
 const FREE_MODELS: &[&str] = &[
+    "google/gemini-2.0-flash-exp:free",   // best format compliance on free tier
+    "google/gemini-flash-1.5:free",
+    "deepseek/deepseek-chat:free",
+    "meta-llama/llama-4-maverick:free",
     "meta-llama/llama-3.3-70b-instruct:free",
     "google/gemma-3-27b-it:free",
 ];

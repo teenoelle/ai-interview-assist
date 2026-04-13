@@ -12,7 +12,7 @@ pub async fn transcribe(api_key: &str, pcm: &[u8]) -> Result<String> {
     let wav_bytes = pcm_to_wav(pcm)?;
 
     let resp = client()
-        .post("https://api.deepgram.com/v1/listen?model=nova-2&language=en&smart_format=true")
+        .post("https://api.deepgram.com/v1/listen?model=nova-2&language=en&smart_format=true&disfluencies=true")
         .header("Authorization", format!("Token {}", api_key))
         .header("Content-Type", "audio/wav")
         .body(wav_bytes)

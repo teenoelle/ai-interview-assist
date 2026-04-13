@@ -6,7 +6,8 @@ export type QuestionTag =
   | 'character'
   | 'values'
   | 'salary'
-  | 'closing'
+  | 'candidate_questions'
+  | 'wrap_up'
   | 'personal'
   | 'motivation'
   | 'fit'
@@ -32,7 +33,8 @@ const TECHNICAL   = ['how would you build', 'design a', 'implement', 'algorithm'
 const SALARY      = ['salary', 'compensation', 'pay', 'benefits', 'equity', 'stock', 'bonus', 'offer', 'package', 'rate', 'expectations'];
 const CULTURE     = ['culture', 'work style', 'remote', 'work-life', 'mission', 'motivate', 'what drives you', 'how do you collaborate', 'how do you work with', 'how do you handle disagreement', 'cross-functional', 'working across'];
 const VALUES      = ['what do you look for in', 'what are you looking for in', 'what matters most to you in', 'what is important to you in', 'what do you need from a', 'what do you value in', 'what kind of manager', 'what kind of environment', 'what kind of leadership', 'what does your ideal', 'what would your ideal', 'what are you looking for in your next', 'what are you looking for in a new'];
-const CLOSING     = ['any questions', 'questions for us', 'questions for me', 'next steps', 'hear from us', 'back to you', 'anything else you', 'is there anything you'];
+const CANDIDATE_QUESTIONS = ['any questions', 'questions for us', 'questions for me', 'anything else you', 'is there anything you', 'anything you would like to ask', "anything you'd like to ask"];
+const WRAP_UP     = ["we'll be in touch", 'we will be in touch', "we'll get back to you", 'we will get back to you', "we'll reach out", 'we will reach out', "we'll let you know", 'we will let you know', 'interviewing other candidates', 'other candidates', 'making a decision', 'have a decision by', 'thanks for coming in', 'thank you for coming in', 'thank you for your time today', "that's all the questions", "that's all my questions", 'all the questions i have', 'wraps up our', 'wrapping up', 'before we let you go', 'before i let you go', 'next steps', 'hear from us', 'back to you'];
 
 // ── Scoring ───────────────────────────────────────────────────────────────────
 
@@ -48,7 +50,8 @@ const PRIORITY: Array<[string[], QuestionTag]> = [
   [FIT,         'fit'],
   [MOTIVATION,  'motivation'],
   [FUTURE,      'future'],
-  [CLOSING,     'closing'],
+  [WRAP_UP,            'wrap_up'],
+  [CANDIDATE_QUESTIONS, 'candidate_questions'],
   [SALARY,      'salary'],
   [STRENGTHS,   'strengths'],
   [CHARACTER,   'character'],
@@ -85,6 +88,7 @@ export const TAG_CONFIG: Record<QuestionTag, { label: string; color: string; bg:
   culture:     { label: 'Q: Culture',     color: '#34d399', bg: '#0a1f15' },
   values:      { label: 'Q: Values',      color: '#f0abfc', bg: '#1a0a1f' },
   salary:      { label: 'Q: Salary',      color: '#fbbf24', bg: '#1a1200' },
-  closing:     { label: 'Q: Closing',     color: '#94a3b8', bg: '#0f172a' },
+  candidate_questions: { label: 'Q: Your Questions', color: '#94a3b8', bg: '#0f172a' },
+  wrap_up:             { label: 'Q: Wrap-Up',         color: '#f59e0b', bg: '#1a1000' },
   general:     { label: 'Q: General',     color: '#64748b', bg: '#0d1117' },
 };

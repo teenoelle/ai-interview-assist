@@ -734,10 +734,11 @@
     { id: 'outfit-500',       font: 'Outfit',                   weight: 500, label: 'Outfit · Medium'       },
     { id: 'system-ui',        font: 'system-ui',                weight: 400, label: 'System Default'        },
   ];
-  let fontLeft   = $state(localStorage.getItem('font-left')   ?? '');
-  let fontHist   = $state(localStorage.getItem('font-hist')   ?? '');
-  let fontCenter = $state(localStorage.getItem('font-center') ?? '');
-  let fontRight  = $state(localStorage.getItem('font-right')  ?? '');
+  let fontLeft     = $state(localStorage.getItem('font-left')     ?? '');
+  let fontHist     = $state(localStorage.getItem('font-hist')     ?? '');
+  let fontCenter   = $state(localStorage.getItem('font-center')   ?? '');
+  let fontRight    = $state(localStorage.getItem('font-right')    ?? '');
+  let fontQuestion = $state(localStorage.getItem('font-question') ?? '');
   function panelFontStack(font: string): string {
     if (!font) return '';
     if (font === 'system-ui') return 'system-ui, -apple-system, sans-serif';
@@ -753,8 +754,8 @@
       : `'${VARIABLE_FONT_NAMES[entry.font] ?? entry.font}', system-ui, sans-serif`;
     return `font-family: ${stack}; font-weight: ${entry.weight};`;
   }
-  function cyclePanelFont(col: 'left' | 'hist' | 'center' | 'right') {
-    const cur = col === 'left' ? fontLeft : col === 'hist' ? fontHist : col === 'center' ? fontCenter : fontRight;
+  function cyclePanelFont(col: 'left' | 'hist' | 'center' | 'right' | 'question') {
+    const cur = col === 'left' ? fontLeft : col === 'hist' ? fontHist : col === 'center' ? fontCenter : col === 'question' ? fontQuestion : fontRight;
     const ids = PANEL_FONT_WEIGHTS.map(f => f.id);
     const idx = ids.indexOf(cur);
     const next = idx === ids.length - 1 ? '' : (ids[idx + 1] ?? '');
@@ -762,6 +763,7 @@
     if (col === 'left') fontLeft = next;
     else if (col === 'hist') fontHist = next;
     else if (col === 'center') fontCenter = next;
+    else if (col === 'question') fontQuestion = next;
     else fontRight = next;
   }
   function panelFontLabel(id: string): string {
@@ -895,11 +897,38 @@
     return () => { clearTimeout(timeout); clearInterval(interval); };
   });
 
-  // Font size
+  // Content font size (scales suggestion/transcript text)
   let fontSize = $state(Number(localStorage.getItem(SK.fontSize) ?? 14));
   $effect(() => {
     document.documentElement.style.setProperty('--font-size', `${fontSize}px`);
     localStorage.setItem(SK.fontSize, String(fontSize));
+  });
+
+  // UI font size (scales chrome: labels, buttons, headers — via --fs-* variables)
+  let uiFontSize = $state(Number(localStorage.getItem(SK.uiFontSize) ?? 10));
+  $effect(() => {
+    document.documentElement.style.setProperty('--ui-font-size', `${uiFontSize}px`);
+    localStorage.setItem(SK.uiFontSize, String(uiFontSize));
+  });
+
+  // UI font family (separate from content font)
+  let uiFont = $state(localStorage.getItem('ui-font') ?? '');
+  $effect(() => {
+    if (uiFont) {
+      const entry = PANEL_FONT_WEIGHTS.find(f => f.id === uiFont);
+      if (entry) {
+        const cssName = VARIABLE_FONT_NAMES[entry.font] ?? entry.font;
+        const stack = cssName === 'system-ui'
+          ? 'system-ui, -apple-system, sans-serif'
+          : `'${cssName}', system-ui, sans-serif`;
+        document.documentElement.style.setProperty('--ff-ui', stack);
+        document.documentElement.style.setProperty('--fw-ui', String(entry.weight));
+      }
+    } else {
+      document.documentElement.style.removeProperty('--ff-ui');
+      document.documentElement.style.removeProperty('--fw-ui');
+    }
+    localStorage.setItem('ui-font', uiFont);
   });
 
   // Stats
@@ -1100,6 +1129,24 @@
   let loadingPredict = $state(false);
 
   let loadingCompanyBrief = $state(false);
+  let loadingKeywords = $state(false);
+
+  async function fetchKeywords() {
+    if (loadingKeywords) return;
+    loadingKeywords = true;
+    try {
+      const resp = await fetch('/api/enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jd_text: localStorage.getItem('setup-jd') ?? '' }),
+      });
+      if (resp.ok) {
+        const d = await resp.json();
+        if (d.jd_keywords?.length) { jdKeywords = d.jd_keywords; mentionedKeywords = new Set(); interviewerRaisedKeywords = new Set(); }
+      }
+    } catch { /* ignore */ }
+    loadingKeywords = false;
+  }
 
   async function fetchBackgroundSetup() {
     // Pre-warm salary tactics so they're ready before the question comes up
@@ -1426,7 +1473,7 @@
           if (isFirst) { currentQuestionIdx = newIdx; jumpSignal = { idx: newIdx, key: Date.now() }; }
           const qTag = tagQuestion(q);
           const isSalary = isFirst && qTag === 'salary';
-          const isClosingQ = isFirst && qTag === 'closing';
+          const isClosingQ = isFirst && qTag === 'candidate_questions';
           const isCompound = isFirst && !!secondaryTag && qTag !== 'fit';
           suggestions = [...suggestions, {
             question: q,
@@ -1643,7 +1690,7 @@
           break;
         case '+': case '=': adjustZoom('all', +10); break;
         case '-': case '_': adjustZoom('all', -10); break;
-        case 't': case 'T': if (!showVoiceMenu) ttsEnabled = !ttsEnabled; break;
+        case 'v': case 'V': if (!showVoiceMenu) ttsEnabled = !ttsEnabled; break;
         case 'w': case 'W': showWhisper = !showWhisper; break;
         case '1': cueExpandSignal = { cueIdx: 0, key: Date.now() }; break;
         case '2': cueExpandSignal = { cueIdx: 1, key: Date.now() }; break;
@@ -1776,8 +1823,8 @@
         <h1>AI Interview Assistant</h1>
         <p>Real-time AI coaching during your job interview</p>
         <div class="setup-font-row">
-          <label class="setup-font-label">Font</label>
-          <select class="font-select" bind:value={appFont} title="App font">
+          <label class="setup-font-label">Content</label>
+          <select class="font-select" bind:value={appFont} title="Content font (suggestion text, transcript)">
             {#each PANEL_FONT_WEIGHTS as f}
               <option value={f.id}>{f.label}</option>
             {/each}
@@ -1815,7 +1862,7 @@
     <div class="interview-layout" class:capturing>
       <header class="interview-header">
         <div class="header-title-row">
-          <button class="header-back-btn" onclick={() => { phase = 'setup'; eventWs?.disconnect(); wsStatus = 'disconnected'; }} title="Back to overview">← Overview</button>
+          <button class="header-back-btn" onclick={() => { phase = 'setup'; eventWs?.disconnect(); wsStatus = 'disconnected'; }} title="Back to setup">← Setup</button>
           <h1>AI Interview Assistant</h1>
           <span class="ws-header-dot"
             class:ws-connected={wsStatus === 'connected'}
@@ -1824,7 +1871,7 @@
           >{wsStatus === 'connected' ? '●' : wsStatus === 'reconnecting' ? `↻ ${wsAttempt}` : '○'}</span>
         </div>
         <div class="header-right">
-          <div class="shortcuts-hint">F: focus · W: whisper · T: voice · 1/2/3: expand cue · Esc: clear · +/−: font</div>
+          <div class="shortcuts-hint">F: focus · W: whisper · V: voice</div>
 
           <!-- TTS controls -->
           <div class="tts-controls">
@@ -1897,11 +1944,25 @@
                 {/if}
               </div>
             {/if}
-            <select class="font-select" bind:value={appFont} title="App font">
+            <select class="font-select" bind:value={appFont} title="Content font (suggestion text, transcript)">
               {#each PANEL_FONT_WEIGHTS as f}
                 <option value={f.id}>{f.label}</option>
               {/each}
             </select>
+          </div>
+
+          <!-- UI font controls -->
+          <div class="ui-font-controls">
+            <span class="ui-font-label">Panels</span>
+            <select class="font-select" bind:value={uiFont} title="Panel title font (Transcript, AI Suggestions, etc.)">
+              <option value="">Same as content</option>
+              {#each PANEL_FONT_WEIGHTS as f}
+                <option value={f.id}>{f.label}</option>
+              {/each}
+            </select>
+            <button class="zoom-btn" onclick={() => uiFontSize = Math.max(10, uiFontSize - 1)} title="Decrease UI font size">−</button>
+            <span class="ui-size-val">{uiFontSize}</span>
+            <button class="zoom-btn" onclick={() => uiFontSize = Math.min(22, uiFontSize + 1)} title="Increase UI font size">+</button>
           </div>
 
           <div class="layout-menu-wrap">
@@ -2124,12 +2185,13 @@
               {/if}
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div class="col-header col-drag-handle" draggable={true} ondragstart={(e) => onColDragStart('center', e)} style="padding-top: 0.35rem;">
-                <span class="col-label">{collapsedCols.has('center') ? '…' : 'AI Suggestions'}</span>
+                <span class="col-label">{collapsedCols.has('center') ? '…' : 'Say'}</span>
                 {#if !collapsedCols.has('center')}
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('center', -10)} title="Decrease font size">A−</button>
                     <button class="zoom-btn" onclick={() => adjustZoom('center', +10)} title="Increase font size">A+</button>
                     <button class="zoom-btn" onclick={() => cyclePanelFont('center')} title={fontCenter ? panelFontLabel(fontCenter) : 'Font: global'} class:zoom-btn-active={!!fontCenter}>Ff</button>
+                    <button class="zoom-btn" onclick={() => cyclePanelFont('question')} title={fontQuestion ? `Q: ${panelFontLabel(fontQuestion)}` : 'Question font: global'} class:zoom-btn-active={!!fontQuestion}>Qq</button>
                     <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('center')} title="Collapse">▾</button>
                   </div>
                 {:else}
@@ -2139,7 +2201,7 @@
               {#if !collapsedCols.has('center')}
                 <div class="col-body col-split-body" bind:this={centerColBodyEl}>
                   <div class="col-body-scroll" style="zoom: {centerZoom/100}; padding: 0.25rem 0.5rem 0.5rem; {panelFontStyle(fontCenter)}">
-                    <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} lockOnNew={true} {jumpSignal} {cueExpandSignal} onPinnedChange={(p) => (suggestionPinned = p)} {onClosingSectionOpen} {salaryTactics} {capturing} />
+                    <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} lockOnNew={true} {jumpSignal} {cueExpandSignal} onPinnedChange={(p) => (suggestionPinned = p)} {onClosingSectionOpen} {salaryTactics} {capturing} questionFontStyle={panelFontStyle(fontQuestion)} />
                   </div>
                 </div>
               {/if}
@@ -2186,7 +2248,7 @@
                   </div>
                 {/if}
                 <div class="col-header col-drag-handle" draggable={true} ondragstart={(e) => onColDragStart('right', e)}>
-                  <span class="col-label">Interviewer</span>
+                  <span class="col-label">Coaching</span>
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('rightTop', -10)} title="Decrease font size">A−</button>
                     <button class="zoom-btn" onclick={() => adjustZoom('rightTop', +10)} title="Increase font size">A+</button>
@@ -2267,7 +2329,7 @@
             {@const prevRole = i > 0 ? (SECTION_ROLE[panelSections[i-1].id] ?? 'coaching') : null}
             {#if prevRole !== myRole && !(prevRole === null && myRole === 'coaching')}
               <div class="group-divider group-divider-{myRole}">
-                {myRole === 'interviewer' ? '👤 Interviewer' : myRole === 'you' ? '✅ Your Performance' : 'Resources'}
+                {myRole === 'interviewer' ? '👤 Interviewer' : myRole === 'you' ? 'Your Performance' : 'Resources'}
               </div>
             {/if}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -2396,16 +2458,9 @@
                 {:else if sid === 'salary-coach'}
                   <!-- salary tactics now shown inline in SuggestionPanel -->
                 {:else if sid === 'keywords'}
-                  {#if jdKeywords.length > 0}
-                    <div class="side-section">
-                      <div class="side-section-label">Keywords</div>
-                      <KeywordTrackerPanel keywords={jdKeywords} mentionedSet={mentionedKeywords} flashSet={flashingKeywords} interviewerRaisedSet={interviewerRaisedKeywords} />
-                    </div>
-                  {/if}
+                  <KeywordTrackerPanel keywords={jdKeywords} mentionedSet={mentionedKeywords} flashSet={flashingKeywords} interviewerRaisedSet={interviewerRaisedKeywords} onLoad={fetchKeywords} loading={loadingKeywords} />
                 {:else if sid === 'company-brief'}
-                  {#if companyBrief}
-                    <CompanyBriefPanel brief={companyBrief} companyName={localStorage.getItem('setup-company-name') ?? ''} onLoad={fetchCompanyBrief} loading={loadingCompanyBrief} />
-                  {/if}
+                  <CompanyBriefPanel brief={companyBrief} companyName={localStorage.getItem('setup-company-name') ?? ''} onLoad={fetchCompanyBrief} loading={loadingCompanyBrief} />
                 {:else if sid === 'interviewer-profiles'}
                   <InterviewerProfilePanel interviewers={interviewerSummaries} onLoad={fetchInterviewerSummaries} onReload={() => { interviewerSummaries = buildInterviewerStubs(); loadingProfileIndices = []; void fetchInterviewerSummaries(); }} loading={loadingSummaries} onLoadProfile={fetchInterviewerSummaryByIndex} loadingProfileIndices={loadingProfileIndices} />
                 {:else if sid === 'stats'}
@@ -2448,10 +2503,12 @@
                       </div>
                     {/if}
                     <div class="side-stat side-stat-pace" title="Your speaking pace in words per minute">
+                      <span class="side-label">Pace</span>
                       <EnergyCoachPanel
                         wpm={paceReading.wordsPerMinute}
                         status={paceReading.status}
                         tip={paceReading.tip}
+                        hideLabel
                       />
                     </div>
                   </div>
@@ -2586,7 +2643,7 @@
             </div>
           </div>
           <div class="keywords-bar-content" style="zoom: {kwZoom/100}">
-            <KeywordTrackerPanel keywords={jdKeywords} mentionedSet={mentionedKeywords} flashSet={flashingKeywords} interviewerRaisedSet={interviewerRaisedKeywords} {keywordQuestionMap} horizontal={true} popupBottom={kwBarH + 8} />
+            <KeywordTrackerPanel keywords={jdKeywords} mentionedSet={mentionedKeywords} flashSet={flashingKeywords} interviewerRaisedSet={interviewerRaisedKeywords} {keywordQuestionMap} horizontal={true} popupBottom={kwBarH + 8} onLoad={fetchKeywords} loading={loadingKeywords} />
           </div>
         </div>
       {/if}
@@ -2664,6 +2721,7 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="focus-drag-bar" onmousedown={onFocusMoveDown}>
             <span class="focus-drag-dots">⠿</span>
+            <span class="focus-nav-hint">↑↓ prev/next · ← back · → latest</span>
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div class="focus-fs-btns" onmousedown={(e) => e.stopPropagation()}>
               <button class="focus-fs-btn" onclick={() => focusFsAdj(-10)}>−</button>
@@ -2678,7 +2736,7 @@
             </div>
           </div>
           <div class="focus-panel-wrap" style="zoom:{focusCardFs/100}">
-            <SuggestionPanel {suggestions} onClear={() => {}} teleprompter={true} lockOnNew={true} {jumpSignal} {onClosingSectionOpen} {salaryTactics} {capturing} />
+            <SuggestionPanel {suggestions} onClear={() => {}} teleprompter={true} lockOnNew={true} {jumpSignal} {onClosingSectionOpen} {salaryTactics} {capturing} questionFontStyle={panelFontStyle(fontQuestion)} />
           </div>
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="focus-resize-handle" onmousedown={onFocusResizeDown}></div>
@@ -2975,11 +3033,10 @@
   .header-back-btn:hover { color: #93c5fd; }
   .interview-header h1 {
     font-size: var(--fs-lg); font-weight: 700;
-    background: linear-gradient(135deg, #60a5fa, #a78bfa);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    color: #64748b;
   }
   .header-right { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
-  .shortcuts-hint { font-size: var(--fs-sm); color: #334155; white-space: nowrap; }
+  .shortcuts-hint { font-size: var(--fs-sm); color: #475569; white-space: nowrap; }
   .history-btn {
     padding: 0.3rem 0.8rem; background: transparent;
     border: 1px solid #334155; border-radius: 0.375rem;
@@ -3074,6 +3131,12 @@
     border-radius: 0.2rem; margin: 0.1rem 0.5rem;
   }
 
+  /* UI font controls — use fixed px so the picker itself doesn't reflow when --ui-font-size changes */
+  .ui-font-controls { display: flex; align-items: center; gap: 0.25rem; flex-shrink: 0; font-size: 10px; }
+  .ui-font-label { font-size: 10px; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; flex-shrink: 0; }
+  .ui-size-val { font-size: 10px; color: #64748b; min-width: 1.4rem; text-align: center; font-variant-numeric: tabular-nums; }
+  .ui-font-controls .zoom-btn { font-size: 10px !important; padding: 0.05rem 0.3rem !important; }
+
   /* TTS */
   .tts-controls { position: relative; display: flex; align-items: center; gap: 0.25rem; }
   .tts-btn {
@@ -3161,18 +3224,20 @@
   .voice-test-inline-btn:hover { background: #1e3a5f; border-color: #3b82f6; }
 
   .error-banner {
-    display: flex; align-items: flex-start; gap: 0.75rem;
-    padding: 0.5rem 1rem; background: #450a0a; color: #fca5a5; font-size: var(--fs-base); flex-shrink: 0;
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.3rem 1rem; background: #450a0a; color: #fca5a5; font-size: var(--fs-sm); flex-shrink: 0;
   }
-  .error-list { flex: 1; max-height: 6rem; overflow-y: auto; }
-  .error-actions { flex-shrink: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+  .error-list { flex: 1; max-height: 4rem; overflow-y: auto; }
+  .error-actions { flex-shrink: 0; display: flex; flex-direction: row; gap: 0.25rem; }
   .error-btn {
-    padding: 0.15rem 0.5rem; background: transparent;
+    padding: 0.1rem 0.4rem; background: transparent;
     border: 1px solid #7f1d1d; border-radius: 0.25rem;
-    color: #fca5a5; font-size: var(--fs-sm); cursor: pointer;
+    color: #fca5a5; font-size: var(--fs-sm); cursor: pointer; white-space: nowrap;
   }
   .error-btn:hover { background: #7f1d1d; }
   .status-banner { padding: 0.2rem 1rem; background: #1e3a5f; color: #93c5fd; font-size: var(--fs-base); flex-shrink: 0; }
+
+  /* UI font/size — applied via the original .col-label rule below */
 
   /* Header title + WS dot */
   .header-title-row { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
@@ -3296,6 +3361,13 @@
     justify-content: space-between;
     padding: 0.35rem 0.75rem 0;
     flex-shrink: 0;
+    position: relative;
+  }
+  .col-header .col-label {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
   }
   .col-drag-handle {
     cursor: grab;
@@ -3339,7 +3411,7 @@
   .section-wrapper.drop-above { border-top: 2px solid #3b82f6; }
   .section-wrapper.drop-below { border-bottom: 2px solid #3b82f6; }
   .section-wrapper.section-interviewer { border-left: 3px solid rgba(239, 68, 68, 0.35); }
-  .section-wrapper.section-you { border-left: 3px solid rgba(245, 158, 11, 0.3); }
+  .section-wrapper.section-you { border-left: 3px solid rgba(71, 85, 105, 0.4); }
 
   .section-role-badge {
     position: absolute;
@@ -3353,7 +3425,7 @@
     pointer-events: none;
   }
   .role-interviewer { color: #ef4444; }
-  .role-you { color: #f59e0b; }
+  .role-you { color: #475569; }
 
   .group-divider {
     font-size: var(--fs-xs);
@@ -3366,7 +3438,7 @@
   }
   .group-divider:first-child { border-top: none; margin-top: 0; padding-top: 0.15rem; }
   .group-divider-interviewer { color: rgba(239, 68, 68, 0.6); }
-  .group-divider-you { color: rgba(245, 158, 11, 0.6); }
+  .group-divider-you { color: #475569; }
   .group-divider-coaching { color: #334155; }
 
   /* Collapsed section bar */
@@ -3393,10 +3465,12 @@
   .section-expand-btn:hover { color: #94a3b8; }
 
   .col-label {
-    font-size: var(--fs-xs);
-    font-weight: 700;
+    font-size: var(--ui-font-size, 0.62rem);
+    font-family: var(--ff-ui, var(--ff-base));
+    font-weight: var(--fw-ui, 700);
     color: #334155;
     text-transform: uppercase;
+    text-align: center;
     letter-spacing: 0.1em;
     display: flex;
     align-items: center;
@@ -3558,12 +3632,13 @@
   /* Keywords bar meta */
   .keywords-bar-meta {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    gap: 0.15rem;
+    gap: 0.3rem;
     flex-shrink: 0;
   }
-  .kw-zoom-btns { flex-direction: column; gap: 0.1rem; opacity: 1 !important; }
+  .kw-zoom-btns { flex-direction: row; gap: 0.15rem; opacity: 0; transition: opacity 0.15s; pointer-events: none; }
+  .keywords-bar-meta:hover .kw-zoom-btns { opacity: 1; pointer-events: auto; }
 
   .col-left { background: #080d18; }
   .col-left .col-body { opacity: 0.75; }
@@ -3911,6 +3986,8 @@
   }
   .side-label { font-size: var(--fs-xs); color: #475569; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
   .side-value { font-size: var(--fs-sm); font-weight: 700; font-variant-numeric: tabular-nums; color: #475569; }
+  .side-stat-pace { align-items: center; }
+  .side-stat-pace :global(.energy-panel) { width: 3.5rem; flex-shrink: 0; padding: 0; }
 
   .filler-block {
     display: flex; flex-direction: column; gap: 0.2rem;
@@ -3984,6 +4061,7 @@
   }
   .focus-drag-bar:active { cursor: grabbing; }
   .focus-drag-dots { color: #1e3a5f; font-size: 1.1rem; letter-spacing: 0.15em; user-select: none; }
+  .focus-nav-hint { font-size: var(--fs-xs); color: #1e3a5f; letter-spacing: 0.04em; user-select: none; pointer-events: none; }
   .focus-fs-btns { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
   .focus-font-select {
     background: #07101e; color: #475569; border: 1px solid #1e3a5f;

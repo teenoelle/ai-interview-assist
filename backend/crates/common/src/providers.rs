@@ -52,6 +52,20 @@ pub fn is_rate_limit(err: &anyhow::Error) -> bool {
         || msg.contains("Too Many Requests")
 }
 
+/// Returns true for transient server-side errors (5xx) that warrant
+/// falling through to the next provider rather than hard-failing.
+pub fn is_server_error(err: &anyhow::Error) -> bool {
+    let msg = err.to_string();
+    msg.contains("503")
+        || msg.contains("502")
+        || msg.contains("500")
+        || msg.contains("Service Unavailable")
+        || msg.contains("Bad Gateway")
+        || msg.contains("upstream connect error")
+        || msg.contains("overflow")
+        || msg.contains("Internal Server Error")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

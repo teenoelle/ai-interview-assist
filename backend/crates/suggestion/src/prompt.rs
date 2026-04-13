@@ -101,6 +101,31 @@ const CLOSING_TRIGGERS: &[&str] = &[
     "is there anything you'd like to ask",
 ];
 
+const WRAP_UP_TRIGGERS: &[&str] = &[
+    "we'll be in touch",
+    "we will be in touch",
+    "we'll get back to you",
+    "we will get back to you",
+    "we'll reach out",
+    "we will reach out",
+    "we'll let you know",
+    "we will let you know",
+    "interviewing other candidates",
+    "other candidates",
+    "making a decision",
+    "have a decision by",
+    "thanks for coming in",
+    "thank you for coming in",
+    "thank you for your time today",
+    "that's all the questions",
+    "that's all my questions",
+    "all the questions i have",
+    "wraps up our",
+    "wrapping up",
+    "before we let you go",
+    "before i let you go",
+];
+
 const STRENGTHS_TRIGGERS: &[&str] = &[
     "what are your strengths",
     "what is your greatest strength",
@@ -300,6 +325,7 @@ pub enum QuestionType {
     Fit,
     Future,
     Closing,
+    WrapUp,
     Strengths,
     Weaknesses,
     Behavioral,
@@ -324,6 +350,7 @@ pub fn classify_question(question: &str) -> (QuestionType, Option<QuestionType>)
         (score_triggers(MOTIVATION_TRIGGERS,   &q), QuestionType::Motivation),
         (score_triggers(FUTURE_TRIGGERS,       &q), QuestionType::Future),
         (score_triggers(CLOSING_TRIGGERS,      &q), QuestionType::Closing),
+        (score_triggers(WRAP_UP_TRIGGERS,      &q), QuestionType::WrapUp),
         (score_triggers(STRENGTHS_TRIGGERS,    &q), QuestionType::Strengths),
         (score_triggers(WEAKNESSES_TRIGGERS,   &q), QuestionType::Weaknesses),
         (score_triggers(BEHAVIORAL_TRIGGERS,   &q), QuestionType::Behavioral),
@@ -373,6 +400,7 @@ fn question_type_topic(qt: QuestionType) -> &'static str {
         QuestionType::Fit          => "why you are applying at this level or channel — a deliberate trade-off",
         QuestionType::Future       => "your career direction and goals",
         QuestionType::Closing      => "questions you have for the interviewer",
+        QuestionType::WrapUp       => "a closing statement reiterating your fit and enthusiasm",
         QuestionType::Strengths    => "your key strengths",
         QuestionType::Weaknesses   => "an area you are actively developing",
         QuestionType::Behavioral   => "a specific past behavioral example",
@@ -392,7 +420,8 @@ pub fn question_type_to_tag(qt: QuestionType) -> &'static str {
         QuestionType::Motivation   => "motivation",
         QuestionType::Fit          => "fit",
         QuestionType::Future       => "future",
-        QuestionType::Closing      => "closing",
+        QuestionType::Closing      => "candidate_questions",
+        QuestionType::WrapUp       => "wrap_up",
         QuestionType::Strengths    => "strengths",
         QuestionType::Weaknesses   => "weaknesses",
         QuestionType::Behavioral   => "behavioral",
@@ -417,12 +446,12 @@ pub fn build_user_prompt(question: &str, transcript: &[TranscriptSegment]) -> St
     let (qtype, _) = classify_question(question);
     tracing::info!("Question type: {:?} — {:?}", qtype, question);
     let ctx_prefix = make_ctx_prefix(transcript);
-    dispatch_prompt(&ctx_prefix, question, qtype)
+    dispatch_prompt(&ctx_prefix, question, qtype, transcript)
 }
 
 pub fn build_user_prompt_for_type(question: &str, transcript: &[TranscriptSegment], qtype: QuestionType) -> String {
     let ctx_prefix = make_ctx_prefix(transcript);
-    dispatch_prompt(&ctx_prefix, question, qtype)
+    dispatch_prompt(&ctx_prefix, question, qtype, transcript)
 }
 
 /// Returns a pre-written small-talk response — no LLM call needed.
@@ -443,7 +472,7 @@ pub fn build_compound_user_prompt(question: &str, transcript: &[TranscriptSegmen
     build_compound_prompt(&ctx_prefix, question, primary, secondary)
 }
 
-fn dispatch_prompt(ctx_prefix: &str, question: &str, qtype: QuestionType) -> String {
+fn dispatch_prompt(ctx_prefix: &str, question: &str, qtype: QuestionType, transcript: &[TranscriptSegment]) -> String {
     match qtype {
         QuestionType::Smalltalk    => build_competency_prompt(ctx_prefix, question), // fallback; normally short-circuited before LLM
         QuestionType::Introduction => build_introduction_prompt(ctx_prefix, question),
@@ -451,6 +480,7 @@ fn dispatch_prompt(ctx_prefix: &str, question: &str, qtype: QuestionType) -> Str
         QuestionType::Fit          => build_fit_prompt(ctx_prefix, question),
         QuestionType::Future       => build_future_prompt(ctx_prefix, question),
         QuestionType::Closing      => build_closing_hm_prompt(ctx_prefix, question),
+        QuestionType::WrapUp       => build_wrap_up_prompt(ctx_prefix, question, transcript),
         QuestionType::Strengths    => build_strengths_prompt(ctx_prefix, question),
         QuestionType::Weaknesses   => build_weaknesses_prompt(ctx_prefix, question),
         QuestionType::Behavioral   => build_behavioral_prompt(ctx_prefix, question),
@@ -531,7 +561,7 @@ fn build_fit_prompt(ctx_prefix: &str, question: &str) -> String {
         "{}The interviewer asked a level/fit challenge question: '{}'\n\n\
 CRITICAL: This is a FIT/TRADE-OFF question — the interviewer is questioning why the candidate is applying at this level or in this channel. \
 Output ONLY the labeled lines below. Never be defensive.\n\
-DO NOT output Company:, Motivation:, Role:, Trade:, Value:, or Answer: — those labels do not exist here.\n\n\
+DO NOT output Overqualified:, Company:, Motivation:, Role:, Trade:, Value:, or Answer: — those labels do not exist here. Start directly with Acknowledge:.\n\n\
 Acknowledge: <1 sentence. Briefly confirm ONLY the level or seniority observation the interviewer made. Do NOT name any skills, channels, tools, or experience gaps here — those belong in Gap. Just confirm the premise calmly. Starts with 'That\\'s right', 'You\\'re right', or 'Fair observation'. Max 12 words. Example for 'why a more entry-level position': 'You\\'re right — my background is at a more senior level.'>\n\
 Reframe: <1-2 sentences. Flip the premise — name the level or channel difference as a deliberate choice, not a retreat. Starts with 'I'. Tone: matter-of-fact. Max 10 words each.>\n\
 Transition1: <1 sentence bridging Reframe to Gap. Starts with 'Specifically,' or 'The area I am building toward is' or 'What the JD asks for that I am actively developing is'. Max 12 words.>\n\
@@ -545,7 +575,7 @@ Close: <One sentence. Connects the whole framing to the employer's specific chal
 Ask: <2-4 word noun phrase> | <Question> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
 Ask: <2-4 word noun phrase> | <Question> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
 Rules:\n\
-- Output ONLY: Acknowledge:, Reframe:, Transition1:, Gap:, Transition2:, Choice:, Transition3:, Bring:, Close:, then two Ask: lines. No other labels. No preamble.\n\
+- Output ONLY: Acknowledge:, Reframe:, Transition1:, Gap:, Transition2:, Choice:, Transition3:, Bring:, Close:, then two Ask: lines. No other labels. No preamble. NEVER output 'Overqualified:' — start directly with Acknowledge:.\n\
 - Acknowledge confirms ONLY the level/seniority observation — no skills, channels, tools, or JD specifics. Those belong in Gap. One calm factual sentence.\n\
 - Acknowledge must not repeat what Reframe says — it only confirms the observation. Reframe does the pivoting.\n\
 - CRITICAL — Gap must identify a SPECIFIC skill, channel, or domain from the JD (system prompt) where the candidate's background is absent or materially thinner. Name it by its actual domain (e.g. 'paid social', 'programmatic buying', 'SEO') — never 'a new area' or 'further experience'.\n\
@@ -591,6 +621,47 @@ Rules:\n\
 - Ask topics: 2-4 word noun phrases naming the specific thing being asked about. Must directly relate to what the interviewer asked — not generic role questions. If the recent conversation includes specific words or concerns the interviewer mentioned, prioritise those for Ask topics.\n\
 - No adjectives or adverbs. No 'passionate', 'excited', 'dedicated', 'driven'. Facts and direction only.",
         ctx_prefix, question
+    )
+}
+
+fn make_wrap_up_context(transcript: &[TranscriptSegment]) -> String {
+    // Skip the last 4 segments (the farewell exchange itself), then take up to 30
+    // substantive segments — filtering out very short filler responses (< 6 words).
+    let skip_tail = 4usize;
+    let end = transcript.len().saturating_sub(skip_tail);
+    let substantive: Vec<&TranscriptSegment> = transcript[..end]
+        .iter()
+        .filter(|s| s.text.split_whitespace().count() >= 6)
+        .collect();
+    let take = substantive.len().min(30);
+    let relevant = &substantive[substantive.len().saturating_sub(take)..];
+    if relevant.is_empty() { return String::new(); }
+    let formatted = relevant.iter()
+        .map(|s| format!("{}: {}", s.speaker, s.text))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!("Interview conversation (most recent exchanges):\n{}\n\n", formatted)
+}
+
+pub fn build_wrap_up_prompt(ctx_prefix: &str, question: &str, transcript: &[TranscriptSegment]) -> String {
+    let interview_ctx = make_wrap_up_context(transcript);
+    format!(
+        "{}{}The interviewer has signalled the interview is ending: '{}'
+
+Output ONLY the four labeled lines below, in order. No preamble, no commentary, no extra lines.
+
+---
+Thanks: <One complete spoken sentence. Warm, genuine, not effusive. Must start with 'Thank you' or 'It's been' or 'I really enjoyed'. Max 12 words.>
+Reiterate: <One complete spoken sentence. Must start with 'My' or 'With my' or 'I bring'. Name the candidate's single most relevant concrete qualification and connect it to the employer's specific challenge. No vague claims like 'my experience' or 'my background'. Max 20 words.>
+Echo: <One complete spoken sentence. Must start with 'I especially enjoyed' or 'The conversation about' or 'I appreciated'. Reference a specific topic, question, or moment from the interview. If no context is available, name a concrete aspect of the role. Max 20 words.>
+Forward: <One complete spoken sentence. Must start with 'I look forward to' or 'I'm excited to hear' or 'I'd love to'. Express genuine anticipation for next steps or contributing. Never uses 'this opportunity'. Max 15 words.>
+
+Rules:
+- Every line must be a grammatically complete sentence a person would naturally say aloud.
+- Reiterate must name a real, specific qualification — not 'my experience' or 'my background'.
+- Echo must reference something specific from the conversation or role.
+- Total spoken time: under 30 seconds.",
+        ctx_prefix, interview_ctx, question
     )
 }
 

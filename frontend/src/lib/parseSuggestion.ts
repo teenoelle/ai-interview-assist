@@ -37,6 +37,11 @@ export interface ParsedSuggestion {
   transition1: string;
   transition2: string;
   transition3: string;
+  // Wrap-up / closing statement beats
+  thanks: string;       // Thanks: opener
+  reiterate: string;    // Reiterate: qualification fit
+  echo_moment: string;  // Echo: callback to interview moment
+  forward_lean: string; // Forward: forward lean
 }
 
 export function parseSuggestion(text: string | null | undefined, streaming = false): ParsedSuggestion {
@@ -48,6 +53,7 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
   let reframe = '', gap = '', choice = '', bring = '', trade = '', value = '';
   let direction = '', alignment = '', contribution = '';
   let transition1 = '', transition2 = '', transition3 = '';
+  let thanks = '', reiterate = '', echo_moment = '', forward_lean = '';
   const asks: { topic: string; question: string; followUp?: string; section?: string }[] = [];
   const bodyLines: string[] = [];
   let pendingAskTopic = '';
@@ -57,7 +63,7 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
   // Strip markdown bold markers e.g. **Affirm:** → Affirm:
   const clean = (s: string) => s.replace(/^\*+([^*]+)\*+\s*/, '$1 ').trim();
   const isCueLabel = (s: string) =>
-    /^(Principle|Context|Action|Result|Point|Metric|General|Example|Story|Pivot|Acknowledge|Affirm|Impact|Solve|Bridge|Close|Answer|Say|Tell|Ask|Present|Summary|Thread|Past|Story|Future|Next|Company|Role|Self|Reframe|Gap|Choice|Bring|Trade|Value|Direction|Alignment|Contribution|Transition1|Transition2|Transition3|Section):/i.test(s);
+    /^(Principle|Context|Action|Result|Point|Metric|General|Example|Story|Pivot|Acknowledge|Affirm|Impact|Solve|Bridge|Close|Answer|Say|Tell|Ask|Present|Summary|Thread|Past|Story|Future|Next|Company|Role|Self|Reframe|Gap|Choice|Bring|Trade|Value|Direction|Alignment|Contribution|Transition1|Transition2|Transition3|Section|Thanks|Reiterate|Echo|Forward):/i.test(s);
 
   for (const line of lines) {
     const t = line.trim();
@@ -89,6 +95,10 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
         else if (field === 'transition1') transition1 = val;
         else if (field === 'transition2') transition2 = val;
         else if (field === 'transition3') transition3 = val;
+        else if (field === 'thanks') thanks = val;
+        else if (field === 'reiterate') reiterate = val;
+        else if (field === 'echo_moment') echo_moment = val;
+        else if (field === 'forward_lean') forward_lean = val;
       }
     };
 
@@ -153,6 +163,14 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
       setNF('transition2', c.replace(/^Transition2:\s*/i, '').trim());
     } else if (c.match(/^Transition3:/i)) {
       setNF('transition3', c.replace(/^Transition3:\s*/i, '').trim());
+    } else if (c.match(/^Thanks:/i)) {
+      setNF('thanks', c.replace(/^Thanks:\s*/i, '').trim());
+    } else if (c.match(/^Reiterate:/i)) {
+      setNF('reiterate', c.replace(/^Reiterate:\s*/i, '').trim());
+    } else if (c.match(/^Echo:/i)) {
+      setNF('echo_moment', c.replace(/^Echo:\s*/i, '').trim());
+    } else if (c.match(/^Forward:/i)) {
+      setNF('forward_lean', c.replace(/^Forward:\s*/i, '').trim());
     } else if (c.match(/^(Answer|Say|Tell):/i)) {
       pendingNewField = null;
       cue = 'Answer';
@@ -209,6 +227,10 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
       else if (f === 'transition1') transition1 = transition1 ? transition1 + ' ' + t : t;
       else if (f === 'transition2') transition2 = transition2 ? transition2 + ' ' + t : t;
       else if (f === 'transition3') transition3 = transition3 ? transition3 + ' ' + t : t;
+      else if (f === 'thanks') thanks = thanks ? thanks + ' ' + t : t;
+      else if (f === 'reiterate') reiterate = reiterate ? reiterate + ' ' + t : t;
+      else if (f === 'echo_moment') echo_moment = echo_moment ? echo_moment + ' ' + t : t;
+      else if (f === 'forward_lean') forward_lean = forward_lean ? forward_lean + ' ' + t : t;
     } else if (pendingTell && t && !isCueLabel(c)) {
       // Capture answer text that was on its own line after Answer:
       tell = tell ? tell + ' ' + t : t;
@@ -252,8 +274,9 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
   }
 
   if (!tell && text && asks.length === 0 && !present && !company && !direction) {
-    const first = text.replace(/^(Acknowledge:|Answer:|Say:)[^\n]*/im, '').trim().split(/[.\n]/)[0]?.trim() ?? '';
-    tell = first.length > 80 ? first.slice(0, 80) + '…' : first;
+    // If there's no structure at all, show the full text rather than truncating at 80 chars
+    const cleaned = text.replace(/^(Acknowledge:|Answer:|Say:)[^\n]*/im, '').trim();
+    tell = cleaned;
   }
 
   // Transition phrases the LLM sometimes bleeds into keyword labels — strip and move to text
@@ -313,6 +336,7 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
     trade: sc(trade), value: sc(value),
     direction: sc(direction), alignment: sc(alignment), contribution: sc(contribution),
     transition1: sc(transition1), transition2: sc(transition2), transition3: sc(transition3),
+    thanks: sc(thanks), reiterate: sc(reiterate), echo_moment: sc(echo_moment), forward_lean: sc(forward_lean),
   };
 }
 
@@ -370,7 +394,9 @@ export function getAnswerType(
   if (tag === 'culture')     return { framework: 'A: Style',     label: 'Context → Style → Example → Impact' };
   if (tag === 'character')   return { framework: 'A: Trait',     label: 'Acknowledge → Trait → Context → Relevance' };
   if (tag === 'values')      return { framework: 'A: Align',     label: 'Context → Preferences → Bridge → Connect' };
-  if (tag === 'closing')     return { framework: 'A: Engage',    label: 'Questions to Ask' };
+  if (tag === 'candidate_questions') return { framework: 'A: Engage',  label: 'Questions to Ask' };
+  if (tag === 'wrap_up' || parsed.thanks || parsed.reiterate || parsed.echo_moment || parsed.forward_lean)
+    return { framework: 'A: Close', label: 'Thanks · Fit · Echo · Forward' };
 
   if (parsed.present || parsed.thread || parsed.past || parsed.future)
     return { framework: 'A: Career Arc', label: 'Summary → Story → Next' };

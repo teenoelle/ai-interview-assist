@@ -12,9 +12,9 @@ pub async fn stream_suggestions(
 ) -> Result<()> {
     stream_openai_compat(
         api_key,
-        "https://api.mistral.ai/v1/chat/completions",
-        "mistral-large-latest",
-        "Mistral",
+        "https://api.deepseek.com/v1/chat/completions",
+        "deepseek-chat",
+        "DeepSeek",
         system_prompt,
         user_prompt,
         mode,

@@ -46,7 +46,7 @@ impl RingBuffer {
 
         if energy > self.peak_energy { self.peak_energy = energy; }
 
-        if energy > 200.0 {
+        if energy > 5.0 {
             self.has_speech = true;
             self.silent_bytes = 0;
         } else {

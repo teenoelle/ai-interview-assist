@@ -319,7 +319,7 @@
       <button class="delete-btn" onclick={() => onDelete(record.id)}>Delete</button>
     </div>
     <div class="footer-row share-row">
-      <button class="share-btn" onclick={downloadReport}>↓ Report</button>
+      <button class="share-btn" onclick={downloadReport}>↓ Download Report</button>
       <button class="share-btn" class:copied={copyReportState === 'copied'} onclick={copyMarkdown}>
         {copyReportState === 'copied' ? '✓ Copied!' : 'Copy Markdown'}
       </button>

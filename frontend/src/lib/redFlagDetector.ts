@@ -16,9 +16,7 @@ const PATTERNS: Pattern[] = [
     category: 'Overqualified', coachingNote: 'Address commitment and excitement directly. Explain why THIS role fits your goals now.' },
   { triggers: ['fired', 'let go', 'terminated', 'laid off', 'made redundant'],
     category: 'Termination', coachingNote: 'Brief and factual, no blame. What you learned and how you moved forward.' },
-  { triggers: ['salary expectation', 'what are you expecting', 'what do you want to make', 'current salary', 'how much are you'],
-    category: 'Salary Probe', coachingNote: "Deflect early — 'I'm flexible, what's the budgeted range?' or give a researched range." },
-  { triggers: ['only stayed', 'only a year', 'job hopping', 'move around a lot', 'short time at'],
+{ triggers: ['only stayed', 'only a year', 'job hopping', 'move around a lot', 'short time at'],
     category: 'Short Tenure', coachingNote: 'Brief explanation (growth, restructure, opportunity), then pivot to what you achieved.' },
 ];
 

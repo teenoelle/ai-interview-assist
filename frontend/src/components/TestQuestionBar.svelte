@@ -81,8 +81,17 @@
     { label: 'Salary', tag: 'salary', questions: [
       'What are your salary expectations?',
     ]},
-    { label: 'Closing', tag: 'closing', questions: [
+    { label: 'Your Questions', tag: 'candidate_questions', questions: [
       'Do you have any questions for us?',
+      'Is there anything you would like to ask?',
+      'Anything else you want to know before we wrap up?',
+    ]},
+    { label: 'Wrap-Up', tag: 'wrap_up', questions: [
+      "Well, it's been great meeting you — we're interviewing other candidates and we'll be in touch.",
+      "That's all the questions I have — thanks so much for coming in today.",
+      "We'll be in touch once we've spoken to a few more candidates.",
+      "Thanks for your time today — we'll reach out about next steps.",
+      "Before I let you go, is there anything else you'd like to add?",
     ]},
   ];
 
@@ -91,7 +100,7 @@
     personal: '#f472b6', motivation: '#fb923c', future: '#38bdf8',
     strengths: '#4ade80', character: '#e879f9', weaknesses: '#f87171', behavioral: '#a78bfa',
     situational: '#a3e635', technical: '#60a5fa', culture: '#34d399',
-    values: '#f0abfc', salary: '#fbbf24', closing: '#94a3b8',
+    values: '#f0abfc', salary: '#fbbf24', candidate_questions: '#94a3b8', wrap_up: '#f59e0b',
   };
 
   async function send(q: string) {

@@ -27,40 +27,7 @@ pub async fn run_agent(
                 let rl = rate_limiter.clone();
 
                 tokio::spawn(async move {
-                    // 1. Claude — primary when key is available (no rate limiter needed,
-                    //    separate quota from Gemini)
-                    if let Some(key) = &akey {
-                        match claude_vision::analyze_sentiment(key, &jpeg_bytes).await {
-                            Ok(result) => {
-                                tracing::info!("sentiment ✓ Claude");
-                                let _ = etx.send(WsEvent::Sentiment { emotion: result.emotion, reason: result.reason, coaching: result.coaching, coaching_why: result.coaching_why });
-                                let _ = etx.send(WsEvent::ProviderUsed { service: "sentiment".to_string(), provider: "Claude".to_string(), local: false });
-                                // Broadcast rate limit info so the frontend can display it
-                                if let (Some(remaining), Some(limit)) =
-                                    (result.requests_remaining, result.requests_limit)
-                                {
-                                    let _ = etx.send(WsEvent::RateLimit {
-                                        provider: "Claude".to_string(),
-                                        requests_remaining: remaining,
-                                        requests_limit: limit,
-                                    });
-                                }
-                                return;
-                            }
-                            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                                tracing::warn!("Claude sentiment unavailable, falling back to Gemini: {}", e);
-                            }
-                            Err(e) => {
-                                tracing::error!("Claude sentiment error: {}", e);
-                                let _ = etx.send(WsEvent::Error {
-                                    message: format!("Sentiment error: {}", e),
-                                });
-                                return;
-                            }
-                        }
-                    }
-
-                    // 2. Ollama vision (llava) — local free fallback, silently skip if not running
+                    // 1. Ollama vision — local, free, no quota
                     match ollama_vision::analyze_sentiment(&ourl, &ovmodel, &jpeg_bytes).await {
                         Ok(result) => {
                             tracing::info!("sentiment ✓ Ollama ({})", ovmodel);
@@ -71,20 +38,42 @@ pub async fn run_agent(
                         Err(e) => tracing::warn!("Ollama vision unavailable, trying Gemini: {}", e),
                     }
 
-                    // 3. Gemini — last resort, single attempt only (sentiment is non-critical;
-                    //    retrying for minutes in the background causes spurious errors after capture stops)
+                    // 2. Gemini Vision — rate-limited to avoid competing with transcription
                     rl.acquire().await;
                     match gemini_vision::analyze_sentiment(&gkey, &jpeg_bytes).await {
                         Ok(result) => {
                             tracing::info!("sentiment ✓ Gemini Vision");
                             let _ = etx.send(WsEvent::Sentiment { emotion: result.emotion, reason: result.reason, coaching: result.coaching, coaching_why: result.coaching_why });
                             let _ = etx.send(WsEvent::ProviderUsed { service: "sentiment".to_string(), provider: "Gemini Vision".to_string(), local: false });
+                            return;
                         }
                         Err(e) if is_rate_limit(&e) || is_quota_exhausted(&e) => {
-                            tracing::warn!("Gemini sentiment rate-limited, skipping frame: {}", e);
+                            tracing::warn!("Gemini sentiment rate-limited, trying Claude: {}", e);
                         }
                         Err(e) => {
                             tracing::error!("Sentiment error: {}", e);
+                            return;
+                        }
+                    }
+
+                    // 3. Claude — last resort
+                    if let Some(key) = &akey {
+                        match claude_vision::analyze_sentiment(key, &jpeg_bytes).await {
+                            Ok(result) => {
+                                tracing::info!("sentiment ✓ Claude");
+                                let _ = etx.send(WsEvent::Sentiment { emotion: result.emotion, reason: result.reason, coaching: result.coaching, coaching_why: result.coaching_why });
+                                let _ = etx.send(WsEvent::ProviderUsed { service: "sentiment".to_string(), provider: "Claude API".to_string(), local: false });
+                                if let (Some(remaining), Some(limit)) =
+                                    (result.requests_remaining, result.requests_limit)
+                                {
+                                    let _ = etx.send(WsEvent::RateLimit {
+                                        provider: "Claude API".to_string(),
+                                        requests_remaining: remaining,
+                                        requests_limit: limit,
+                                    });
+                                }
+                            }
+                            Err(e) => tracing::warn!("Claude sentiment unavailable: {}", e),
                         }
                     }
                 });

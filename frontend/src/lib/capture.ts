@@ -22,8 +22,8 @@ export class MediaCapture {
   private videoInterval: ReturnType<typeof setInterval> | null = null;
   private faceInterval: ReturnType<typeof setInterval> | null = null;
   private analyserInterval: ReturnType<typeof setInterval> | null = null;
-  private systemWorklet: AudioWorkletNode | null = null;
-  private micWorklet: AudioWorkletNode | null = null;
+  private systemWorklet: ScriptProcessorNode | null = null;
+  private micWorklet: ScriptProcessorNode | null = null;
   private systemAudioSource: MediaStreamAudioSourceNode | null = null;
   private systemAnalyser: AnalyserNode | null = null;
   private videoElement: HTMLVideoElement | null = null;
@@ -58,40 +58,64 @@ export class MediaCapture {
   onReshareNeeded(cb: ReshareNeededCallback) { this._reshareNeededCallback = cb; }
 
   async start(): Promise<void> {
+    // Create AudioContext NOW while the user gesture is still active.
+    // Creating it after await getDisplayMedia() (which takes several seconds)
+    // causes Chrome to start the context suspended → silent onaudioprocess buffers.
+    this.systemAudioCtx = new AudioContext();
+    this.systemAudioCtx.resume().catch(() => {});
+    console.log('[capture] AudioContext created, state:', this.systemAudioCtx.state, 'sampleRate:', this.systemAudioCtx.sampleRate);
+
+    console.log('[capture] getDisplayMedia...');
     this.systemStream = await navigator.mediaDevices.getDisplayMedia({
-      video: { frameRate: 1, displaySurface: 'monitor' } as MediaTrackConstraints,
+      video: { frameRate: 1 } as MediaTrackConstraints,
       audio: true,
     });
-    // Return focus to the interview app after the OS/browser switches to the captured window
+    console.log('[capture] display media ok, audio tracks:', this.systemStream.getAudioTracks().length, 'video tracks:', this.systemStream.getVideoTracks().length);
     window.focus();
-
-    // Only watch VIDEO tracks for onended — when a meeting popup or notification causes
-    // Chrome to revoke the stream, we trigger a reshare prompt but keep the audio pipeline
-    // alive so transcription resumes the moment the user reshares (no WebSocket reconnect).
     this._attachVideoEndedHandlers(this.systemStream);
 
     try {
-      this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      console.log('[capture] requesting mic...');
+      this.micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: true,
+        },
+        video: false,
+      });
       this.micActive = true;
-    } catch {
-      console.warn('Microphone access denied — using single-stream mode.');
+      console.log('[capture] mic ok');
+    } catch (e) {
+      console.warn('[capture] mic denied:', e);
     }
 
     try {
+      console.log('[capture] requesting webcam...');
       this.webcamStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-    } catch {
-      console.warn('Webcam access denied — self-view disabled.');
+      console.log('[capture] webcam ok');
+    } catch (e) {
+      console.warn('[capture] webcam denied:', e);
     }
 
+    console.log('[capture] connecting websockets...');
     this.systemAudioWs.connect();
     this.videoWs.connect();
     if (this.micActive) this.micAudioWs.connect();
 
     await new Promise((resolve) => setTimeout(resolve, 500));
 
-    await this.startSystemAudioCapture();
-    if (this.micActive) await this.startMicCapture();
+    console.log('[capture] starting system audio capture...');
+    this.startSystemAudioCapture();
+    console.log('[capture] system audio started');
+    if (this.micActive) {
+      console.log('[capture] starting mic capture...');
+      this.startMicCapture();
+      console.log('[capture] mic capture started');
+    }
+    console.log('[capture] starting video capture...');
     this.startVideoCapture();
+    console.log('[capture] all started');
     // Load face detector in background — silently degrades if unavailable
     this.faceDetector = new FaceEmotionDetector();
     this.faceDetector.init().catch(e => {
@@ -150,31 +174,70 @@ export class MediaCapture {
     });
   }
 
-  private async startSystemAudioCapture() {
+  private startSystemAudioCapture() {
     if (!this.systemStream) return;
     const tracks = this.systemStream.getAudioTracks();
     if (tracks.length === 0) return;
-    this.systemAudioCtx = new AudioContext({ sampleRate: 16000 });
-    await this.systemAudioCtx.audioWorklet.addModule('/pcm-processor.js');
-    this.systemAudioSource = this.systemAudioCtx.createMediaStreamSource(new MediaStream([tracks[0]]));
-    this.systemWorklet = new AudioWorkletNode(this.systemAudioCtx, 'pcm-processor');
-    this.systemWorklet.port.onmessage = (e: MessageEvent) => {
-      if (e.data instanceof Int16Array) {
-        this.systemAudioWs.send(e.data.buffer);
-      } else if (e.data?.type === 'level') {
-        this._systemLevel = e.data.rms;
-        this._levelCallback?.(this._micLevel, this._systemLevel);
-      }
-    };
-    this.systemAudioSource.connect(this.systemWorklet);
-    this.systemWorklet.connect(this.systemAudioCtx.destination);
-
-    // Chrome throttles setInterval in hidden tabs (2s → ~60s), so use onstatechange instead.
+    // systemAudioCtx was pre-created in start() during the user gesture.
+    if (!this.systemAudioCtx) return;
+    console.log('[capture] system AudioContext state:', this.systemAudioCtx.state, 'sampleRate:', this.systemAudioCtx.sampleRate);
+    this.systemAudioCtx.resume().catch(() => {});
     this.systemAudioCtx.onstatechange = () => {
       if (this.systemAudioCtx?.state === 'suspended') {
         this.systemAudioCtx.resume().catch(() => {});
       }
     };
+
+    this.systemAudioSource = this.systemAudioCtx.createMediaStreamSource(new MediaStream([tracks[0]]));
+
+    // ScriptProcessorNode: synchronous, no addModule needed.
+    const TARGET_RATE = 16000;
+    const nativeRate = this.systemAudioCtx.sampleRate;
+    const ratio = nativeRate / TARGET_RATE;
+    const BUFFER = 4096;
+    const CHUNK_TARGET = 8000; // 0.5 s worth at 16 kHz
+    const CHUNK_NATIVE = Math.round(CHUNK_TARGET * ratio);
+    let buf: number[] = [];
+    // Use 2 input channels — tab capture is often stereo; mono node can produce zeros on ch0
+    const numInputCh = tracks[0].getSettings().channelCount ?? 2;
+    this.systemWorklet = this.systemAudioCtx.createScriptProcessor(BUFFER, Math.max(numInputCh, 2), 1);
+    this.systemWorklet.onaudioprocess = (e) => {
+      // Mix down to mono (average ch0+ch1) so we don't miss audio on either channel
+      const ch0 = e.inputBuffer.getChannelData(0);
+      const ch1 = e.inputBuffer.numberOfChannels > 1 ? e.inputBuffer.getChannelData(1) : ch0;
+      const float32 = new Float32Array(ch0.length);
+      for (let i = 0; i < ch0.length; i++) float32[i] = (ch0[i] + ch1[i]) * 0.5;
+      for (let i = 0; i < float32.length; i++) buf.push(float32[i]);
+      while (buf.length >= CHUNK_NATIVE) {
+        const chunk = buf.splice(0, CHUNK_NATIVE);
+        // Linear-interpolation downsample to TARGET_RATE
+        const out = new Float32Array(CHUNK_TARGET);
+        for (let i = 0; i < CHUNK_TARGET; i++) {
+          const pos = i * ratio;
+          const idx = Math.floor(pos);
+          const frac = pos - idx;
+          const a = chunk[idx] ?? 0;
+          const b = chunk[idx + 1] ?? a;
+          out[i] = a + frac * (b - a);
+        }
+        let sumSq = 0;
+        for (let i = 0; i < out.length; i++) sumSq += out[i] * out[i];
+        this._systemLevel = Math.sqrt(sumSq / out.length);
+        this._levelCallback?.(this._micLevel, this._systemLevel);
+        const int16 = new Int16Array(CHUNK_TARGET);
+        for (let i = 0; i < CHUNK_TARGET; i++) {
+          const s = Math.max(-1, Math.min(1, out[i]));
+          int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+        }
+        this.systemAudioWs.send(int16.buffer);
+      }
+    };
+    // Use a MediaStreamDestination (silent sink) instead of destination.
+    // Connecting to the real destination causes Chrome to silence tab-captured audio
+    // to prevent feedback loops — the input buffers become all zeros.
+    const sysSink = this.systemAudioCtx.createMediaStreamDestination();
+    this.systemAudioSource.connect(this.systemWorklet);
+    this.systemWorklet.connect(sysSink);
 
     // AnalyserNode for real-time spectral features
     this.systemAnalyser = this.systemAudioCtx.createAnalyser();
@@ -204,30 +267,69 @@ export class MediaCapture {
     }, 250);
   }
 
-  private async startMicCapture() {
+  private startMicCapture() {
     if (!this.micStream) return;
     const tracks = this.micStream.getAudioTracks();
     if (tracks.length === 0) return;
-    this.micAudioCtx = new AudioContext({ sampleRate: 16000 });
-    await this.micAudioCtx.audioWorklet.addModule('/pcm-processor.js');
-    const source = this.micAudioCtx.createMediaStreamSource(new MediaStream([tracks[0]]));
-    this.micWorklet = new AudioWorkletNode(this.micAudioCtx, 'pcm-processor');
-    this.micWorklet.port.onmessage = (e: MessageEvent) => {
-      if (e.data instanceof Int16Array) {
-        this.micAudioWs.send(e.data.buffer);
-      } else if (e.data?.type === 'level') {
-        this._micLevel = e.data.rms;
-        this._levelCallback?.(this._micLevel, this._systemLevel);
-      }
-    };
-    source.connect(this.micWorklet);
-    this.micWorklet.connect(this.micAudioCtx.destination);
-
+    // Reuse system AudioContext if available (same native rate), otherwise create a new one.
+    this.micAudioCtx = this.systemAudioCtx ?? new AudioContext();
+    this.micAudioCtx.resume().catch(() => {});
     this.micAudioCtx.onstatechange = () => {
       if (this.micAudioCtx?.state === 'suspended') {
         this.micAudioCtx.resume().catch(() => {});
       }
     };
+
+    const settings = tracks[0].getSettings();
+    console.log('[mic] track settings:', JSON.stringify(settings));
+
+    const TARGET_RATE = 16000;
+    const nativeRate = this.micAudioCtx.sampleRate;
+    const ratio = nativeRate / TARGET_RATE;
+    const source = this.micAudioCtx.createMediaStreamSource(new MediaStream([tracks[0]]));
+    const BUFFER = 4096;
+    const CHUNK_TARGET = 8000;
+    const CHUNK_NATIVE = Math.round(CHUNK_TARGET * ratio);
+    let buf: number[] = [];
+    let micDiag = 0;
+    this.micWorklet = this.micAudioCtx.createScriptProcessor(BUFFER, 2, 1);
+    this.micWorklet.onaudioprocess = (e) => {
+      const ch0 = e.inputBuffer.getChannelData(0);
+      const ch1 = e.inputBuffer.numberOfChannels > 1 ? e.inputBuffer.getChannelData(1) : ch0;
+      if (micDiag < 10) {
+        let maxAbs = 0;
+        for (let i = 0; i < ch0.length; i++) maxAbs = Math.max(maxAbs, Math.abs(ch0[i]), Math.abs(ch1[i]));
+        console.log(`[mic] #${micDiag} ch0[0]=${ch0[0].toFixed(6)} ch1[0]=${ch1[0].toFixed(6)} maxAbs=${maxAbs.toFixed(6)} nCh=${e.inputBuffer.numberOfChannels}`);
+        micDiag++;
+      }
+      const float32 = ch0;
+      for (let i = 0; i < float32.length; i++) buf.push(float32[i]);
+      while (buf.length >= CHUNK_NATIVE) {
+        const chunk = buf.splice(0, CHUNK_NATIVE);
+        const out = new Float32Array(CHUNK_TARGET);
+        for (let i = 0; i < CHUNK_TARGET; i++) {
+          const pos = i * ratio;
+          const idx = Math.floor(pos);
+          const frac = pos - idx;
+          const a = chunk[idx] ?? 0;
+          const b = chunk[idx + 1] ?? a;
+          out[i] = a + frac * (b - a);
+        }
+        let sumSq = 0;
+        for (let i = 0; i < out.length; i++) sumSq += out[i] * out[i];
+        this._micLevel = Math.sqrt(sumSq / out.length);
+        this._levelCallback?.(this._micLevel, this._systemLevel);
+        const int16 = new Int16Array(CHUNK_TARGET);
+        for (let i = 0; i < CHUNK_TARGET; i++) {
+          const s = Math.max(-1, Math.min(1, out[i]));
+          int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+        }
+        this.micAudioWs.send(int16.buffer);
+      }
+    };
+    const micSink = this.micAudioCtx.createMediaStreamDestination();
+    source.connect(this.micWorklet);
+    this.micWorklet.connect(micSink);
   }
 
   private _captureFrameFn: (() => Promise<void>) | null = null;
@@ -332,7 +434,10 @@ export class MediaCapture {
     this.systemWorklet?.disconnect();
     this.micWorklet?.disconnect();
     this.systemAudioCtx?.close();
-    this.micAudioCtx?.close();
+    // micAudioCtx may be shared with systemAudioCtx — only close if distinct
+    if (this.micAudioCtx && this.micAudioCtx !== this.systemAudioCtx) {
+      this.micAudioCtx.close();
+    }
     this.systemStream?.getTracks().forEach((t) => { t.onended = null; t.stop(); });
     this.micStream?.getTracks().forEach((t) => t.stop());
     this.webcamStream?.getTracks().forEach((t) => t.stop());

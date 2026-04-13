@@ -17,7 +17,7 @@ static WHISPER_CB: OnceLock<CircuitBreaker> = OnceLock::new();
 static GROQ_KEY1_CB: OnceLock<CircuitBreaker> = OnceLock::new();
 
 fn whisper_cb() -> &'static CircuitBreaker {
-    WHISPER_CB.get_or_init(|| CircuitBreaker::new("local-whisper", 3, 300))
+    WHISPER_CB.get_or_init(|| CircuitBreaker::new("local-whisper", 6, 120))
 }
 
 fn groq_key1_cb() -> &'static CircuitBreaker {
@@ -54,7 +54,7 @@ async fn transcribe_with_fallback(
             tracing::debug!("Local Whisper circuit open ({} failures) — skipping", whisper_cb().failure_count());
         } else {
             let endpoint = format!("{}/v1/audio/transcriptions", url.trim_end_matches('/'));
-            match groq::transcribe_openai_asr(&endpoint, "", whisper_model, pcm, 10).await {
+            match groq::transcribe_openai_asr(&endpoint, "", whisper_model, pcm, 30).await {
                 Ok(text) => {
                     whisper_cb().record_success();
                     inc(call_counts, "Whisper (local)");
@@ -385,7 +385,7 @@ pub async fn run_mic_agent(
                 ring_buf.push(&chunk);
                 if ring_buf.should_flush() {
                     if !ring_buf.has_speech() {
-                        tracing::debug!("mic: silent segment discarded ({:.1}s, peak energy {:.0}, threshold 200)",
+                        tracing::debug!("mic: silent segment discarded ({:.1}s, peak energy {:.0}, threshold 5)",
                             ring_buf.duration_secs(), ring_buf.peak_energy);
                         ring_buf.drain_segment();
                         continue;
@@ -483,7 +483,7 @@ pub async fn run_agent(
                 ring_buf.push(&pcm_chunk);
                 if ring_buf.should_flush() {
                     if !ring_buf.has_speech() {
-                        tracing::debug!("system: silent segment discarded ({:.1}s, peak energy {:.0}, threshold 200)",
+                        tracing::debug!("system: silent segment discarded ({:.1}s, peak energy {:.0}, threshold 5)",
                             ring_buf.duration_secs(), ring_buf.peak_energy);
                         ring_buf.drain_segment();
                         continue;

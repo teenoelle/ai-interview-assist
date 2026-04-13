@@ -3,21 +3,14 @@ use serde_json::{json, Value};
 use tokio::sync::broadcast;
 use common::messages::{WsEvent, SuggestionMode};
 use futures::StreamExt;
+use reqwest::Client;
 use std::sync::OnceLock;
 
-static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-fn client() -> &'static reqwest::Client {
-    CLIENT.get_or_init(|| {
-        reqwest::Client::builder()
-            .pool_max_idle_per_host(0)  // no connection reuse — Ollama closes idle connections
-            .build()
-            .expect("ollama client")
-    })
+static CLIENT: OnceLock<Client> = OnceLock::new();
+fn client() -> &'static Client {
+    CLIENT.get_or_init(|| Client::builder().pool_max_idle_per_host(0).build().expect("bonsai client"))
 }
 
-/// Stream suggestions from a local Ollama instance.
-/// Uses a short timeout (15 s) so a cold/unloaded model doesn't stall the fallback chain.
-/// Sends keep_alive: "60m" so the model stays in RAM between questions.
 pub async fn stream_suggestions(
     base_url: &str,
     model: &str,
@@ -34,13 +27,14 @@ pub async fn stream_suggestions(
             { "role": "user",   "content": user_prompt }
         ],
         "max_tokens": 1500,
-        "temperature": 0.3,
+        "temperature": 0.6,
         "stream": true,
-        "keep_alive": "60m",
+        "options": {
+            "num_ctx": 8192
+        }
     });
 
-    let client = client();
-    let resp = client
+    let resp = client()
         .post(&url)
         .json(&body)
         .timeout(std::time::Duration::from_secs(60))
@@ -50,7 +44,7 @@ pub async fn stream_suggestions(
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
-        return Err(anyhow!("Ollama {} error {}: {}", model, status, text));
+        return Err(anyhow!("Bonsai {} error {}: {}", model, status, text));
     }
 
     let mut full_text = String::new();
@@ -78,7 +72,7 @@ pub async fn stream_suggestions(
         }
     }
 
-    tracing::info!("suggestion ✓ Ollama ({}) — {} chars", model, full_text.len());
+    tracing::info!("suggestion ✓ Bonsai ({}) — {} chars", model, full_text.len());
     let _ = event_tx.send(WsEvent::SuggestionComplete { full_text, mode });
     Ok(())
 }

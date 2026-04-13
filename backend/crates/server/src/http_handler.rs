@@ -731,9 +731,12 @@ pub async fn handle_suggest_mode(
     let grkey = state.groq_key.clone();
     let grkey2 = state.groq_key_2.clone();
     let orkey = state.openrouter_key.clone();
+    let dkey = state.deepseek_key.clone();
     let mkey = state.mistral_key.clone();
     let ckey = state.cerebras_key.clone();
     let qkey = state.qwen_key.clone();
+    let burl = state.bonsai_url.clone();
+    let bmodel = state.bonsai_model.clone();
     let ourl = state.ollama_url.clone();
     let omodels = state.ollama_models.clone();
     let rl = state.rate_limiter.clone();
@@ -742,8 +745,8 @@ pub async fn handle_suggest_mode(
         if let Err(e) = suggestion::run_single(
             &q, mode, &sp, &tr,
             &gkey, akey.as_deref(), grkey.as_deref(), grkey2.as_deref(),
-            orkey.as_deref(), mkey.as_deref(), ckey.as_deref(), qkey.as_deref(),
-            &ourl, &omodels, &rl, etx, &cc,
+            orkey.as_deref(), dkey.as_deref(), mkey.as_deref(), ckey.as_deref(), qkey.as_deref(),
+            burl.as_deref(), &bmodel, &ourl, &omodels, &rl, etx, &cc,
         ).await {
             tracing::error!("suggest-mode error: {}", e);
         }

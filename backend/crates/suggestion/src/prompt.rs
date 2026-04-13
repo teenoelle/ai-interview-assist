@@ -468,11 +468,16 @@ pub fn smalltalk_response(question: &str) -> String {
 }
 
 pub fn build_compound_user_prompt(question: &str, transcript: &[TranscriptSegment], primary: QuestionType, secondary: QuestionType) -> String {
-    let ctx_prefix = make_ctx_prefix(transcript);
+    const ROLE_HEADER: &str = "ROLES: YOU = the job candidate applying for this position. THEM = the employer interviewing you. You are NOT currently working there. Never say 'I work at [employer]' or use 'we'/'our' about the employer.\n\n";
+    let ctx_prefix = format!("{}{}", ROLE_HEADER, make_ctx_prefix(transcript));
     build_compound_prompt(&ctx_prefix, question, primary, secondary)
 }
 
 fn dispatch_prompt(ctx_prefix: &str, question: &str, qtype: QuestionType, transcript: &[TranscriptSegment]) -> String {
+    // Prepended to every prompt so small models cannot confuse candidate with employer.
+    const ROLE_HEADER: &str = "ROLES: YOU = the job candidate applying for this position. THEM = the employer interviewing you. You are NOT currently working there. Never say 'I work at [employer]' or use 'we'/'our' about the employer.\n\n";
+    let ctx = format!("{}{}", ROLE_HEADER, ctx_prefix);
+    let ctx_prefix = ctx.as_str();
     match qtype {
         QuestionType::Smalltalk    => build_competency_prompt(ctx_prefix, question), // fallback; normally short-circuited before LLM
         QuestionType::Introduction => build_introduction_prompt(ctx_prefix, question),
@@ -518,7 +523,9 @@ Rules:\n\
 - ALWAYS use 'I' — never 'we' or 'our'.\n\
 - NEVER invent metrics, percentages, figures, or timeframes not in the background.\n\
 - NEVER name specific companies or clients — refer by industry only.\n\
-- ACRONYMS: write in full on first use, abbreviation in parentheses.",
+- ACRONYMS: write in full on first use, abbreviation in parentheses.\n\
+- Ask noun phrase: names the underlying business concept — NEVER copies words from the interviewer's question.\n\
+- Ask follow-up (3rd pipe): what YOU say if the interviewer asks why YOU are asking THEM — not a response to the original question.",
         ctx_prefix, question
     )
 }
@@ -529,7 +536,7 @@ fn build_motivation_prompt(ctx_prefix: &str, question: &str) -> String {
 CRITICAL: This is a MOTIVATION question. Output ONLY the labeled lines below.\n\
 DO NOT output Solve:, Bridge:, or Answer: — those labels do not exist here.\n\n\
 Acknowledge: <1 sentence. Brief natural opener acknowledging the question and signalling genuine thought about this opportunity. Starts with 'Sure', 'Happy to', or 'Of course'. Max 10 words. Example: 'Happy to — I have been thinking about this carefully.'>\n\
-Company: <1-2 sentences. Each starts with 'I'. Max 10 words each. The employer's specific business challenge or mission from the system prompt — name the actual problem, not generic praise.>\n\
+Company: <1-2 sentences. Describes THEIR challenge — what problem the employer is trying to solve, drawn ONLY from the system prompt. NEVER say 'I work at [employer]' — you are applying there, not employed there. NEVER invent tools, platforms, or strategies not in the system prompt. Each sentence starts with 'I see that', 'I notice that', or 'I understand that'. Max 10 words each.>\n\
 Transition1: <1 sentence connecting Company to Role. Starts with 'That challenge maps directly to' or 'Which is where' or 'My background fits because'. Max 10 words.>\n\
 Role: <2 sentences. Each starts with 'I'. Max 10 words each. How your specific background maps to this role's requirements. Draw only from background provided. No invented details.>\n\
 Transition2: <1 sentence connecting Role to Self. Starts with 'But beyond the skillset,' or 'On a personal level,' or 'And what draws me further is'. Max 10 words.>\n\
@@ -537,15 +544,18 @@ Self: <1-2 sentences. Each starts with 'I'. Max 10 words each. How this role fit
 Transition3: <1 sentence connecting Self to Close. Starts with 'So when I look at' or 'That combination is exactly why' or 'Which is why'. Max 10 words.>\n\
 Close: <One sentence. Connects your motivation to the employer's specific challenge from the system prompt. Starts with 'That\'s why', 'This is why', 'The work I\'ve done in', or 'What I\'d bring here specifically is'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
 ---\n\
-Ask: <2-4 word noun phrase naming what you're asking about — drawn from the specific topic the interviewer raised. e.g. 'business challenge', 'client mix', 'team priorities'> | <Specific grammatical question probing an aspect of what the interviewer asked about. Names a concrete challenge, outcome, or constraint from the system prompt. Ends with '?'.> | <1 sentence if asked 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase — a different angle from the first, still related to the interviewer's question> | <A different specific question. Names a concrete metric, process, or domain — no vague pronouns. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
+Ask: <2-4 word noun phrase naming what you're asking about — drawn from the specific topic the interviewer raised. e.g. 'business challenge', 'client mix', 'team priorities'> | <Specific grammatical question probing an aspect of what the interviewer asked about. Names a concrete challenge, outcome, or constraint from the system prompt. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Not a response to the original interview question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — a different angle from the first, still related to the interviewer's question> | <A different specific question. Names a concrete metric, process, or domain — no vague pronouns. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Company: Transition1: Role: Transition2: Self: Transition3: Close: Ask: Ask:\n\
-- Company: name the employer's actual challenge — never 'great company' or 'exciting opportunity'.\n\
+- Company: describes THEIR challenge from the system prompt — never 'great company'. NEVER say 'I work at [employer]' — you are applying there. NEVER invent tools or strategies.\n\
+- Role: draws ONLY from candidate background — NEVER invent skills, tools, or experience not in the background.\n\
 - TONE: facts and direction only — no adjectives, no 'passionate', 'excited', 'dedicated', 'driven'.\n\
 - ALWAYS use 'I' — never 'we' or 'our'.\n\
 - NEVER invent metrics, figures, or timeframes not in the background. Directional language only.\n\
-- NEVER name specific companies or clients — refer by industry only.",
+- NEVER name specific companies or clients — refer by industry only.\n\
+- Ask noun phrase: names the underlying business concept — NEVER copies words from the interviewer's question.\n\
+- Ask follow-up (3rd pipe): what YOU say if the interviewer asks why YOU are asking THEM — not a response to the original question.",
         ctx_prefix, question
     )
 }
@@ -566,18 +576,20 @@ Transition3: <1 sentence bridging Choice to Bring. Starts with 'What I bring in 
 Bring: <1-2 sentences. What the candidate contributes from existing depth that a career junior can't: faster ramp, cross-channel perspective, stakeholder credibility, pattern recognition from adjacent domains. Names the specific skill or perspective — not vague. Starts with 'I'. Max 10 words each.>\n\
 Close: <One sentence. Connects the whole framing to the employer's specific challenge from the system prompt. Starts with 'That\\'s why', 'This is why', 'The work I\\'ve done in', or 'What I\\'d bring here specifically is'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
 ----\n\
-Ask: <2-4 word noun phrase> | <Question> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase> | <Question> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
+Ask: <2-4 word noun phrase> | <Question> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase> | <Question> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Reframe: Transition1: Gap: Transition2: Choice: Transition3: Bring: Close: Ask: Ask:\n\
 - Acknowledge: confirms level/seniority observation ONLY — no skills, channels, or JD specifics (those go in Gap). Never repeats Reframe.\n\
 - CRITICAL — Gap: name the SPECIFIC skill or channel from the JD where background is absent (e.g. 'paid social', 'SEO') — never 'a new area'.\n\
 - Choice: draws from the employer's actual challenge in the system prompt — not generic.\n\
-- Bring: draws ONLY from candidate background — names specific skills/perspective from adjacent experience.\n\
+- Bring: draws ONLY from candidate background — NEVER invent skills, tools, or experience not in the background.\n\
 - TONE: facts and trade-offs only — no adjectives, no 'passionate', 'excited', 'dedicated'.\n\
 - ALWAYS use 'I' — never 'we' or 'our'.\n\
 - NEVER invent metrics, percentages, or timeframes.\n\
-- NEVER name specific companies or clients — refer by category only.",
+- NEVER name specific companies or clients — refer by category only.\n\
+- Ask noun phrase: names the underlying business concept — NEVER copies words from the interviewer's question.\n\
+- Ask follow-up (3rd pipe): what YOU say if the interviewer asks why YOU are asking THEM — not a response to the original question.",
         ctx_prefix, question
     )
 }
@@ -596,8 +608,8 @@ Contribution: <1 sentence. Starts with 'I'. Max 10 words. What you will build or
 Transition3: <1 sentence connecting Contribution to Close. Starts with 'Taken together,' or 'That is the reason' or 'So in short,'. Max 10 words.>\n\
 Close: <One sentence. Connects your trajectory to the employer's specific challenge from the system prompt. Starts with 'That\'s why', 'This is why', 'The work I\'ve done in', or 'What I\'d bring here specifically is'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
 ---\n\
-Ask: <2-4 word noun phrase naming what you're asking about — drawn from the specific topic the interviewer raised. e.g. 'growth path', 'skill development', 'team challenge'> | <Specific grammatical question probing an aspect of what the interviewer asked about. Names a concrete skill, domain, or outcome. Ends with '?'.> | <1 sentence if asked 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase — a different angle, still related to the interviewer's question> | <A different specific question about the opportunity or challenge ahead. Names a concrete metric, process, or domain. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
+Ask: <2-4 word noun phrase naming what you're asking about — drawn from the specific topic the interviewer raised. e.g. 'growth path', 'skill development', 'team challenge'> | <Specific grammatical question probing an aspect of what the interviewer asked about. Names a concrete skill, domain, or outcome. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Not a response to the original interview question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — a different angle, still related to the interviewer's question> | <A different specific question about the opportunity or challenge ahead. Names a concrete metric, process, or domain. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Direction: Transition1: Alignment: Transition2: Contribution: Transition3: Close: Ask: Ask:\n\
 - CRITICAL — Direction must describe the NEXT level ABOVE current documented experience — not repeat what the CV already shows.\n\
@@ -605,7 +617,9 @@ Rules:\n\
 - TONE: facts and direction only — no adjectives, no 'passionate', 'excited', 'dedicated', 'driven', no 'dream'.\n\
 - ALWAYS use 'I' — never 'we' or 'our'.\n\
 - NEVER invent metrics, figures, or timeframes not in the background.\n\
-- NEVER name specific companies, clients, tools, or platforms — refer by category only.",
+- NEVER name specific companies, clients, tools, or platforms — refer by category only.\n\
+- Ask noun phrase: names the underlying business concept — NEVER copies words from the interviewer's question.\n\
+- Ask follow-up (3rd pipe): what YOU say if the interviewer asks why YOU are asking THEM — not a response to the original question.",
         ctx_prefix, question
     )
 }
@@ -658,10 +672,10 @@ pub fn build_closing_hr_prompt(ctx_prefix: &str, question: &str) -> String {
 \nCRITICAL: Output ONLY the --- separator followed by exactly 4 Ask: lines. No other content.
 
 \n---
-\nAsk: <2-4 word noun phrase — onboarding and ramp-up> | <Question about how the first 90 days are structured or what support is in place. Names something specific. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
-\nAsk: <2-4 word noun phrase — what high performers share> | <Question about what the most successful people in this role or team have in common — beyond skills. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
-\nAsk: <2-4 word noun phrase — career growth path> | <Question about what progression from this role looks like — what opens up, rough timelines, what signals readiness. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
-\nAsk: <2-4 word noun phrase — day-to-day culture> | <Question about how the company's or team's values show up concretely in day-to-day work — not just on paper. Names something specific. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — onboarding and ramp-up> | <Question about how the first 90 days are structured or what support is in place. Names something specific. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — what high performers share> | <Question about what the most successful people in this role or team have in common — beyond skills. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — career growth path> | <Question about what progression from this role looks like — what opens up, rough timelines, what signals readiness. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — day-to-day culture> | <Question about how the company's or team's values show up concretely in day-to-day work — not just on paper. Names something specific. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
 
 \nRules:
 \n- Ask topics: 2-4 word noun phrases. Never verb phrases. Never vague.
@@ -678,10 +692,10 @@ pub fn build_closing_hm_prompt(ctx_prefix: &str, question: &str) -> String {
 \nCRITICAL: Output ONLY the --- separator followed by exactly 4 Ask: lines. No other content.
 
 \n---
-\nAsk: <2-4 word noun phrase — the employer's core challenge, drawn from the system prompt> | <Question probing the employer's specific business or technical challenge. Names the exact problem from the system prompt. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
-\nAsk: <2-4 word noun phrase — 90-day success definition> | <Question about what outcomes or deliverables define a strong start in this exact role. Names the specific outcome, metric, or deliverable. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
-\nAsk: <2-4 word noun phrase — team decision-making process> | <Question about how the team makes decisions in the relevant domain. Names the specific process, tool, or domain. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
-\nAsk: <2-4 word noun phrase — company or team direction> | <Forward-looking question about where the company or team is headed. Names the specific domain or growth area. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — the employer's core challenge, drawn from the system prompt> | <Question probing the employer's specific business or technical challenge. Names the exact problem from the system prompt. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — 90-day success definition> | <Question about what outcomes or deliverables define a strong start in this exact role. Names the specific outcome, metric, or deliverable. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — team decision-making process> | <Question about how the team makes decisions in the relevant domain. Names the specific process, tool, or domain. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — company or team direction> | <Forward-looking question about where the company or team is headed. Names the specific domain or growth area. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
 
 \nRules:
 \n- Ask topics: 2-4 word noun phrases. Never verb phrases. Never vague.
@@ -699,10 +713,10 @@ pub fn build_closing_ceo_prompt(ctx_prefix: &str, question: &str) -> String {
 \nCRITICAL: Output ONLY the --- separator followed by exactly 4 Ask: lines. No other content.
 
 \n---
-\nAsk: <2-4 word noun phrase — company vision or strategic direction> | <Question about where the CEO sees the company in 3-5 years, or the most important strategic bet they are making. Names something specific from the system prompt context. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
-\nAsk: <2-4 word noun phrase — biggest current challenge> | <Question about what challenge at the company level keeps them most focused right now. Names the market, product, or operational domain from the system prompt. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
-\nAsk: <2-4 word noun phrase — what this hire unlocks> | <Question about what this role makes possible for the company that wasn't possible before — what gap it fills at the company level. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
-\nAsk: <2-4 word noun phrase — what success looks like to them> | <Question about what kind of person moves the needle at this company from the CEO's perspective — what traits or behaviours they most value. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — company vision or strategic direction> | <Question about where the CEO sees the company in 3-5 years, or the most important strategic bet they are making. Names something specific from the system prompt context. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — biggest current challenge> | <Question about what challenge at the company level keeps them most focused right now. Names the market, product, or operational domain from the system prompt. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — what this hire unlocks> | <Question about what this role makes possible for the company that wasn't possible before — what gap it fills at the company level. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
+\nAsk: <2-4 word noun phrase — what success looks like to them> | <Question about what kind of person moves the needle at this company from the CEO's perspective — what traits or behaviours they most value. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>
 
 \nRules:
 \n- Ask topics: 2-4 word noun phrases. Never verb phrases. Never vague.
@@ -728,18 +742,20 @@ Last sentence: names the combined business value these strengths bring to this s
 No adjectives. No 'I am passionate'. No 'utilize'. Facts and outcomes only.>\n\
 Close: <One sentence connecting your strengths to the employer's specific business challenge. Starts with 'That\'s why', 'This is why', 'The work I\'ve done in', or 'What I\'d bring here specifically is'. Max 20 words. Never say 'this role', 'this work', 'this', 'it', or 'that'.>\n\
 ---\n\
-Ask: <2-4 word noun phrase — directly related to what the interviewer asked about strengths. e.g. 'highest impact area', 'skill application', 'team gap'> | <Question probing where the specific strengths just discussed would have the most impact — names the domain, metric, or challenge from the system prompt. Ends with '?'.> | <1 sentence if asked 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase — a different angle on what the interviewer raised> | <A different question about what the team most needs — names the specific skill area or outcome. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
+Ask: <2-4 word noun phrase — directly related to what the interviewer asked about strengths. e.g. 'highest impact area', 'skill application', 'team gap'> | <Question probing where the specific strengths just discussed would have the most impact — names the domain, metric, or challenge from the system prompt. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Not a response to the original interview question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — a different angle on what the interviewer raised> | <A different question about what the team most needs — names the specific skill area or outcome. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Answer: Close: Ask: Ask:\n\
 - Acknowledge: names business priority behind the question — never starts with 'I'.\n\
 - Answer: [keyword] immediately before each strength sentence — no space between ] and first word. 2-3 strengths only.\n\
-- Answer: evidence draws ONLY from candidate background — NEVER invent metrics. Directional language only.\n\
+- Answer: evidence draws ONLY from candidate background — NEVER invent metrics, tools, or skills. Directional language only.\n\
 - Answer: connection names the employer's actual challenge from the system prompt.\n\
 - TONE: facts and outcomes only — no adjectives, no 'passionate', 'utilize'.\n\
 - ALWAYS use 'I' — never 'we' or 'our'.\n\
 - ACRONYMS: write in full on first use, abbreviation in parentheses.\n\
-- NEVER name specific clients or companies — refer by industry only.",
+- NEVER name specific clients or companies — refer by industry only.\n\
+- Ask noun phrase: names the underlying business concept — NEVER copies words from the interviewer's question.\n\
+- Ask follow-up (3rd pipe): what YOU say if the interviewer asks why YOU are asking THEM — not a response to the original question.",
         ctx_prefix, question
     )
 }
@@ -754,8 +770,8 @@ Bridge: <One short spoken sentence that transitions from Solve to the Answer. 5-
 Answer: [Situation]<One sentence of brief context. 'In [context], I [role or task].' Max 12 words.> [Task]<One sentence naming what needed to be achieved or resolved. Starts with 'The goal was' or 'I needed to'. Max 12 words.> [Action]<Two to three sentences. First: specific action taken — starts with 'I [verb]'. REQUIRED: immediately follow with inline illustration — 'So if [specific trigger], I [specific action], which would [directional outcome].' If a second action applies, use 'I also [action].' then another illustration. No adjectives. No adverbs. No 'utilize'. Name metrics, channels, tools, processes explicitly.> [Result]<One sentence naming the directional outcome achieved. Starts with 'As a result,' or 'The outcome was' or 'This led to'. Directional language only — never invent a metric.>\n\
 Close: <One sentence the candidate says after the Answer. Mirrors the employer\'s specific business challenge from the system prompt — name the exact problem the employer is trying to solve (their growth constraint, market challenge, or operational goal) not a generic domain. Starts with 'That\'s why', 'This is why', 'The work I\'ve done in', or 'What I\'d bring here specifically is'. Max 20 words. End with a period. Never say 'this role', 'this work', 'this', 'it', or 'that'.>\n\
 ---\n\
-Ask: <2-4 word noun phrase naming what you're asking about — drawn directly from the topic the interviewer raised. e.g. 'team prioritization', 'success metrics', 'client feedback loop'> | <A genuine question the candidate asks the interviewer. Names a specific metric, tool, process, or concept related to what the interviewer asked about. Ends with '?'.> | <1 sentence if asked 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase — a different angle, still related to the interviewer's question> | <A different genuine question. Names the specific topic — no vague pronouns. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
+Ask: <2-4 word noun phrase naming what you're asking about — drawn directly from the topic the interviewer raised. e.g. 'team prioritization', 'success metrics', 'client feedback loop'> | <A genuine question the candidate asks the interviewer. Names a specific metric, tool, process, or concept related to what the interviewer asked about. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Not a response to the original interview question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — a different angle, still related to the interviewer's question> | <A different genuine question. Names the specific topic — no vague pronouns. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Solve: Bridge: Answer: Close: Ask: Ask:\n\
 - Acknowledge: names business priority — never starts with 'I'. Never restates question.\n\
@@ -763,13 +779,15 @@ Rules:\n\
 - Bridge: 5-8 words. Starts with 'I\'d' or 'I'. Never a question.\n\
 - Answer: use exactly [Situation] [Task] [Action] [Result] keywords in order. All on same line as 'Answer:'.\n\
 - Answer [Action]: EVERY action claim MUST be immediately followed by inline illustration — 'So if [trigger], I [action], which would [outcome].'\n\
-- Answer [Result]: directional outcome only — NEVER invent metrics.\n\
+- Answer [Result]: directional outcome only — NEVER invent metrics, tools, or outcomes not in the background.\n\
 - TONE: no adjectives or adverbs. No 'utilize'. Facts and actions only.\n\
 - ALWAYS use 'I' — never 'we', 'our team'. Candidate speaks only about their own actions.\n\
 - ACRONYMS: write in full on first use, abbreviation in parentheses.\n\
-- NEVER invent metrics or numbers. Directional language only.\n\
+- NEVER invent metrics, tools, skills, or details not explicitly in the candidate background.\n\
 - NEVER name specific clients, employers, or companies — refer by industry only.\n\
-- If employer is agency/consultancy: frame answers as client work across accounts — never owning one company's strategy.",
+- If employer is agency/consultancy: frame answers as client work across accounts — never owning one company's strategy.\n\
+- Ask noun phrase: names the underlying business concept — NEVER copies words from the interviewer's question.\n\
+- Ask follow-up (3rd pipe): what YOU say if the interviewer asks why YOU are asking THEM — not a response to the original question.",
         ctx_prefix, question
     )
 }
@@ -803,10 +821,10 @@ Starts with 'That\\'s why', 'This is why', 'The work I\\'ve done in', or 'What I
 ---\n\
 Ask: <2-4 word noun phrase — specific aspect of the thing the interviewer asked about (company/manager/team)> | \
 <Question asking the interviewer to describe that specific dimension of the company or team. Ends with '?'.> | \
-<1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
+<1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
 Ask: <2-4 word noun phrase — a different aspect> | \
 <A different question probing another dimension relevant to the candidate\\'s stated preferences. Ends with '?'.> | \
-<1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
+<1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Solve: Bridge: Close: Ask: Ask:\n\
 - Solve: draw ONLY from themes in candidate's uploaded background — use their actual stated themes, NOT generic substitutes.\n\
@@ -815,7 +833,10 @@ Rules:\n\
 - Solve (C): outcome MUST reflect the current role from the job description — NOT outcomes from past roles.\n\
 - Solve: preferences 2 and 3: (A) sentence opens with 'Beyond that,' or 'I also find that' — placed AFTER [keyword], never before.\n\
 - COMPANY NAMING: only name past employers for positive references. For negative/gap experiences, use 'a previous role'.\n\
-- ALWAYS use 'I' — never 'we' or 'our'.",
+- ALWAYS use 'I' — never 'we' or 'our'.\n\
+- NEVER invent preferences, values, or experiences not in the candidate background.\n\
+- Ask noun phrase: names the underlying business concept — NEVER copies words from the interviewer's question.\n\
+- Ask follow-up (3rd pipe): what YOU say if the interviewer asks why YOU are asking THEM — not a response to the original question.",
         ctx_prefix, question
     )
 }
@@ -831,8 +852,8 @@ Answer: <The spoken answer on this same line. Short sentences. Max 10 words per 
 Close: <One sentence the candidate says after the Answer. Mirrors the employer\'s specific business challenge from the system prompt — name the exact problem the employer is trying to solve (their growth constraint, market challenge, or operational goal) not a generic domain. Starts with 'That\'s why', 'This is why', 'The work I\'ve done in', or 'What I\'d bring here specifically is'. Max 20 words. End with a period. Never say 'this role', 'this work', 'this', 'it', or 'that'.>\n\
 ---\n\
 Example: [1-2 word keyword] 3-5 word outcome title | <STAR story. 4 sentences maximum. All on ONE line. Each sentence starts with 'I'. Max 10 words per sentence. (1) Situation + Action combined — 'In [brief context], I [action verb] [specific approach].' (2) Optional second action — 'I also [action verb] [approach].' (3) Result — last sentence names the directional outcome achieved. NO inline 'So if' illustration. Draw only from candidate background. No invented metrics. Never use vague pronouns.>\n\
-Ask: <2-4 word noun phrase naming what you're asking about — drawn directly from the topic the interviewer raised. e.g. 'attribution model', 'team prioritization', 'data maturity'> | <A genuine question the candidate asks the interviewer. Names a specific metric, tool, process, or concept related to what the interviewer asked about. Ends with '?'.> | <1 sentence if asked 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase — a different angle, still related to the interviewer's question> | <A different genuine question. Names the specific topic — no vague pronouns. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
+Ask: <2-4 word noun phrase naming what you're asking about — drawn directly from the topic the interviewer raised. e.g. 'attribution model', 'team prioritization', 'data maturity'> | <A genuine question the candidate asks the interviewer. Names a specific metric, tool, process, or concept related to what the interviewer asked about. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Not a response to the original interview question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — a different angle, still related to the interviewer's question> | <A different genuine question. Names the specific topic — no vague pronouns. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Solve: Bridge: Answer: Close: Example: Ask: Ask:\n\
 - Acknowledge: names business priority — never starts with 'I'. Never restates question.\n\
@@ -843,8 +864,10 @@ Rules:\n\
 - TONE: no adjectives or adverbs. No 'utilize'. Facts and actions only.\n\
 - ALWAYS use 'I' — never 'we' or 'our team'.\n\
 - ACRONYMS: write in full on first use, abbreviation in parentheses.\n\
-- NEVER invent metrics or numbers. Directional language only.\n\
-- NEVER name specific clients, employers, or companies — refer by industry only.",
+- NEVER invent metrics, tools, skills, or details not explicitly in the candidate background.\n\
+- NEVER name specific clients, employers, or companies — refer by industry only.\n\
+- Ask noun phrase: names the underlying business concept — NEVER copies words from the interviewer's question.\n\
+- Ask follow-up (3rd pipe): what YOU say if the interviewer asks why YOU are asking THEM — not a response to the original question.",
         ctx_prefix, question
     )
 }
@@ -859,8 +882,8 @@ Bridge: <One short sentence transitioning from Solve to the Answer. 5-8 words. S
 Answer: <Technical reasoning on this same line. Each strategy MUST begin with a [1-2 word keyword] immediately before its opening sentence — no space between ] and first word. For each strategy: (A) [keyword] + one outcome sentence naming the technical principle or decision. (B) 'I [action verb] [specific approach] because [technical reason].' (C) REQUIRED illustration — 'So if [specific technical scenario], I [specific action], which would [directional outcome].' Strategy 2 onward: outcome sentence opens with 'Beyond that,' or 'I also'. Last sentence names the overall technical or business outcome. 2-3 strategies. No adjectives. No invented metrics. Draws from candidate background.>\n\
 Close: <One sentence connecting the candidate\\'s technical approach to the employer\\'s specific challenge from the system prompt. Starts with 'That\\'s why', 'This is why', 'The work I\\'ve done in', or 'What I\\'d bring here specifically is'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
 ---\n\
-Ask: <2-4 word noun phrase — the specific technical challenge or system named in the question> | <Question probing the technical depth of the problem — names the specific system, constraint, or scale involved. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase — a different technical angle> | <A different question about tooling, architecture decisions, or technical tradeoffs the team faces. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
+Ask: <2-4 word noun phrase — the specific technical challenge or system named in the question> | <Question probing the technical depth of the problem — names the specific system, constraint, or scale involved. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — a different technical angle> | <A different question about tooling, architecture decisions, or technical tradeoffs the team faces. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
 Rules:\n\
 - Output ONLY these lines. No extra text.\n\
 - Acknowledge: one sentence naming the technical stake. Never starts with 'I'. Draws from system prompt context.\n\
@@ -871,9 +894,10 @@ Rules:\n\
 - Close: one sentence. Max 20 words. References employer\\'s specific challenge. Never say 'this role'.\n\
 - Always use 'I' — never 'we' or 'our'.\n\
 - Acronyms: write in full on first use followed by abbreviation in parentheses.\n\
-- NEVER invent metrics, percentages, dollar figures, or timeframes not in the candidate background.\n\
+- NEVER invent metrics, tools, skills, or details not in the candidate background.\n\
 - NEVER name specific clients or companies — refer by industry only.\n\
-- Use only background provided. No invented details.",
+- Ask noun phrase: names the underlying business concept — NEVER copies words from the interviewer's question.\n\
+- Ask follow-up (3rd pipe): what YOU say if the interviewer asks why YOU are asking THEM — not a response to the original question.",
         ctx_prefix, question
     )
 }
@@ -888,8 +912,8 @@ Bridge: <One short sentence transitioning to the Answer. 5-8 words. Starts with 
 Answer: <Behavioral story on this same line. Short sentences starting with 'I'. Max 10 words per sentence. Structure: (1) Context — one sentence: 'In [brief context], I [role or responsibility].' (2) Action — 'I [specific action verb] [approach] to [collaboration outcome].' (3) REQUIRED illustration — 'So if [specific team scenario], I [specific action], which would [directional outcome].' (4) If a second dimension applies: 'I also [action].' then REQUIRED illustration. (5) Outcome — last sentence names the team or business result. No adjectives. No invented metrics. Draws from candidate background.>\n\
 Close: <One sentence connecting the candidate\\'s collaboration approach to the employer\\'s specific team challenge from the system prompt. Starts with 'That\\'s why', 'This is why', 'The work I\\'ve done in', or 'What I\\'d bring here specifically is'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
 ---\n\
-Ask: <2-4 word noun phrase — team collaboration dynamic or working norm> | <Question probing how the team collaborates or handles the specific dynamic the interviewer raised. Names the concrete process, cadence, or challenge. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase — a different angle on team culture or feedback> | <A different question about how the team gives feedback, resolves disagreement, or works across functions. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
+Ask: <2-4 word noun phrase — team collaboration dynamic or working norm> | <Question probing how the team collaborates or handles the specific dynamic the interviewer raised. Names the concrete process, cadence, or challenge. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — a different angle on team culture or feedback> | <A different question about how the team gives feedback, resolves disagreement, or works across functions. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
 Rules:\n\
 - Output ONLY these lines. No extra text.\n\
 - Acknowledge: one sentence naming the team or collaboration stake. Never starts with 'I'. Draws from system prompt.\n\
@@ -900,9 +924,10 @@ Rules:\n\
 - Close: one sentence. Max 20 words. References employer\\'s specific challenge. Never say 'this role'.\n\
 - Always use 'I' — never 'we' or 'our'.\n\
 - Acronyms: write in full on first use.\n\
-- NEVER invent metrics, percentages, or timeframes not in the candidate background.\n\
+- NEVER invent metrics, tools, skills, or details not in the candidate background.\n\
 - NEVER name specific clients or companies — refer by industry only.\n\
-- Use only background provided. No invented details.",
+- Ask noun phrase: names the underlying business concept — NEVER copies words from the interviewer's question.\n\
+- Ask follow-up (3rd pipe): what YOU say if the interviewer asks why YOU are asking THEM — not a response to the original question.",
         ctx_prefix, question
     )
 }
@@ -917,21 +942,22 @@ Bridge: <One sentence and a brief personal example or story that illustrates the
 Answer: <How these personal traits show up at work and create value for this specific employer. Each trait MUST begin with a [1-2 word keyword] immediately before its sentence — no space between ] and first word. For each trait: (A) [keyword] + one sentence naming how the personal trait translates to professional behaviour and business outcome. (B) One concrete proof point from the candidate background. Trait 2 onward: outcome sentence opens with 'Beyond that,' or 'I also'. Last sentence names the overall impact these traits have on teams and outcomes. 2-3 traits. No adjectives. No invented metrics. Draws from candidate background.>\n\
 Close: <One sentence connecting the candidate\\'s personal qualities to what the employer needs from their team, as described in the system prompt. Starts with 'That\\'s why', 'This is why', 'The work I\\'ve done in', or 'What I\\'d bring here specifically is'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
 ---\n\
-Ask: <2-4 word noun phrase about team culture or values — what kind of person thrives here> | <Question about what personal or interpersonal qualities tend to make people successful at this company or in this team. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase — team dynamics or working style> | <A different question about how the team works together or what values shape day-to-day interactions. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
+Ask: <2-4 word noun phrase about team culture or values — what kind of person thrives here> | <Question about what personal or interpersonal qualities tend to make people successful at this company or in this team. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — team dynamics or working style> | <A different question about how the team works together or what values shape day-to-day interactions. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
 Rules:\n\
 - Output ONLY these lines. No extra text.\n\
 - Acknowledge: names the character dimension, not the job skill. Never starts with 'I'.\n\
-- Solve: names PERSONAL traits only — not professional competencies. e.g. 'direct', 'reliable', 'curious', 'calm', 'empathetic'. Starts with 'My friends would say' or 'People who know me well would describe me as'.\n\
-- Bridge: a specific personal example — not a work achievement. Can be from outside work or from a personal aspect of a work situation. Draws from background if available.\n\
+- Solve: names PERSONAL traits only — not professional competencies. e.g. 'direct', 'reliable', 'curious', 'calm', 'empathetic'. Starts with 'My friends would say', 'People who know me well would describe me as', 'The people who know me well tend to say', or 'Outside of work, people would describe me as'.\n\
+- Bridge: a specific personal example — not a work achievement. Draws from background if available. NEVER invent personal examples.\n\
 - Answer text must be on the same line as 'Answer:'. Uses [keyword] format. Each trait = personal quality translated to professional value.\n\
-- Answer: draws ONLY from candidate background. NEVER invent metrics. Directional language only.\n\
+- Answer: draws ONLY from candidate background. NEVER invent traits, metrics, or personal details not in the background.\n\
 - Close: connects personal traits to the specific team or employer challenge from the system prompt.\n\
 - Always use 'I' — never 'we' or 'our'.\n\
 - Acronyms: write in full on first use.\n\
-- NEVER invent metrics or timeframes not in the candidate background.\n\
+- NEVER invent metrics, traits, or details not in the candidate background.\n\
 - NEVER name specific clients or companies — refer by industry only.\n\
-- Use only background provided. No invented details.",
+- Ask noun phrase: names the underlying business concept — NEVER copies words from the interviewer's question.\n\
+- Ask follow-up (3rd pipe): what YOU say if the interviewer asks why YOU are asking THEM — not a response to the original question.",
         ctx_prefix, question
     )
 }
@@ -954,7 +980,10 @@ Ask: <2-4 word noun phrase — a different bridging angle, still connecting both
 Rules:\n\
 - Output ONLY: Acknowledge:, Answer:, Close:, then two Ask: lines. No other labels. No preamble.\n\
 - Answer addresses {topic1} first, transitions once, then addresses {topic2}. Both parts draw ONLY from candidate background in the system prompt.\n\
+- NEVER invent skills, tools, metrics, or details not in the candidate background.\n\
 - Ask topics probe the INTERSECTION of both dimensions — not topics from either standalone answer.\n\
+- Ask noun phrase: names the underlying business concept — NEVER copies words from the interviewer's question.\n\
+- Ask follow-up (3rd pipe): what YOU say if the interviewer asks why YOU are asking THEM — not a response to the original question.\n\
 - NEVER invent metrics, percentages, dollar figures, headcount, or timeframes not present in the candidate background.\n\
 - NEVER name specific clients or companies — refer by industry only.",
         ctx_prefix, question,
@@ -975,19 +1004,21 @@ Bridge: <One sentence of concrete evidence from the candidate background that th
 Answer: <One sentence redirecting to a compensating strength that is directly relevant to the employer's specific business challenge from the system prompt (job description, company information, interviewer context). Uses [keyword] strategy format: [1-2 word keyword] + one sentence naming the strength and its business outcome for this employer. Then one concrete proof point from the candidate background (CV, LinkedIn, portfolio, extra experience). Then a directional outcome for this specific employer. No adjectives. No invented metrics.>\n\
 Close: <One sentence connecting the candidate's growth trajectory to the employer's specific challenge from the system prompt. Starts with 'That growth is exactly why', 'That\\'s exactly why', or 'The work I\\'ve done on'. Max 20 words. References the employer\\'s actual business problem — not a generic domain. Never say 'this role', 'this', 'it'.>\n\
 ---\n\
-Ask: <2-4 word noun phrase related to team growth or development culture> | <Question showing the candidate is actively developing — probes how the team or company supports growth in this specific area. Names a concrete process, tool, or domain. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase — different angle on development or feedback> | <Question about how the team gives feedback or how performance is measured in this area. Names a specific metric or process. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
+Ask: <2-4 word noun phrase related to team growth or development culture> | <Question showing the candidate is actively developing — probes how the team or company supports growth in this specific area. Names a concrete process, tool, or domain. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — different angle on development or feedback> | <Question about how the team gives feedback or how performance is measured in this area. Names a specific metric or process. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Impact: Solve: Bridge: Answer: Close: Ask: Ask:\n\
-- Acknowledge: names a REAL, SPECIFIC limitation — never 'perfectionist' or 'work too hard'. Names professional context.\n\
+- Acknowledge: names a REAL, SPECIFIC limitation — never 'perfectionist' or 'work too hard'. Draws ONLY from candidate background — NEVER invent a weakness.\n\
 - Solve: concrete action taken, not vague aspiration. Draws from ALL candidate context.\n\
 - Bridge: real evidence from background. If none, directional language — NEVER fabricate metric or outcome.\n\
-- Answer: [keyword] compensating strength MUST be directly relevant to employer's specific challenge from system prompt.\n\
+- Answer: [keyword] compensating strength MUST be directly relevant to employer's specific challenge from system prompt. NEVER invent skills.\n\
 - TONE: no adjectives, no 'passionate'. Facts only.\n\
 - ALWAYS use 'I' — never 'we' or 'our'.\n\
 - ACRONYMS: write in full on first use, abbreviation in parentheses.\n\
-- NEVER invent metrics, percentages, or timeframes not in background.\n\
-- NEVER name specific clients or companies — refer by industry only.",
+- NEVER invent metrics, percentages, tools, or details not in background.\n\
+- NEVER name specific clients or companies — refer by industry only.\n\
+- Ask noun phrase: names the underlying business concept — NEVER copies words from the interviewer's question.\n\
+- Ask follow-up (3rd pipe): what YOU say if the interviewer asks why YOU are asking THEM — not a response to the original question.",
         ctx_prefix, question
     )
 }
@@ -1002,18 +1033,20 @@ Bridge: <One short sentence transitioning from Solve to the Answer. 5-8 words. S
 Answer: <Reasoning through the hypothetical on this same line. Each strategy MUST begin with a [1-2 word keyword] immediately before its opening sentence — no space between ] and first word. For each strategy: (A) [keyword] + one outcome sentence naming what this approach achieves. (B) 'I [action verb] [specific approach] because [why this addresses the root cause].' (C) REQUIRED illustration — 'So if [specific trigger from this scenario], I [specific action], which would [directional outcome].' Strategy 2 onward: outcome sentence opens with 'Beyond that,' or 'I also find that'. Last sentence names the overall business outcome. No upfront listing. No adjectives. No invented metrics. 2-3 strategies total. Draws from the candidate\\'s actual working methodology in the system prompt: CV roles, LinkedIn experience, portfolio evidence, and extra experience notes.>\n\
 Close: <One sentence connecting the candidate\\'s reasoning approach to the employer\\'s specific business challenge from the system prompt. Draws from the job description and company information. Starts with 'That\\'s why', 'This is why', 'The work I\\'ve done in', or 'What I\\'d bring here specifically is'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
 ---\n\
-Ask: <2-4 word noun phrase probing the real context behind the hypothetical> | <Question that surfaces the actual business situation the interviewer had in mind. Names a specific metric, process, or recent event. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
-Ask: <2-4 word noun phrase — different angle on how success is measured or what\\'s been tried> | <Question about how the team has approached this challenge previously or how success would be measured. Names a concrete metric or process. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
+Ask: <2-4 word noun phrase probing the real context behind the hypothetical> | <Question that surfaces the actual business situation the interviewer had in mind. Names a specific metric, process, or recent event. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — different angle on how success is measured or what\\'s been tried> | <Question about how the team has approached this challenge previously or how success would be measured. Names a concrete metric or process. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Solve: Bridge: Answer: Close: Ask: Ask:\n\
 - Answer: candidate reasons through the hypothetical — does NOT recall a story as the main answer.\n\
 - Answer: each strategy MUST complete all 3 steps (keyword + outcome; action + why; illustration) before moving to next.\n\
-- Answer: draws from ALL candidate context: CV, LinkedIn, portfolio, extra experience notes, early career context.\n\
+- Answer: draws from ALL candidate context: CV, LinkedIn, portfolio, extra experience notes, early career context. NEVER invent approach, tools, or skills.\n\
 - TONE: no adjectives. No invented metrics. Directional language only.\n\
 - ALWAYS use 'I' — never 'we' or 'our'.\n\
 - ACRONYMS: write in full on first use, abbreviation in parentheses.\n\
-- NEVER invent metrics or numbers. Directional language only.\n\
-- NEVER name specific clients or companies — refer by industry only.",
+- NEVER invent metrics, tools, skills, or details not in the candidate background.\n\
+- NEVER name specific clients or companies — refer by industry only.\n\
+- Ask noun phrase: names the underlying business concept — NEVER copies words from the interviewer's question.\n\
+- Ask follow-up (3rd pipe): what YOU say if the interviewer asks why YOU are asking THEM — not a response to the original question.",
         ctx_prefix, question
     )
 }

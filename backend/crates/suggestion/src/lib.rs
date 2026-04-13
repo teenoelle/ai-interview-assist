@@ -55,6 +55,11 @@ fn groq_cb() -> &'static CircuitBreaker {
     GROQ_CB.get_or_init(|| CircuitBreaker::new("groq", 1, CB_PERMANENT))
 }
 
+static GROQ2_CB: OnceLock<CircuitBreaker> = OnceLock::new();
+fn groq2_cb() -> &'static CircuitBreaker {
+    GROQ2_CB.get_or_init(|| CircuitBreaker::new("groq-2", 1, CB_PERMANENT))
+}
+
 static MISTRAL_CB: OnceLock<CircuitBreaker> = OnceLock::new();
 fn mistral_cb() -> &'static CircuitBreaker {
     MISTRAL_CB.get_or_init(|| CircuitBreaker::new("mistral", 1, CB_PERMANENT))
@@ -117,31 +122,79 @@ async fn suggest_with_fallback(
     event_tx: broadcast::Sender<WsEvent>,
     call_counts: &Option<CallCounts>,
 ) -> anyhow::Result<()> {
-    // 0. Bonsai — local LAN model; health-check first so we skip in 1.5 s if unreachable
-    if let Some(url) = bonsai_url {
-        let health = format!("{}/health", url.trim_end_matches('/'));
-        if !is_reachable(&health).await {
-            tracing::debug!("Bonsai unreachable — skipping");
-        } else {
-            match bonsai_llm::stream_suggestions(url, bonsai_model, system_prompt, user_prompt, mode, event_tx.clone()).await {
-                Ok(()) => {
-                    inc(call_counts, "Bonsai");
-                    let _ = event_tx.send(WsEvent::ProviderUsed {
-                        service: "suggestions".to_string(),
-                        provider: "Bonsai".to_string(),
-                        local: true,
-                    });
-                    return Ok(());
-                }
-                Err(e) => {
-                    tracing::warn!("Bonsai unavailable, falling back: {}", e);
-                    let _ = event_tx.send(WsEvent::Error { message: format!("Bonsai: {}", e) });
-                }
+    // 1. Groq key 1 — fast (~2-5 s), good format compliance
+    if groq_cb().is_open() {
+        tracing::debug!("Groq circuit open — skipping");
+    } else if let Some(key) = groq_key {
+        match groq_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()).await {
+            Ok(()) => {
+                groq_cb().record_success();
+                inc(call_counts, "Groq");
+                let _ = event_tx.send(WsEvent::ProviderUsed { service: "suggestions".to_string(), provider: "Groq".to_string(), local: false });
+                return Ok(());
             }
+            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
+                if is_quota_exhausted(&e) { groq_cb().record_failure(); }
+                tracing::warn!("Groq unavailable (quota/rate-limit): {}", e);
+                let _ = event_tx.send(WsEvent::Error { message: format!("Groq: {}", e) });
+            }
+            Err(e) if is_server_error(&e) => {
+                tracing::warn!("Groq server error, trying next: {}", e);
+                let _ = event_tx.send(WsEvent::Error { message: format!("Groq: {}", e) });
+            }
+            Err(e) => return Err(e),
         }
     }
 
-    // 1. Claude CLI — circuit breaker: 1 failure → permanent skip
+    // 2. Mistral — higher monthly limits, fallback when Groq exhausted
+    if mistral_cb().is_open() {
+        tracing::debug!("Mistral circuit open — skipping");
+    } else if let Some(key) = mistral_key {
+        match mistral_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()).await {
+            Ok(()) => {
+                mistral_cb().record_success();
+                inc(call_counts, "Mistral");
+                let _ = event_tx.send(WsEvent::ProviderUsed { service: "suggestions".to_string(), provider: "Mistral".to_string(), local: false });
+                return Ok(());
+            }
+            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
+                if is_quota_exhausted(&e) { mistral_cb().record_failure(); }
+                tracing::warn!("Mistral unavailable (quota/rate-limit): {}", e);
+                let _ = event_tx.send(WsEvent::Error { message: format!("Mistral: {}", e) });
+            }
+            Err(e) if is_server_error(&e) => {
+                tracing::warn!("Mistral server error, trying next: {}", e);
+                let _ = event_tx.send(WsEvent::Error { message: format!("Mistral: {}", e) });
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
+    // 3. Groq key 2 — independent quota, same model pool
+    if groq2_cb().is_open() {
+        tracing::debug!("Groq #2 circuit open — skipping");
+    } else if let Some(key) = groq_key_2 {
+        match groq_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()).await {
+            Ok(()) => {
+                groq2_cb().record_success();
+                inc(call_counts, "Groq #2");
+                let _ = event_tx.send(WsEvent::ProviderUsed { service: "suggestions".to_string(), provider: "Groq #2".to_string(), local: false });
+                return Ok(());
+            }
+            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
+                if is_quota_exhausted(&e) { groq2_cb().record_failure(); }
+                tracing::warn!("Groq #2 unavailable (quota/rate-limit): {}", e);
+                let _ = event_tx.send(WsEvent::Error { message: format!("Groq #2: {}", e) });
+            }
+            Err(e) if is_server_error(&e) => {
+                tracing::warn!("Groq #2 server error, trying next: {}", e);
+                let _ = event_tx.send(WsEvent::Error { message: format!("Groq #2: {}", e) });
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
+    // 4. Claude CLI — circuit breaker: 1 failure → permanent skip
     if claude_cli_cb().is_open() {
         tracing::debug!("Claude CLI circuit open — skipping");
     } else {
@@ -164,14 +217,12 @@ async fn suggest_with_fallback(
                     claude_cli_cb().record_failure();
                 }
                 tracing::warn!("Claude CLI unavailable, falling back: {}", e);
-                let _ = event_tx.send(WsEvent::Error {
-                    message: format!("Claude CLI: {}", e),
-                });
+                let _ = event_tx.send(WsEvent::Error { message: format!("Claude CLI: {}", e) });
             }
         }
     }
 
-    // 2. Claude API — circuit breaker: 1 quota failure → permanent skip
+    // 5. Claude API — circuit breaker: 1 quota failure → permanent skip
     if claude_api_cb().is_open() {
         tracing::debug!("Claude API circuit open — skipping");
     } else if let Some(key) = anthropic_key {
@@ -199,31 +250,7 @@ async fn suggest_with_fallback(
         }
     }
 
-    // 3. Mistral
-    if mistral_cb().is_open() {
-        tracing::debug!("Mistral circuit open — skipping");
-    } else if let Some(key) = mistral_key {
-        match mistral_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()).await {
-            Ok(()) => {
-                mistral_cb().record_success();
-                inc(call_counts, "Mistral");
-                let _ = event_tx.send(WsEvent::ProviderUsed { service: "suggestions".to_string(), provider: "Mistral".to_string(), local: false });
-                return Ok(());
-            }
-            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                if is_quota_exhausted(&e) { mistral_cb().record_failure(); }
-                tracing::warn!("Mistral unavailable (quota/rate-limit): {}", e);
-                let _ = event_tx.send(WsEvent::Error { message: format!("Mistral: {}", e) });
-            }
-            Err(e) if is_server_error(&e) => {
-                tracing::warn!("Mistral server error, trying next: {}", e);
-                let _ = event_tx.send(WsEvent::Error { message: format!("Mistral: {}", e) });
-            }
-            Err(e) => return Err(e),
-        }
-    }
-
-    // 4. Ollama — local models; single reachability check before looping
+    // 6. Ollama — local models; single reachability check before looping
     let ollama_up = is_reachable(&format!("{}/api/tags", ollama_url.trim_end_matches('/'))).await;
     if !ollama_up {
         tracing::debug!("Ollama unreachable — skipping all local models");
@@ -247,39 +274,6 @@ async fn suggest_with_fallback(
             }
         }
     }
-
-    // 4. Groq key 1 — fast (~2-5 s), good format compliance with temp 0.3
-    if groq_cb().is_open() {
-        tracing::debug!("Groq circuit open — skipping");
-    } else if let Some(key) = groq_key {
-        match groq_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()).await {
-            Ok(()) => {
-                groq_cb().record_success();
-                inc(call_counts, "Groq");
-                let _ = event_tx.send(WsEvent::ProviderUsed { service: "suggestions".to_string(), provider: "Groq".to_string(), local: false });
-                return Ok(());
-            }
-            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                if is_quota_exhausted(&e) { groq_cb().record_failure(); }
-                tracing::warn!("Groq unavailable (quota/rate-limit): {}", e);
-                let _ = event_tx.send(WsEvent::Error { message: format!("Groq: {}", e) });
-            }
-            Err(e) if is_server_error(&e) => {
-                tracing::warn!("Groq server error, trying next: {}", e);
-                let _ = event_tx.send(WsEvent::Error { message: format!("Groq: {}", e) });
-            }
-            Err(e) => return Err(e),
-        }
-    }
-
-    // 5. Groq key 2
-    if let Some(key) = groq_key_2 {
-        try_provider!("Groq #2",
-            groq_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()),
-            call_counts, event_tx);
-    }
-
-    // (Mistral moved to position 1 above)
 
     // 7. OpenRouter
     if let Some(key) = openrouter_key {
@@ -307,6 +301,39 @@ async fn suggest_with_fallback(
         try_provider!("DeepSeek",
             deepseek_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()),
             call_counts, event_tx);
+    }
+
+    // 11. LAN Ollama — remote machine; health-check first (/health or /)
+    if let Some(url) = bonsai_url {
+        let base = url.trim_end_matches('/');
+        let reachable = {
+            let r = reqwest::Client::new().get(format!("{}/health", base))
+                .timeout(std::time::Duration::from_millis(1500)).send().await;
+            match r {
+                Ok(resp) if resp.status().is_success() => true,
+                _ => is_reachable(base).await,
+            }
+        };
+        if !reachable {
+            tracing::debug!("LAN Ollama unreachable — skipping");
+        } else {
+            match bonsai_llm::stream_suggestions(url, bonsai_model, system_prompt, user_prompt, mode, event_tx.clone()).await {
+                Ok(()) => {
+                    let name = format!("LAN Ollama ({})", bonsai_model);
+                    inc(call_counts, &name);
+                    let _ = event_tx.send(WsEvent::ProviderUsed {
+                        service: "suggestions".to_string(),
+                        provider: name,
+                        local: false,
+                    });
+                    return Ok(());
+                }
+                Err(e) => {
+                    tracing::warn!("LAN Ollama ({}) unavailable, falling back: {}", bonsai_model, e);
+                    let _ = event_tx.send(WsEvent::Error { message: format!("LAN Ollama ({}): {}", bonsai_model, e) });
+                }
+            }
+        }
     }
 
     // 12. Gemma 4 — Gemini API, rate-limited

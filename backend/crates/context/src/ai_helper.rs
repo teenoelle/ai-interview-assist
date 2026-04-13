@@ -149,10 +149,17 @@ async fn try_ollama_text_with_system(url: &str, model: &str, system: &str, user:
 }
 
 async fn try_bonsai_text(url: &str, model: &str, prompt: &str, max_tokens: u32) -> Option<String> {
-    let health = format!("{}/health", url.trim_end_matches('/'));
-    let ok = client().get(&health).timeout(std::time::Duration::from_secs(2)).send().await
-        .map(|r| r.status().is_success()).unwrap_or(false);
-    if !ok { return None; }
+    // Try /health first (LM Studio, custom servers), fall back to / (Ollama).
+    let base = url.trim_end_matches('/');
+    let reachable = {
+        let r = client().get(format!("{}/health", base)).timeout(std::time::Duration::from_secs(2)).send().await;
+        match r {
+            Ok(resp) if resp.status().is_success() => true,
+            _ => client().get(base).timeout(std::time::Duration::from_secs(2)).send().await
+                    .map(|r| r.status().is_success()).unwrap_or(false),
+        }
+    };
+    if !reachable { return None; }
     let body = json!({
         "model": model,
         "max_tokens": max_tokens,

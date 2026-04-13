@@ -85,14 +85,11 @@ macro_rules! try_provider {
             }
             Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
                 tracing::warn!("{} unavailable (quota/rate-limit), trying next provider: {}", $name, e);
-                if is_quota_exhausted(&e) {
-                    let _ = $etx.send(WsEvent::Error {
-                        message: format!("{}: credits or quota depleted — falling back", $name),
-                    });
-                }
+                let _ = $etx.send(WsEvent::Error { message: format!("{}: {}", $name, e) });
             }
             Err(e) if is_server_error(&e) => {
                 tracing::warn!("{} server error, trying next provider: {}", $name, e);
+                let _ = $etx.send(WsEvent::Error { message: format!("{}: {}", $name, e) });
             }
             Err(e) => return Err(e),
         }
@@ -120,7 +117,31 @@ async fn suggest_with_fallback(
     event_tx: broadcast::Sender<WsEvent>,
     call_counts: &Option<CallCounts>,
 ) -> anyhow::Result<()> {
-    // 0. Claude CLI — circuit breaker: 1 failure → permanent skip
+    // 0. Bonsai — local LAN model; health-check first so we skip in 1.5 s if unreachable
+    if let Some(url) = bonsai_url {
+        let health = format!("{}/health", url.trim_end_matches('/'));
+        if !is_reachable(&health).await {
+            tracing::debug!("Bonsai unreachable — skipping");
+        } else {
+            match bonsai_llm::stream_suggestions(url, bonsai_model, system_prompt, user_prompt, mode, event_tx.clone()).await {
+                Ok(()) => {
+                    inc(call_counts, "Bonsai");
+                    let _ = event_tx.send(WsEvent::ProviderUsed {
+                        service: "suggestions".to_string(),
+                        provider: "Bonsai".to_string(),
+                        local: true,
+                    });
+                    return Ok(());
+                }
+                Err(e) => {
+                    tracing::warn!("Bonsai unavailable, falling back: {}", e);
+                    let _ = event_tx.send(WsEvent::Error { message: format!("Bonsai: {}", e) });
+                }
+            }
+        }
+    }
+
+    // 1. Claude CLI — circuit breaker: 1 failure → permanent skip
     if claude_cli_cb().is_open() {
         tracing::debug!("Claude CLI circuit open — skipping");
     } else {
@@ -137,36 +158,15 @@ async fn suggest_with_fallback(
             }
             Err(e) => {
                 let msg = e.to_string();
-                // Only permanently trip for non-transient failures
-                // (binary not found, auth broken). Rate limit / overload: skip for session only.
                 let transient = msg.contains("rate") || msg.contains("overload")
-                    || msg.contains("529") || msg.contains("529")
-                    || msg.contains("Too Many") || msg.contains("capacity");
+                    || msg.contains("529") || msg.contains("Too Many") || msg.contains("capacity");
                 if !transient {
                     claude_cli_cb().record_failure();
                 }
                 tracing::warn!("Claude CLI unavailable, falling back: {}", e);
-            }
-        }
-    }
-
-    // 1. Bonsai — local LAN model; health-check first so we skip in 1.5 s if unreachable
-    if let Some(url) = bonsai_url {
-        let health = format!("{}/health", url.trim_end_matches('/'));
-        if !is_reachable(&health).await {
-            tracing::debug!("Bonsai unreachable — skipping");
-        } else {
-            match bonsai_llm::stream_suggestions(url, bonsai_model, system_prompt, user_prompt, mode, event_tx.clone()).await {
-                Ok(()) => {
-                    inc(call_counts, "Bonsai");
-                    let _ = event_tx.send(WsEvent::ProviderUsed {
-                        service: "suggestions".to_string(),
-                        provider: "Bonsai".to_string(),
-                        local: true,
-                    });
-                    return Ok(());
-                }
-                Err(e) => tracing::warn!("Bonsai unavailable, falling back: {}", e),
+                let _ = event_tx.send(WsEvent::Error {
+                    message: format!("Claude CLI: {}", e),
+                });
             }
         }
     }
@@ -187,16 +187,13 @@ async fn suggest_with_fallback(
                 return Ok(());
             }
             Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                if is_quota_exhausted(&e) {
-                    claude_api_cb().record_failure();
-                    let _ = event_tx.send(WsEvent::Error {
-                        message: "Claude API: credits or quota depleted — falling back".to_string(),
-                    });
-                }
+                if is_quota_exhausted(&e) { claude_api_cb().record_failure(); }
                 tracing::warn!("Claude API unavailable (quota/rate-limit), trying next: {}", e);
+                let _ = event_tx.send(WsEvent::Error { message: format!("Claude API: {}", e) });
             }
             Err(e) if is_server_error(&e) => {
                 tracing::warn!("Claude API server error, trying next: {}", e);
+                let _ = event_tx.send(WsEvent::Error { message: format!("Claude API: {}", e) });
             }
             Err(e) => return Err(e),
         }
@@ -214,14 +211,13 @@ async fn suggest_with_fallback(
                 return Ok(());
             }
             Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                if is_quota_exhausted(&e) {
-                    mistral_cb().record_failure();
-                    let _ = event_tx.send(WsEvent::Error { message: "Mistral: credits or quota depleted — falling back".to_string() });
-                }
+                if is_quota_exhausted(&e) { mistral_cb().record_failure(); }
                 tracing::warn!("Mistral unavailable (quota/rate-limit): {}", e);
+                let _ = event_tx.send(WsEvent::Error { message: format!("Mistral: {}", e) });
             }
             Err(e) if is_server_error(&e) => {
                 tracing::warn!("Mistral server error, trying next: {}", e);
+                let _ = event_tx.send(WsEvent::Error { message: format!("Mistral: {}", e) });
             }
             Err(e) => return Err(e),
         }
@@ -244,7 +240,10 @@ async fn suggest_with_fallback(
                     });
                     return Ok(());
                 }
-                Err(e) => tracing::warn!("Ollama {} unavailable, trying next: {}", model, e),
+                Err(e) => {
+                    tracing::warn!("Ollama {} unavailable, trying next: {}", model, e);
+                    let _ = event_tx.send(WsEvent::Error { message: format!("Ollama ({}): {}", model, e) });
+                }
             }
         }
     }
@@ -261,14 +260,13 @@ async fn suggest_with_fallback(
                 return Ok(());
             }
             Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                if is_quota_exhausted(&e) {
-                    groq_cb().record_failure();
-                    let _ = event_tx.send(WsEvent::Error { message: "Groq: credits or quota depleted — falling back".to_string() });
-                }
+                if is_quota_exhausted(&e) { groq_cb().record_failure(); }
                 tracing::warn!("Groq unavailable (quota/rate-limit): {}", e);
+                let _ = event_tx.send(WsEvent::Error { message: format!("Groq: {}", e) });
             }
             Err(e) if is_server_error(&e) => {
                 tracing::warn!("Groq server error, trying next: {}", e);
+                let _ = event_tx.send(WsEvent::Error { message: format!("Groq: {}", e) });
             }
             Err(e) => return Err(e),
         }

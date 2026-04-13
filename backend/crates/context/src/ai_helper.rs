@@ -38,6 +38,9 @@ pub type UsageCounter = Arc<Mutex<std::collections::HashMap<String, u64>>>;
 pub struct AiConfig<'a> {
     pub gemini_key: &'a str,
     pub anthropic_key: Option<&'a str>,
+    pub mistral_key: Option<&'a str>,
+    pub bonsai_url: Option<&'a str>,
+    pub bonsai_model: &'a str,
     pub groq_key: Option<&'a str>,
     pub groq_key_2: Option<&'a str>,
     pub ollama_url: &'a str,
@@ -145,6 +148,71 @@ async fn try_ollama_text_with_system(url: &str, model: &str, system: &str, user:
     if text.is_empty() { None } else { Some(text) }
 }
 
+async fn try_bonsai_text(url: &str, model: &str, prompt: &str, max_tokens: u32) -> Option<String> {
+    let health = format!("{}/health", url.trim_end_matches('/'));
+    let ok = client().get(&health).timeout(std::time::Duration::from_secs(2)).send().await
+        .map(|r| r.status().is_success()).unwrap_or(false);
+    if !ok { return None; }
+    let body = json!({
+        "model": model,
+        "max_tokens": max_tokens,
+        "messages": [{ "role": "user", "content": prompt }],
+        "stream": false
+    });
+    let resp = client()
+        .post(format!("{}/v1/chat/completions", url.trim_end_matches('/')))
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(60))
+        .send().await.ok()?;
+    if !resp.status().is_success() { return None; }
+    let j: Value = resp.json().await.ok()?;
+    let text = j["choices"][0]["message"]["content"].as_str()?.trim().to_string();
+    if text.is_empty() { None } else { Some(text) }
+}
+
+async fn try_claude_cli_text(prompt: &str, max_tokens: u32) -> Option<String> {
+    use tokio::process::Command;
+    use tokio::io::{AsyncWriteExt, AsyncReadExt, BufReader};
+    use std::process::Stdio;
+    let mut child = Command::new("claude")
+        .args(["--print", "--output-format", "text", "--model", "claude-haiku-4-5-20251001",
+               "--permission-mode", "bypassPermissions"])
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
+        .current_dir(std::env::temp_dir())
+        .spawn().ok()?;
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(prompt.as_bytes()).await;
+    }
+    let stdout = child.stdout.take()?;
+    let mut reader = BufReader::new(stdout);
+    let mut out = String::new();
+    let _ = reader.read_to_string(&mut out).await;
+    let status = child.wait().await.ok()?;
+    if !status.success() || out.trim().is_empty() { return None; }
+    // Honour max_tokens roughly by word count
+    let words: Vec<&str> = out.split_whitespace().collect();
+    let approx = words[..words.len().min(max_tokens as usize * 3 / 4)].join(" ");
+    Some(if approx.len() < out.trim().len() { approx } else { out.trim().to_string() })
+}
+
+async fn try_mistral_text(key: &str, prompt: &str, max_tokens: u32) -> Option<String> {
+    let body = json!({
+        "model": "mistral-large-latest",
+        "max_tokens": max_tokens,
+        "messages": [{ "role": "user", "content": prompt }]
+    });
+    let resp = client()
+        .post("https://api.mistral.ai/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", key))
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(30))
+        .send().await.ok()?;
+    if !resp.status().is_success() { return None; }
+    let j: Value = resp.json().await.ok()?;
+    let text = j["choices"][0]["message"]["content"].as_str()?.trim().to_string();
+    if text.is_empty() { None } else { Some(text) }
+}
+
 /// Claude-first AI call for important one-shot generation (debrief, analysis).
 /// Order: Claude → Groq key1 → Groq key2 → Gemini. Skips Ollama (too slow for long outputs).
 pub async fn call_ai_quality(cfg: &AiConfig<'_>, prompt: &str, max_tokens: u32) -> Result<String> {
@@ -216,31 +284,23 @@ pub async fn call_ai_quality(cfg: &AiConfig<'_>, prompt: &str, max_tokens: u32) 
         .to_string())
 }
 
-/// Call AI providers in order: Groq key1 → Groq key2 → Ollama → Claude → Gemini.
+/// Call AI providers in order: Bonsai → Claude CLI → Claude API → Mistral → Groq → Gemini.
 pub async fn call_ai(cfg: &AiConfig<'_>, prompt: &str, max_tokens: u32) -> Result<String> {
-    // Groq key1
-    if let Some(key) = cfg.groq_key {
-        if let Some(text) = try_groq_text(key, prompt, max_tokens).await {
-            inc(&cfg.usage, "Groq");
+    // Bonsai — local LAN model
+    if let Some(url) = cfg.bonsai_url {
+        if let Some(text) = try_bonsai_text(url, cfg.bonsai_model, prompt, max_tokens).await {
+            inc(&cfg.usage, "Bonsai");
             return Ok(text);
         }
     }
 
-    // Groq key2
-    if let Some(key) = cfg.groq_key_2 {
-        if let Some(text) = try_groq_text(key, prompt, max_tokens).await {
-            inc(&cfg.usage, "Groq #2");
-            return Ok(text);
-        }
-    }
-
-    // Ollama (local, no quota)
-    if let Some(text) = try_ollama_text(cfg.ollama_url, cfg.ollama_model, prompt, max_tokens).await {
-        inc(&cfg.usage, "Ollama");
+    // Claude CLI
+    if let Some(text) = try_claude_cli_text(prompt, max_tokens).await {
+        inc(&cfg.usage, "Claude CLI");
         return Ok(text);
     }
 
-    // Claude
+    // Claude API
     if let Some(key) = cfg.anthropic_key {
         let body = json!({
             "model": "claude-haiku-4-5-20251001",
@@ -260,7 +320,31 @@ pub async fn call_ai(cfg: &AiConfig<'_>, prompt: &str, max_tokens: u32) -> Resul
             inc(&cfg.usage, "Claude API");
             return Ok(j["content"][0]["text"].as_str().unwrap_or("").trim().to_string());
         }
-        tracing::debug!("Claude returned {}, trying next provider", resp.status());
+        tracing::debug!("Claude API returned {}, trying next provider", resp.status());
+    }
+
+    // Mistral
+    if let Some(key) = cfg.mistral_key {
+        if let Some(text) = try_mistral_text(key, prompt, max_tokens).await {
+            inc(&cfg.usage, "Mistral");
+            return Ok(text);
+        }
+    }
+
+    // Groq key1
+    if let Some(key) = cfg.groq_key {
+        if let Some(text) = try_groq_text(key, prompt, max_tokens).await {
+            inc(&cfg.usage, "Groq");
+            return Ok(text);
+        }
+    }
+
+    // Groq key2
+    if let Some(key) = cfg.groq_key_2 {
+        if let Some(text) = try_groq_text(key, prompt, max_tokens).await {
+            inc(&cfg.usage, "Groq #2");
+            return Ok(text);
+        }
     }
 
     // Gemini fallback
@@ -410,11 +494,26 @@ pub async fn call_ai_fast(cfg: &AiConfig<'_>, system_prompt: &str, user_prompt: 
         .to_string())
 }
 
-/// Call AI with a system prompt: Claude Haiku → Groq key1 → Groq key2 → Ollama → Gemini.
+/// Call AI with a system prompt: Bonsai → Claude CLI → Claude API → Mistral → Groq → Gemini.
 pub async fn call_ai_simple(cfg: &AiConfig<'_>, system_prompt: &str, user_prompt: &str) -> Result<String> {
     let max_tokens = 400u32;
+    let combined = format!("<system>\n{}\n</system>\n\n{}", system_prompt, user_prompt);
 
-    // Claude Haiku — primary
+    // Bonsai — local LAN model
+    if let Some(url) = cfg.bonsai_url {
+        if let Some(text) = try_bonsai_text(url, cfg.bonsai_model, &combined, max_tokens).await {
+            inc(&cfg.usage, "Bonsai");
+            return Ok(text);
+        }
+    }
+
+    // Claude CLI
+    if let Some(text) = try_claude_cli_text(&combined, max_tokens).await {
+        inc(&cfg.usage, "Claude CLI");
+        return Ok(text);
+    }
+
+    // Claude API
     if let Some(key) = cfg.anthropic_key {
         let body = json!({
             "model": "claude-haiku-4-5-20251001",
@@ -436,10 +535,18 @@ pub async fn call_ai_simple(cfg: &AiConfig<'_>, system_prompt: &str, user_prompt
             inc(&cfg.usage, "Claude API");
             return Ok(j["content"][0]["text"].as_str().unwrap_or("").trim().to_string());
         }
-        tracing::debug!("Claude returned {}, trying next provider", resp.status());
+        tracing::debug!("Claude API returned {}, trying next provider", resp.status());
     }
 
-    // Groq key1 — fallback
+    // Mistral
+    if let Some(key) = cfg.mistral_key {
+        if let Some(text) = try_mistral_text(key, &combined, max_tokens).await {
+            inc(&cfg.usage, "Mistral");
+            return Ok(text);
+        }
+    }
+
+    // Groq key1
     if let Some(key) = cfg.groq_key {
         if let Some(text) = try_groq_text_with_system(key, system_prompt, user_prompt, max_tokens).await {
             inc(&cfg.usage, "Groq");
@@ -453,12 +560,6 @@ pub async fn call_ai_simple(cfg: &AiConfig<'_>, system_prompt: &str, user_prompt
             inc(&cfg.usage, "Groq #2");
             return Ok(text);
         }
-    }
-
-    // Ollama (local, no quota)
-    if let Some(text) = try_ollama_text_with_system(cfg.ollama_url, cfg.ollama_model, system_prompt, user_prompt, max_tokens).await {
-        inc(&cfg.usage, "Ollama");
-        return Ok(text);
     }
 
     // Gemini fallback

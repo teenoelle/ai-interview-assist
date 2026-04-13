@@ -513,16 +513,12 @@ Close: <2 sentences. First: connect your Next to why this specific employer and 
 Ask: <2-4 word noun phrase naming what you\\'re asking about — e.g. 'team structure', 'client mix', 'success metrics'> | <Specific grammatical question the candidate asks the interviewer. Directly related to the type of work or challenge described by the interviewer. Ends with '?'.> | <1 sentence if asked 'why do you ask?' — starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
 Ask: <2-4 word noun phrase> | <A different specific question about the opportunity. Names the concrete topic — no vague pronouns. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
 Rules:\n\
-- Output ONLY: Acknowledge:, Summary:, Thread:, Transition1:, Story:, Transition2:, Next:, Transition3:, Close:, then two Ask: lines. No other labels. No preamble.\n\
-- Summary and Story draw ONLY from candidate background — no invented details.\n\
-- Thread must bridge background to role: it names the pattern that makes the candidate the natural fit for this employer's challenge — not just what they've done. If the background shows someone who is trusted to make things work across teams or clients, Thread should name that role (e.g. 'being the go-to person who turns complexity into outcomes'). Always connect Thread to the employer's challenge from the system prompt.\n\
-- Next names the specific direction the candidate is building toward — not generic praise.\n\
-- Close first sentence must reference the employer\\'s specific challenge from the system prompt AND connect to Next.\n\
-- Close second sentence must be exactly: 'And that\\'s why I\\'m so excited to be speaking with you today.'\n\
-- Ask topics: short noun phrases (2-4 words), not verb phrases. Directly related to what the interviewer asked about.\n\
-- NEVER invent metrics, percentages, dollar figures, headcount, or timeframes.\n\
-- NEVER name specific companies, clients, or employers — refer by industry only.\n\
-- No adjectives or adverbs. No 'passionate', 'excited', 'dedicated', 'driven'. Facts and direction only.",
+- LABELS in order: Acknowledge: Summary: Thread: Transition1: Story: Transition2: Next: Transition3: Close: Ask: Ask:\n\
+- TONE: facts and direction only — no adjectives, no 'passionate', 'excited', 'dedicated', 'driven'.\n\
+- ALWAYS use 'I' — never 'we' or 'our'.\n\
+- NEVER invent metrics, percentages, figures, or timeframes not in the background.\n\
+- NEVER name specific companies or clients — refer by industry only.\n\
+- ACRONYMS: write in full on first use, abbreviation in parentheses.",
         ctx_prefix, question
     )
 }
@@ -539,19 +535,17 @@ Role: <2 sentences. Each starts with 'I'. Max 10 words each. How your specific b
 Transition2: <1 sentence connecting Role to Self. Starts with 'But beyond the skillset,' or 'On a personal level,' or 'And what draws me further is'. Max 10 words.>\n\
 Self: <1-2 sentences. Each starts with 'I'. Max 10 words each. How this role fits your career trajectory. What you will build or develop here that you cannot elsewhere.>\n\
 Transition3: <1 sentence connecting Self to Close. Starts with 'So when I look at' or 'That combination is exactly why' or 'Which is why'. Max 10 words.>\n\
-Close: <One sentence. Connects your motivation to the employer's specific challenge from the system prompt. Starts with 'That\'s why', 'This is why', or 'I\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
+Close: <One sentence. Connects your motivation to the employer's specific challenge from the system prompt. Starts with 'That\'s why', 'This is why', 'The work I\'ve done in', or 'What I\'d bring here specifically is'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
 ---\n\
 Ask: <2-4 word noun phrase naming what you're asking about — drawn from the specific topic the interviewer raised. e.g. 'business challenge', 'client mix', 'team priorities'> | <Specific grammatical question probing an aspect of what the interviewer asked about. Names a concrete challenge, outcome, or constraint from the system prompt. Ends with '?'.> | <1 sentence if asked 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
 Ask: <2-4 word noun phrase — a different angle from the first, still related to the interviewer's question> | <A different specific question. Names a concrete metric, process, or domain — no vague pronouns. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
 Rules:\n\
-- Output ONLY: Acknowledge:, Company:, Transition1:, Role:, Transition2:, Self:, Transition3:, Close:, then two Ask: lines. No other labels. No preamble.\n\
-- Company names the employer's actual challenge from the system prompt. Never 'great company' or 'exciting opportunity'.\n\
-- Role draws ONLY from candidate background — no invented details.\n\
-- NEVER invent metrics, percentages, dollar figures, headcount, or timeframes. If no specific figure exists in the candidate background, use directional language only (e.g. 'improved', 'reduced', 'grew') — never fabricate a number.\n\
-- NEVER name specific companies, clients, or employers — refer by industry only (e.g. 'a retail brand', 'a tech startup').\n\
-- Ask topics: 2-4 word noun phrases naming the specific thing being asked about — e.g. 'team structure', 'success metrics', 'client mix'. Must directly relate to what the interviewer asked. Never a verb phrase. Never vague.\n\
-- Ask questions must probe the specific topic the interviewer raised — not generic role questions. If the recent conversation includes specific words or concerns the interviewer mentioned, prioritise those for Ask topics.\n\
-- No adjectives or adverbs. No 'passionate', 'excited', 'dedicated', 'driven'. Facts and direction only.",
+- LABELS in order: Acknowledge: Company: Transition1: Role: Transition2: Self: Transition3: Close: Ask: Ask:\n\
+- Company: name the employer's actual challenge — never 'great company' or 'exciting opportunity'.\n\
+- TONE: facts and direction only — no adjectives, no 'passionate', 'excited', 'dedicated', 'driven'.\n\
+- ALWAYS use 'I' — never 'we' or 'our'.\n\
+- NEVER invent metrics, figures, or timeframes not in the background. Directional language only.\n\
+- NEVER name specific companies or clients — refer by industry only.",
         ctx_prefix, question
     )
 }
@@ -570,27 +564,20 @@ Transition2: <1 sentence bridging Gap to Choice. Starts with 'I chose this emplo
 Choice: <1-2 sentences. Why this specific employer and role is the right place to address this gap — connects the JD challenge to the candidate's strategic intent. Draws from the employer's specific challenge in the system prompt. Starts with 'I'. Max 10 words each.>\n\
 Transition3: <1 sentence bridging Choice to Bring. Starts with 'What I bring in the meantime is' or 'And what I contribute from existing depth is' or 'Where I add immediate value is'. Max 12 words.>\n\
 Bring: <1-2 sentences. What the candidate contributes from existing depth that a career junior can't: faster ramp, cross-channel perspective, stakeholder credibility, pattern recognition from adjacent domains. Names the specific skill or perspective — not vague. Starts with 'I'. Max 10 words each.>\n\
-Close: <One sentence. Connects the whole framing to the employer's specific challenge from the system prompt. Starts with 'That\\'s why', 'This is why', or 'I\\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
+Close: <One sentence. Connects the whole framing to the employer's specific challenge from the system prompt. Starts with 'That\\'s why', 'This is why', 'The work I\\'ve done in', or 'What I\\'d bring here specifically is'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
 ----\n\
 Ask: <2-4 word noun phrase> | <Question> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
 Ask: <2-4 word noun phrase> | <Question> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
 Rules:\n\
-- Output ONLY: Acknowledge:, Reframe:, Transition1:, Gap:, Transition2:, Choice:, Transition3:, Bring:, Close:, then two Ask: lines. No other labels. No preamble. NEVER output 'Overqualified:' — start directly with Acknowledge:.\n\
-- Acknowledge confirms ONLY the level/seniority observation — no skills, channels, tools, or JD specifics. Those belong in Gap. One calm factual sentence.\n\
-- Acknowledge must not repeat what Reframe says — it only confirms the observation. Reframe does the pivoting.\n\
-- CRITICAL — Gap must identify a SPECIFIC skill, channel, or domain from the JD (system prompt) where the candidate's background is absent or materially thinner. Name it by its actual domain (e.g. 'paid social', 'programmatic buying', 'SEO') — never 'a new area' or 'further experience'.\n\
-- Choice draws from the employer's actual challenge in the system prompt — not generic.\n\
-- Bring draws ONLY from candidate background. Names the specific skills or perspective that cross over from adjacent experience.\n\
-- Ask questions: choose the TWO most relevant angles from the list below — do not always use the same two. Pick based on what is most specific to the fit narrative just constructed:\n\
-  • Gap development: how does the team approach developing [specific gap skill]? What learning or mentorship is in place?\n\
-  • Choice validation: what does the specific JD challenge named in Choice look like in practice day-to-day for this team?\n\
-  • Bring application: where would the existing depth described in Bring have the most immediate impact in this team?\n\
-  • Success definition: how is strong performance defined in year one for someone transitioning from adjacent experience into this gap area?\n\
-  • Level transition: how does the team typically support someone stepping into a more specialised or focused scope than their prior role?\n\
-- Each Ask noun phrase must name the specific domain, channel, or challenge — never a generic phrase like 'this role' or 'team growth'.\n\
-- NEVER invent metrics, percentages, dollar figures, headcount, or timeframes.\n\
-- NEVER name specific companies, clients, or employers — refer by category only.\n\
-- No adjectives or adverbs. No 'passionate', 'excited', 'dedicated'. Facts and trade-offs only.",
+- LABELS in order: Acknowledge: Reframe: Transition1: Gap: Transition2: Choice: Transition3: Bring: Close: Ask: Ask:\n\
+- Acknowledge: confirms level/seniority observation ONLY — no skills, channels, or JD specifics (those go in Gap). Never repeats Reframe.\n\
+- CRITICAL — Gap: name the SPECIFIC skill or channel from the JD where background is absent (e.g. 'paid social', 'SEO') — never 'a new area'.\n\
+- Choice: draws from the employer's actual challenge in the system prompt — not generic.\n\
+- Bring: draws ONLY from candidate background — names specific skills/perspective from adjacent experience.\n\
+- TONE: facts and trade-offs only — no adjectives, no 'passionate', 'excited', 'dedicated'.\n\
+- ALWAYS use 'I' — never 'we' or 'our'.\n\
+- NEVER invent metrics, percentages, or timeframes.\n\
+- NEVER name specific companies or clients — refer by category only.",
         ctx_prefix, question
     )
 }
@@ -607,19 +594,18 @@ Alignment: <1-2 sentences. Each starts with 'I'. Max 10 words each. How this spe
 Transition2: <1 sentence connecting Alignment to Contribution. Starts with 'Concretely,' or 'In practical terms,' or 'What I would bring here is'. Max 10 words.>\n\
 Contribution: <1 sentence. Starts with 'I'. Max 10 words. What you will build or deliver here along the way. Concrete outcome, not vague aspiration.>\n\
 Transition3: <1 sentence connecting Contribution to Close. Starts with 'Taken together,' or 'That is the reason' or 'So in short,'. Max 10 words.>\n\
-Close: <One sentence. Connects your trajectory to the employer's specific challenge from the system prompt. Starts with 'That\'s why', 'This is why', or 'I\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
+Close: <One sentence. Connects your trajectory to the employer's specific challenge from the system prompt. Starts with 'That\'s why', 'This is why', 'The work I\'ve done in', or 'What I\'d bring here specifically is'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
 ---\n\
 Ask: <2-4 word noun phrase naming what you're asking about — drawn from the specific topic the interviewer raised. e.g. 'growth path', 'skill development', 'team challenge'> | <Specific grammatical question probing an aspect of what the interviewer asked about. Names a concrete skill, domain, or outcome. Ends with '?'.> | <1 sentence if asked 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
 Ask: <2-4 word noun phrase — a different angle, still related to the interviewer's question> | <A different specific question about the opportunity or challenge ahead. Names a concrete metric, process, or domain. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
 Rules:\n\
-- Output ONLY: Acknowledge:, Direction:, Transition1:, Alignment:, Transition2:, Contribution:, Transition3:, Close:, then two Ask: lines. No other labels. No preamble.\n\
-- Direction: specific but not rigid. Never 'dream' or 'passionate'. Facts and direction only.\n\
-- CRITICAL — Direction must build ON TOP OF the candidate's current documented experience. If the CV already shows the candidate working across multiple clients, managing large budgets, leading teams, etc., do NOT describe those as future goals — they are present-state facts. Direction must describe the NEXT level above where the candidate already is.\n\
-- Alignment names the employer's actual challenge from the system prompt.\n\
-- NEVER invent metrics, percentages, dollar figures, headcount, or timeframes. If no specific figure exists in the candidate background, use directional language only (e.g. 'improved', 'reduced', 'grew') — never fabricate a number.\n\
-- NEVER name specific companies, clients, employers, tools, or platforms (e.g. never 'Google', 'Meta', 'LinkedIn', 'Salesforce') — refer by category (e.g. 'a paid search channel', 'a retail brand', 'a CRM platform').\n\
-- Ask topics: 2-4 word noun phrases naming the specific thing being asked about. Must directly relate to what the interviewer asked — not generic role questions. If the recent conversation includes specific words or concerns the interviewer mentioned, prioritise those for Ask topics.\n\
-- No adjectives or adverbs. No 'passionate', 'excited', 'dedicated', 'driven'. Facts and direction only.",
+- LABELS in order: Acknowledge: Direction: Transition1: Alignment: Transition2: Contribution: Transition3: Close: Ask: Ask:\n\
+- CRITICAL — Direction must describe the NEXT level ABOVE current documented experience — not repeat what the CV already shows.\n\
+- Alignment: names the employer's actual challenge from the system prompt — not generic.\n\
+- TONE: facts and direction only — no adjectives, no 'passionate', 'excited', 'dedicated', 'driven', no 'dream'.\n\
+- ALWAYS use 'I' — never 'we' or 'our'.\n\
+- NEVER invent metrics, figures, or timeframes not in the background.\n\
+- NEVER name specific companies, clients, tools, or platforms — refer by category only.",
         ctx_prefix, question
     )
 }
@@ -652,7 +638,7 @@ Output ONLY the four labeled lines below, in order. No preamble, no commentary, 
 
 ---
 Thanks: <One complete spoken sentence. Warm, genuine, not effusive. Must start with 'Thank you' or 'It's been' or 'I really enjoyed'. Max 12 words.>
-Reiterate: <One complete spoken sentence. Must start with 'My' or 'With my' or 'I bring'. Name the candidate's single most relevant concrete qualification and connect it to the employer's specific challenge. No vague claims like 'my experience' or 'my background'. Max 20 words.>
+Reiterate: <One complete spoken sentence. Must start with 'The work I've done in', 'I've been doing', or 'What I'd bring specifically is'. Name the candidate's single most relevant concrete qualification and connect it to the employer's specific challenge. No vague claims like 'my experience' or 'my background'. Max 20 words.>
 Echo: <One complete spoken sentence. Must start with 'I especially enjoyed' or 'The conversation about' or 'I appreciated'. Reference a specific topic, question, or moment from the interview. If no context is available, name a concrete aspect of the role. Max 20 words.>
 Forward: <One complete spoken sentence. Must start with 'I look forward to' or 'I'm excited to hear' or 'I'd love to'. Express genuine anticipation for next steps or contributing. Never uses 'this opportunity'. Max 15 words.>
 
@@ -740,24 +726,20 @@ For each strength:\n\
 Strength 2 onward: opening sentence starts with 'Beyond that,' or 'I also bring'.\n\
 Last sentence: names the combined business value these strengths bring to this specific role.\n\
 No adjectives. No 'I am passionate'. No 'utilize'. Facts and outcomes only.>\n\
-Close: <One sentence connecting your strengths to the employer's specific business challenge. Starts with 'That\'s why', 'This is why', or 'I\'m confident'. Max 20 words. Never say 'this role', 'this work', 'this', 'it', or 'that'.>\n\
+Close: <One sentence connecting your strengths to the employer's specific business challenge. Starts with 'That\'s why', 'This is why', 'The work I\'ve done in', or 'What I\'d bring here specifically is'. Max 20 words. Never say 'this role', 'this work', 'this', 'it', or 'that'.>\n\
 ---\n\
 Ask: <2-4 word noun phrase — directly related to what the interviewer asked about strengths. e.g. 'highest impact area', 'skill application', 'team gap'> | <Question probing where the specific strengths just discussed would have the most impact — names the domain, metric, or challenge from the system prompt. Ends with '?'.> | <1 sentence if asked 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
 Ask: <2-4 word noun phrase — a different angle on what the interviewer raised> | <A different question about what the team most needs — names the specific skill area or outcome. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
 Rules:\n\
-- Output ONLY these lines. No extra text.\n\
-- Acknowledge: one sentence naming the business priority behind the question. Never starts with 'I'.\n\
-- Answer text must be on the same line as 'Answer:' — not on a new line.\n\
-- Answer: each strength MUST begin with [keyword] immediately before the outcome sentence. No space between ] and first word.\n\
-- Answer: strength evidence draws ONLY from candidate background. NEVER invent metrics — use directional language only if no figure exists in the background.\n\
-- Answer: strength connection names the employer's actual challenge from the system prompt.\n\
-- Answer: 2-3 strengths only. Never more than 3.\n\
-- Close: one sentence. Max 20 words. Never say 'this role'.\n\
-- Always use 'I' — never 'we' or 'our'.\n\
-- Acronyms: write in full on first use followed by abbreviation in parentheses.\n\
-- NEVER name specific clients or companies. Refer by industry only (e.g. 'retail brand', 'tech startup').\n\
-- Ask topics: 2-4 word noun phrases naming the specific thing being asked about. Must directly relate to what the interviewer asked — not generic role questions. If the recent conversation includes specific words or concerns the interviewer mentioned, prioritise those.\n\
-- Use only background provided. No invented details.",
+- LABELS in order: Acknowledge: Answer: Close: Ask: Ask:\n\
+- Acknowledge: names business priority behind the question — never starts with 'I'.\n\
+- Answer: [keyword] immediately before each strength sentence — no space between ] and first word. 2-3 strengths only.\n\
+- Answer: evidence draws ONLY from candidate background — NEVER invent metrics. Directional language only.\n\
+- Answer: connection names the employer's actual challenge from the system prompt.\n\
+- TONE: facts and outcomes only — no adjectives, no 'passionate', 'utilize'.\n\
+- ALWAYS use 'I' — never 'we' or 'our'.\n\
+- ACRONYMS: write in full on first use, abbreviation in parentheses.\n\
+- NEVER name specific clients or companies — refer by industry only.",
         ctx_prefix, question
     )
 }
@@ -770,34 +752,24 @@ Acknowledge: <One complete grammatical sentence the candidate speaks aloud to th
 Solve: <One sentence spoken after Acknowledge. Shows the candidate has direct experience solving this exact type of business problem. Starts with 'I' or 'I\'ve'. Max 12 words. Must name the specific business outcome from Acknowledge — never vague pronouns. e.g. 'I\'ve built paid search systems that directly reduce customer acquisition cost.' or 'I\'ve led attribution strategy across high-spend performance accounts.'>\n\
 Bridge: <One short spoken sentence that transitions from Solve to the Answer. 5-8 words. Starts with 'I\'d' or 'I'. e.g. 'I\'d approach that by starting with the data.' or 'I\'d tackle that by auditing the targeting first.' Never a question. Never starts with 'We' or 'Here\'s'.>\n\
 Answer: [Situation]<One sentence of brief context. 'In [context], I [role or task].' Max 12 words.> [Task]<One sentence naming what needed to be achieved or resolved. Starts with 'The goal was' or 'I needed to'. Max 12 words.> [Action]<Two to three sentences. First: specific action taken — starts with 'I [verb]'. REQUIRED: immediately follow with inline illustration — 'So if [specific trigger], I [specific action], which would [directional outcome].' If a second action applies, use 'I also [action].' then another illustration. No adjectives. No adverbs. No 'utilize'. Name metrics, channels, tools, processes explicitly.> [Result]<One sentence naming the directional outcome achieved. Starts with 'As a result,' or 'The outcome was' or 'This led to'. Directional language only — never invent a metric.>\n\
-Close: <One sentence the candidate says after the Answer. Mirrors the employer\'s specific business challenge from the system prompt — name the exact problem the employer is trying to solve (their growth constraint, market challenge, or operational goal) not a generic domain. Starts with 'That\'s why', 'This is why', or 'I\'m confident'. Max 20 words. End with a period. Never say 'this role', 'this work', 'this', 'it', or 'that'.>\n\
+Close: <One sentence the candidate says after the Answer. Mirrors the employer\'s specific business challenge from the system prompt — name the exact problem the employer is trying to solve (their growth constraint, market challenge, or operational goal) not a generic domain. Starts with 'That\'s why', 'This is why', 'The work I\'ve done in', or 'What I\'d bring here specifically is'. Max 20 words. End with a period. Never say 'this role', 'this work', 'this', 'it', or 'that'.>\n\
 ---\n\
 Ask: <2-4 word noun phrase naming what you're asking about — drawn directly from the topic the interviewer raised. e.g. 'team prioritization', 'success metrics', 'client feedback loop'> | <A genuine question the candidate asks the interviewer. Names a specific metric, tool, process, or concept related to what the interviewer asked about. Ends with '?'.> | <1 sentence if asked 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
 Ask: <2-4 word noun phrase — a different angle, still related to the interviewer's question> | <A different genuine question. Names the specific topic — no vague pronouns. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
 Rules:\n\
-- Output ONLY these lines. No extra text.\n\
-- Acknowledge: one complete sentence the candidate reads aloud. Empathetic and conversational — names the business priority without restating the question. Never starts with 'I'.\n\
-- Solve: one sentence starting with 'I'. Names the specific business outcome from Acknowledge. Max 12 words. No vague pronouns.\n\
-- Bridge: one short spoken sentence, 5-8 words, that transitions from Solve to the Answer. Starts with 'I\'d' or 'I'. Never a question. Never starts with 'We' or 'Here\'s'.\n\
-- Answer text must be on the same line as 'Answer:' — not on a new line.\n\
-- Answer: use exactly four [keyword] blocks in order: [Situation], [Task], [Action], [Result]. No other keywords.\n\
-- Answer [Situation]: one sentence of brief context. 'In [context], I [role or task].' Max 12 words.\n\
-- Answer [Task]: one sentence naming what needed to be achieved. Starts with 'The goal was' or 'I needed to'. Max 12 words.\n\
-- Answer [Action]: specific action(s) taken. EVERY action claim MUST be immediately followed by an inline illustration — no exceptions. Pattern: 'So if [specific trigger], I [specific action], which would [directional outcome].' Directional language only — never a fabricated number.\n\
-- Answer [Result]: one sentence. Directional outcome achieved. Starts with 'As a result,' or 'The outcome was' or 'This led to'. Never invent a metric.\n\
-- Answer: no adjectives or adverbs. No 'utilize'. No arrows (→). Write all sentences in full. Facts and actions only.\n\
-- Close: one sentence mirroring the employer\'s specific business challenge from the system prompt. Name the exact problem the employer is solving — not a generic domain or skill. Starts with 'That\'s why', 'This is why', or 'I\'m confident'. Max 20 words. Never say 'this role', 'this work', 'this', 'it', or 'that'.\n\
-- Always use 'I' — never 'we', 'our team', or 'we found'. The candidate speaks only about their own actions and decisions.\n\
-- Acronyms: always write in full on first use followed by the abbreviation in parentheses — e.g. 'Customer Acquisition Cost (CAC)', 'Return on Ad Spend (ROAS)', 'Search Engine Optimization (SEO)'. Never use a bare acronym without first defining it.\n\
-- NEVER invent metrics, percentages, or numbers. Only use figures explicitly stated in the candidate background. If an outcome improved but the magnitude is unknown, describe the direction only (e.g. 'improved conversion') — never fabricate a number.\n\
-- Keywords are multi-word phrases from the question (e.g. 'difficult conversation', 'conflicting priorities', 'client relationships').\n\
-- Ask topics: 2-4 word noun phrases naming the specific thing being asked about. Must directly relate to the topic the interviewer raised — not generic role questions. If the recent conversation includes specific words or concerns the interviewer mentioned, prioritise those for Ask topics. Never a verb phrase.\n\
-- Ask question: natural, specific, grammatical question the candidate asks the interviewer. Ends with '?'. No adjectives or adverbs. Never use 'this', 'it', 'that', or vague pronouns — always name the specific metric, tool, process, or concept explicitly.\n\
-- Ask follow-up (3rd pipe segment): REQUIRED on every Ask line. 1 sentence the candidate says if the interviewer asks 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words. Must appear after the second pipe — never omit it.\n\
-- Ask lines come AFTER the --- separator only.\n\
-- NEVER name specific clients, employers, or companies. Refer to them by industry only (e.g. 'retail brand', 'tech startup', 'financial services firm').\n\
-- Read the system prompt carefully to understand the employer's business model. If the employer is an agency, consultancy, or services firm that works with multiple clients, frame all answers in terms of client work across accounts — NEVER describe it as owning one company's strategy long-term.\n\
-- Use only background provided. No invented details.",
+- LABELS in order: Acknowledge: Solve: Bridge: Answer: Close: Ask: Ask:\n\
+- Acknowledge: names business priority — never starts with 'I'. Never restates question.\n\
+- Solve: starts with 'I'. Names specific business outcome from Acknowledge. Max 12 words.\n\
+- Bridge: 5-8 words. Starts with 'I\'d' or 'I'. Never a question.\n\
+- Answer: use exactly [Situation] [Task] [Action] [Result] keywords in order. All on same line as 'Answer:'.\n\
+- Answer [Action]: EVERY action claim MUST be immediately followed by inline illustration — 'So if [trigger], I [action], which would [outcome].'\n\
+- Answer [Result]: directional outcome only — NEVER invent metrics.\n\
+- TONE: no adjectives or adverbs. No 'utilize'. Facts and actions only.\n\
+- ALWAYS use 'I' — never 'we', 'our team'. Candidate speaks only about their own actions.\n\
+- ACRONYMS: write in full on first use, abbreviation in parentheses.\n\
+- NEVER invent metrics or numbers. Directional language only.\n\
+- NEVER name specific clients, employers, or companies — refer by industry only.\n\
+- If employer is agency/consultancy: frame answers as client work across accounts — never owning one company's strategy.",
         ctx_prefix, question
     )
 }
@@ -827,7 +799,7 @@ COMPANY NAMING RULE: only name a company when the reference is positive (e.g. gr
 Preferences 2 and 3: the (A) sentence opens with 'Beyond that,' or 'I also find that' — placed AFTER the [keyword] marker, not before it. e.g. '[ownership]Beyond that, clear ownership reduces decision lag.' No adjectives. No adverbs. No invented details.>\n\
 Bridge: <One sentence connecting the candidate's preferences to this specific employer. 5-8 words. Starts with 'I\\'d' or 'I'. Never a question.>\n\
 Close: <One sentence. States why this employer or team specifically fits what the candidate looks for, drawn from the company context in the system prompt. \
-Starts with 'That\\'s why', 'This is why', or 'I\\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
+Starts with 'That\\'s why', 'This is why', 'The work I\\'ve done in', or 'What I\\'d bring here specifically is'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
 ---\n\
 Ask: <2-4 word noun phrase — specific aspect of the thing the interviewer asked about (company/manager/team)> | \
 <Question asking the interviewer to describe that specific dimension of the company or team. Ends with '?'.> | \
@@ -836,16 +808,14 @@ Ask: <2-4 word noun phrase — a different aspect> | \
 <A different question probing another dimension relevant to the candidate\\'s stated preferences. Ends with '?'.> | \
 <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
 Rules:\n\
-- Draw ONLY from themes in the candidate's uploaded background. Use their actual stated themes (e.g. 'growth', 'innovation', 'collaboration') — do NOT replace with generic workplace preferences not mentioned.\n\
-- Never invent preferences, values, or experiences not documented in the background.\n\
-- Reframe the language around each theme, not the theme itself. Keep the candidate's actual topics but express them as contribution conditions. Examples: 'consistent/stable leadership' → 'clear direction from leadership'; 'professional development' → 'room to grow skills'; 'innovation' → 'space to test ideas'; 'collaboration' → 'working alongside people with high standards'; 'feel supported/empowered' → 'autonomy with support'.\n\
-- Solve: output 3 preferences. All content on the same line as 'Solve:'. Each preference MUST begin with [1-2 word keyword] immediately before its first sentence. No space between ] and first word.\n\
-- Solve: each preference follows this exact 3-step sequence — (A) [keyword] + what conditions help the candidate contribute; (B) 'I [verb] [approach] because [why — name a specific role, project, or situation from the background, not a general pattern]'; (C) 'So if [company/team has X or does Y], I [would/can do Z], which would [outcome].' DO NOT skip step C. Frame (C) as an open invitation.\n\
-- Solve (C) outcome: MUST reflect the current role being interviewed for — check the job description. Do NOT use outcomes from past roles that don't apply here (e.g. don't mention content rejection outcomes if the role is performance marketing). The outcome should describe what the candidate would deliver in this specific role context.\n\
-- Solve: preferences 2 and 3: the (A) sentence MUST open with 'Beyond that,' or 'I also find that' — these come AFTER the [keyword]. NEVER before. e.g. '[keyword]Beyond that, sentence.' not 'Beyond that, [keyword]sentence.' No adjectives or adverbs. No invented details.\n\
-- Close: references the employer\\'s specific environment or challenge from the system prompt.\n\
-- Company naming: only name a past employer when the reference is positive (achievement, growth, skill built). If the experience illustrates a gap, difficult situation, or reason the candidate developed a preference, refer to it as 'a previous role' or 'a previous employer' — never name the company. This protects the candidate's professional reputation.\n\
-- Always use 'I' — never 'we' or 'our'.",
+- LABELS in order: Acknowledge: Solve: Bridge: Close: Ask: Ask:\n\
+- Solve: draw ONLY from themes in candidate's uploaded background — use their actual stated themes, NOT generic substitutes.\n\
+- Solve: reframe each preference as a contribution condition — e.g. 'consistent leadership' → 'clear direction from leadership'.\n\
+- Solve: each preference = [keyword] + 3-part pattern: (A) condition; (B) 'I [verb] because [specific background experience]'; (C) 'So if [company does X], I [would do Y], which would [outcome for THIS role]'.\n\
+- Solve (C): outcome MUST reflect the current role from the job description — NOT outcomes from past roles.\n\
+- Solve: preferences 2 and 3: (A) sentence opens with 'Beyond that,' or 'I also find that' — placed AFTER [keyword], never before.\n\
+- COMPANY NAMING: only name past employers for positive references. For negative/gap experiences, use 'a previous role'.\n\
+- ALWAYS use 'I' — never 'we' or 'our'.",
         ctx_prefix, question
     )
 }
@@ -858,36 +828,23 @@ Acknowledge: <One complete grammatical sentence the candidate speaks aloud to th
 Solve: <One sentence spoken after Acknowledge. Shows the candidate has direct experience solving this exact type of business problem. Starts with 'I' or 'I\'ve'. Max 12 words. Must name the specific business outcome from Acknowledge — never vague pronouns. e.g. 'I\'ve built paid search systems that directly reduce customer acquisition cost.' or 'I\'ve led attribution strategy across high-spend performance accounts.'>\n\
 Bridge: <One short spoken sentence that transitions from Solve to the Answer. 5-8 words. Starts with 'I\'d' or 'I'. e.g. 'I\'d approach that by starting with the data.' or 'I\'d tackle that by auditing the targeting first.' Never a question. Never starts with 'We' or 'Here\'s'.>\n\
 Answer: <The spoken answer on this same line. Short sentences. Max 10 words per sentence. Each strategy MUST begin with a [1-2 word keyword] immediately before its outcome sentence — no space between ] and the first word of the outcome. e.g. '[targeting] Customer acquisition cost rises when targeting drifts. I audit targeting and form messaging because drift is the most common cost driver. So if a client\'s CPA rises, I audit targeting and form changes, which would bring conversion costs down.[attribution] Beyond that, attribution gaps hide which channels drive revenue. I implement multi-touch attribution because single-touch models misallocate budget. So if ROAS drops, I audit the attribution model, which would reveal true revenue drivers.' Each strategy follows this 3-part pattern: (A) [keyword] + outcome sentence. (B) 'I [action verb] [specific approach] because [why it addresses the outcome].' (C) REQUIRED illustration — 'So if [specific trigger], I [specific action], which would [directional outcome].' Strategy 2 onward: outcome sentence opens with 'Beyond that,' or 'I also find that'. Last sentence names the overall business impact. No upfront listing. No adjectives. No adverbs. No 'utilize'. Never use vague pronouns.>\n\
-Close: <One sentence the candidate says after the Answer. Mirrors the employer\'s specific business challenge from the system prompt — name the exact problem the employer is trying to solve (their growth constraint, market challenge, or operational goal) not a generic domain. Starts with 'That\'s why', 'This is why', or 'I\'m confident'. Max 20 words. End with a period. Never say 'this role', 'this work', 'this', 'it', or 'that'.>\n\
+Close: <One sentence the candidate says after the Answer. Mirrors the employer\'s specific business challenge from the system prompt — name the exact problem the employer is trying to solve (their growth constraint, market challenge, or operational goal) not a generic domain. Starts with 'That\'s why', 'This is why', 'The work I\'ve done in', or 'What I\'d bring here specifically is'. Max 20 words. End with a period. Never say 'this role', 'this work', 'this', 'it', or 'that'.>\n\
 ---\n\
 Example: [1-2 word keyword] 3-5 word outcome title | <STAR story. 4 sentences maximum. All on ONE line. Each sentence starts with 'I'. Max 10 words per sentence. (1) Situation + Action combined — 'In [brief context], I [action verb] [specific approach].' (2) Optional second action — 'I also [action verb] [approach].' (3) Result — last sentence names the directional outcome achieved. NO inline 'So if' illustration. Draw only from candidate background. No invented metrics. Never use vague pronouns.>\n\
 Ask: <2-4 word noun phrase naming what you're asking about — drawn directly from the topic the interviewer raised. e.g. 'attribution model', 'team prioritization', 'data maturity'> | <A genuine question the candidate asks the interviewer. Names a specific metric, tool, process, or concept related to what the interviewer asked about. Ends with '?'.> | <1 sentence if asked 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
 Ask: <2-4 word noun phrase — a different angle, still related to the interviewer's question> | <A different genuine question. Names the specific topic — no vague pronouns. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
 Rules:\n\
-- Output ONLY these lines. No extra text.\n\
-- Acknowledge: one complete sentence the candidate reads aloud. Empathetic and conversational — names the business priority without restating the question. Never starts with 'I'.\n\
-- Solve: one sentence starting with 'I'. Names the specific business outcome from Acknowledge. Max 12 words. No vague pronouns.\n\
-- Answer text must be on the same line as 'Answer:' — not on a new line.\n\
-- Answer: each strategy MUST begin with [1-2 word keyword] immediately before the outcome sentence. No space between ] and first word. e.g. '[targeting] Customer acquisition cost rises...'\n\
-- Answer: the FIRST strategy's outcome sentence is direct. NEVER start with 'Beyond that', 'I also', 'On top of that' — those are only for strategy 2 onward.\n\
-- Answer: each strategy follows this exact 3-step sequence — step 1: [keyword] + outcome sentence; step 2: 'I [action] [approach] because [why it works]'; step 3: 'So if [trigger], I [action], which would [directional outcome].' DO NOT skip step 3 under any circumstances.\n\
-- Answer: strategy 2 onward: outcome sentence opens with 'Beyond that,' or 'I also find that'. Then step 2 and step 3 follow identically.\n\
-- Answer: every strategy MUST complete all 3 steps before moving to the next. Directional language only — never a percentage or fabricated number.\n\
-- Answer: last sentence names the overall business impact achieved.\n\
-- Answer: no adjectives or adverbs. No 'utilize'. No arrows (→). Write all sentences in full. Facts and actions only.\n\
-- Bridge: one short spoken sentence, 5-8 words, that transitions from Solve to the Answer. Starts with 'I\'d' or 'I'. Never a question. Never starts with 'We' or 'Here\'s'.\n\
-- Close: one sentence mirroring the employer\'s specific business challenge from the system prompt. Name the exact problem the employer is solving — not a generic domain or skill. Starts with 'That\'s why', 'This is why', or 'I\'m confident'. Max 20 words. Never say 'this role', 'this work', 'this', 'it', or 'that'.\n\
-- Always use 'I' — never 'we', 'our team', or 'we found'. The candidate speaks only about their own actions and decisions.\n\
-- Acronyms: always write in full on first use followed by the abbreviation in parentheses — e.g. 'Customer Acquisition Cost (CAC)', 'Return on Ad Spend (ROAS)', 'Search Engine Optimization (SEO)'. Never use a bare acronym without first defining it.\n\
-- NEVER invent metrics, percentages, or numbers. Only use figures explicitly stated in the candidate background. If an outcome improved but the magnitude is unknown, describe the direction only (e.g. 'improved conversion') — never fabricate a number.\n\
-- Example: [keyword] outcome title | STAR story. 4 sentences maximum. No inline 'So if' illustration. Situation embedded as a clause in the first Action sentence. Draw only from candidate background. No invented metrics.\n\
-- Keywords are multi-word phrases from the question (e.g. 'keyword research', 'client relationships', 'ad copywriting').\n\
-- Ask topics: 2-4 word noun phrases naming the specific thing being asked about. Must directly relate to the topic the interviewer raised — not generic role questions. If the recent conversation includes specific words or concerns the interviewer mentioned, prioritise those for Ask topics. Never a verb phrase.\n\
-- Ask question: natural, specific, grammatical question the candidate asks the interviewer. Ends with '?'. No adjectives or adverbs. Never use 'this', 'it', 'that', or vague pronouns — always name the specific metric, tool, process, or concept explicitly.\n\
-- Ask follow-up (3rd pipe segment): REQUIRED on every Ask line. 1 sentence the candidate says if the interviewer asks 'why do you ask?'. Starts with 'I ask because' or 'I'm curious about'. Max 15 words. Must appear after the second pipe — never omit it.\n\
-- Ask lines come AFTER the --- separator only.\n\
-- NEVER name specific clients, employers, or companies. Refer to them by industry only (e.g. 'retail brand', 'tech startup', 'financial services firm').\n\
-- Use only background provided. No invented details.",
+- LABELS in order: Acknowledge: Solve: Bridge: Answer: Close: Example: Ask: Ask:\n\
+- Acknowledge: names business priority — never starts with 'I'. Never restates question.\n\
+- Solve: starts with 'I'. Names specific business outcome from Acknowledge. Max 12 words.\n\
+- Bridge: 5-8 words. Starts with 'I\'d' or 'I'. Never a question.\n\
+- Answer: [keyword] strategy format. Each strategy = 3 steps: (1) [keyword] + outcome; (2) 'I [action] because [why]'; (3) 'So if [trigger], I [action], which would [outcome].' DO NOT skip step 3.\n\
+- Answer: FIRST strategy sentence is direct — NEVER starts with 'Beyond that'. Strategy 2+ opens with 'Beyond that,' or 'I also find that'.\n\
+- TONE: no adjectives or adverbs. No 'utilize'. Facts and actions only.\n\
+- ALWAYS use 'I' — never 'we' or 'our team'.\n\
+- ACRONYMS: write in full on first use, abbreviation in parentheses.\n\
+- NEVER invent metrics or numbers. Directional language only.\n\
+- NEVER name specific clients, employers, or companies — refer by industry only.",
         ctx_prefix, question
     )
 }
@@ -900,7 +857,7 @@ Acknowledge: <One complete sentence naming the technical challenge or business s
 Solve: <One sentence. Names the candidate's specific technical background most directly relevant to this question. Starts with 'I' or 'I\\'ve'. Max 12 words. Draws from candidate background in the system prompt — CV roles, LinkedIn, portfolio, extra experience notes. No invented details.>\n\
 Bridge: <One short sentence transitioning from Solve to the Answer. 5-8 words. Starts with 'I\\'d' or 'I'. Never a question. Never starts with 'We' or 'Here\\'s'.>\n\
 Answer: <Technical reasoning on this same line. Each strategy MUST begin with a [1-2 word keyword] immediately before its opening sentence — no space between ] and first word. For each strategy: (A) [keyword] + one outcome sentence naming the technical principle or decision. (B) 'I [action verb] [specific approach] because [technical reason].' (C) REQUIRED illustration — 'So if [specific technical scenario], I [specific action], which would [directional outcome].' Strategy 2 onward: outcome sentence opens with 'Beyond that,' or 'I also'. Last sentence names the overall technical or business outcome. 2-3 strategies. No adjectives. No invented metrics. Draws from candidate background.>\n\
-Close: <One sentence connecting the candidate\\'s technical approach to the employer\\'s specific challenge from the system prompt. Starts with 'That\\'s why', 'This is why', or 'I\\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
+Close: <One sentence connecting the candidate\\'s technical approach to the employer\\'s specific challenge from the system prompt. Starts with 'That\\'s why', 'This is why', 'The work I\\'ve done in', or 'What I\\'d bring here specifically is'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
 ---\n\
 Ask: <2-4 word noun phrase — the specific technical challenge or system named in the question> | <Question probing the technical depth of the problem — names the specific system, constraint, or scale involved. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
 Ask: <2-4 word noun phrase — a different technical angle> | <A different question about tooling, architecture decisions, or technical tradeoffs the team faces. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
@@ -929,7 +886,7 @@ Acknowledge: <One complete sentence naming the team dynamic or collaboration cha
 Solve: <One sentence naming the candidate\\'s working style or approach that directly addresses the collaboration need from Acknowledge. Starts with 'I' or 'I\\'ve'. Max 12 words. Draws from candidate background in the system prompt. No invented details.>\n\
 Bridge: <One short sentence transitioning to the Answer. 5-8 words. Starts with 'I\\'d' or 'I'. Never a question.>\n\
 Answer: <Behavioral story on this same line. Short sentences starting with 'I'. Max 10 words per sentence. Structure: (1) Context — one sentence: 'In [brief context], I [role or responsibility].' (2) Action — 'I [specific action verb] [approach] to [collaboration outcome].' (3) REQUIRED illustration — 'So if [specific team scenario], I [specific action], which would [directional outcome].' (4) If a second dimension applies: 'I also [action].' then REQUIRED illustration. (5) Outcome — last sentence names the team or business result. No adjectives. No invented metrics. Draws from candidate background.>\n\
-Close: <One sentence connecting the candidate\\'s collaboration approach to the employer\\'s specific team challenge from the system prompt. Starts with 'That\\'s why', 'This is why', or 'I\\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
+Close: <One sentence connecting the candidate\\'s collaboration approach to the employer\\'s specific team challenge from the system prompt. Starts with 'That\\'s why', 'This is why', 'The work I\\'ve done in', or 'What I\\'d bring here specifically is'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
 ---\n\
 Ask: <2-4 word noun phrase — team collaboration dynamic or working norm> | <Question probing how the team collaborates or handles the specific dynamic the interviewer raised. Names the concrete process, cadence, or challenge. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
 Ask: <2-4 word noun phrase — a different angle on team culture or feedback> | <A different question about how the team gives feedback, resolves disagreement, or works across functions. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
@@ -955,10 +912,10 @@ fn build_character_prompt(ctx_prefix: &str, question: &str) -> String {
         "{}The interviewer asked a personal character question: '{}'\n\n\
 CRITICAL: This question is asking about personal qualities and how people outside of work perceive the candidate — NOT professional skills or job achievements. Output ONLY the exact labeled lines below. No preamble.\n\n\
 Acknowledge: <One complete sentence naming what the interviewer is really trying to understand — insight into the candidate\\'s character, values, and how they show up in relationships. Opens with: 'It sounds like you want to understand', 'From your question, I can see you\\'re interested in', or 'It seems like the priority is understanding'. Completes with the character dimension being probed (e.g. reliability, self-awareness, interpersonal style). Max 20 words. Never starts with 'I'.>\n\
-Solve: <One sentence naming 2-3 personal qualities the candidate\\'s friends or people close to them would genuinely say. These are CHARACTER traits — not job skills. e.g. directness, curiosity, reliability, warmth, follow-through, calm under pressure. Starts with 'My friends would say I am' or 'People who know me well would describe me as'. Draws from the candidate\\'s background — use their career narrative and the self-description in their LinkedIn About section or extra experience notes to infer authentic personal traits. Max 20 words.>\n\
+Solve: <One sentence naming 2-3 personal qualities the candidate\\'s friends or people close to them would genuinely say. These are CHARACTER traits — not job skills. e.g. directness, curiosity, reliability, warmth, follow-through, calm under pressure. Starts with 'My friends would say I am', 'People who know me well would describe me as', 'The people who know me well tend to say', or 'Outside of work, people would describe me as'. Draws from the candidate\\'s background — use their career narrative and the self-description in their LinkedIn About section or extra experience notes to infer authentic personal traits. Max 20 words.>\n\
 Bridge: <One sentence and a brief personal example or story that illustrates these traits outside a work context — or at the intersection of personal and professional. Starts with 'For example,' or 'A good example of this is' or 'Outside of work,'. Names the specific trait in action. Max 20 words. Draws from background if available; otherwise use directional language.>\n\
 Answer: <How these personal traits show up at work and create value for this specific employer. Each trait MUST begin with a [1-2 word keyword] immediately before its sentence — no space between ] and first word. For each trait: (A) [keyword] + one sentence naming how the personal trait translates to professional behaviour and business outcome. (B) One concrete proof point from the candidate background. Trait 2 onward: outcome sentence opens with 'Beyond that,' or 'I also'. Last sentence names the overall impact these traits have on teams and outcomes. 2-3 traits. No adjectives. No invented metrics. Draws from candidate background.>\n\
-Close: <One sentence connecting the candidate\\'s personal qualities to what the employer needs from their team, as described in the system prompt. Starts with 'That\\'s why', 'This is why', or 'I\\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
+Close: <One sentence connecting the candidate\\'s personal qualities to what the employer needs from their team, as described in the system prompt. Starts with 'That\\'s why', 'This is why', 'The work I\\'ve done in', or 'What I\\'d bring here specifically is'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
 ---\n\
 Ask: <2-4 word noun phrase about team culture or values — what kind of person thrives here> | <Question about what personal or interpersonal qualities tend to make people successful at this company or in this team. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
 Ask: <2-4 word noun phrase — team dynamics or working style> | <A different question about how the team works together or what values shape day-to-day interactions. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
@@ -990,7 +947,7 @@ Draw from ALL candidate context in the system prompt: CV, LinkedIn, portfolio, e
 Use ONLY these labeled lines:\n\n\
 Acknowledge: <One sentence naming BOTH dimensions — acknowledges the combined ask without restating the question. Opens with 'It sounds like you are interested in both' or 'From your question, it seems you want to understand both'. Names both {topic1} and {topic2}. Max 20 words. Never starts with 'I'. End with a period.>\n\
 Answer: <Flowing answer on this same line. First 2-3 sentences address {topic1}. Each sentence starts with 'I'. Transition with 'Beyond that,' or 'What also draws me here is' or 'Building on that,'. Final 2-3 sentences address {topic2}. Max 10 words per sentence. No adjectives. No invented metrics. Draws only from candidate context in the system prompt.>\n\
-Close: <One sentence connecting BOTH dimensions to the employer\\'s specific business challenge from the system prompt. Starts with \\'That\\'s why\\', \\'This is why\\', or \\'I\\'m confident\\'. Max 20 words. Never say \\'this role\\', \\'this\\', \\'it\\'.>\n\
+Close: <One sentence connecting BOTH dimensions to the employer\\'s specific business challenge from the system prompt. Starts with \\'That\\'s why\\', \\'This is why\\', \\'The work I\\'ve done in\\', or \\'What I\\'d bring here specifically is\\'. Max 20 words. Never say \\'this role\\', \\'this\\', \\'it\\'.>\n\
 ---\n\
 Ask: <2-4 word noun phrase at the intersection of {topic1} and {topic2} — names the bridging concept, not either standalone topic. e.g. \\'growth path alignment\\', \\'background fit timeline\\'> | <Question that naturally bridges BOTH dimensions — probes the specific connection between candidate background AND this role\\'s challenge. Names the concrete metric, process, or domain. Ends with \\'?\\'.> | <1 sentence. Starts with \\'I ask because\\' or \\'I\\'m curious about\\'. Max 15 words.>\n\
 Ask: <2-4 word noun phrase — a different bridging angle, still connecting both dimensions> | <A different question probing the intersection. Names the specific metric, process, or domain where both aspects join. Ends with \\'?\\'.> | <1 sentence. Starts with \\'I ask because\\' or \\'I\\'m curious about\\'. Max 15 words.>\n\n\
@@ -1016,21 +973,21 @@ Impact: <One sentence naming a specific professional moment — a project delay,
 Solve: <One sentence. The specific behaviour change or structured approach the candidate adopted to address this limitation. Starts with 'I' or 'I\\'ve'. Max 15 words. Names the concrete action — not 'I am working on it'. Draws from ALL candidate context in the system prompt: CV, LinkedIn, portfolio, extra experience notes, early career context.>\n\
 Bridge: <One sentence of concrete evidence from the candidate background that this approach has produced improvement. Starts with 'I'. Names the specific project, role, or context and the directional outcome — no invented metrics. Max 15 words. If no direct evidence exists in the background, use directional language: 'Since then, I have measurably improved' — never fabricate details.>\n\
 Answer: <One sentence redirecting to a compensating strength that is directly relevant to the employer's specific business challenge from the system prompt (job description, company information, interviewer context). Uses [keyword] strategy format: [1-2 word keyword] + one sentence naming the strength and its business outcome for this employer. Then one concrete proof point from the candidate background (CV, LinkedIn, portfolio, extra experience). Then a directional outcome for this specific employer. No adjectives. No invented metrics.>\n\
-Close: <One sentence connecting the candidate's growth trajectory to the employer's specific challenge from the system prompt. Starts with 'That growth is exactly why', 'That\\'s exactly why', or 'I\\'m confident that'. Max 20 words. References the employer\\'s actual business problem — not a generic domain. Never say 'this role', 'this', 'it'.>\n\
+Close: <One sentence connecting the candidate's growth trajectory to the employer's specific challenge from the system prompt. Starts with 'That growth is exactly why', 'That\\'s exactly why', or 'The work I\\'ve done on'. Max 20 words. References the employer\\'s actual business problem — not a generic domain. Never say 'this role', 'this', 'it'.>\n\
 ---\n\
 Ask: <2-4 word noun phrase related to team growth or development culture> | <Question showing the candidate is actively developing — probes how the team or company supports growth in this specific area. Names a concrete process, tool, or domain. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
 Ask: <2-4 word noun phrase — different angle on development or feedback> | <Question about how the team gives feedback or how performance is measured in this area. Names a specific metric or process. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
 Rules:\n\
-- Output ONLY: Acknowledge:, Impact:, Solve:, Bridge:, Answer:, Close:, then two Ask: lines. No other labels. No preamble.\n\
-- Acknowledge: a real, specific limitation — never 'perfectionist' or 'work too hard'. Names the professional context where it shows up. Draws ONLY from candidate background in the system prompt.\n\
-- Solve: concrete action taken, not vague aspiration. Draws from ALL candidate context: CV, LinkedIn, portfolio, extra experience notes, early career context in the system prompt.\n\
-- Bridge: real evidence from background. If no direct evidence, use directional language only — never fabricate a metric, date, or outcome.\n\
-- Answer: [keyword] strategy format. The compensating strength MUST be directly relevant to the employer\\'s specific business challenge from the job description and company information in the system prompt — not generic.\n\
-- Close: references the employer\\'s actual problem from the system prompt. Never generic praise.\n\
-- Always use 'I' — never 'we' or 'our'.\n\
-- Acronyms: write in full on first use followed by abbreviation in parentheses.\n\
-- NEVER invent metrics, percentages, dollar figures, headcount, or timeframes not present in the background.\n\
-- NEVER name specific clients or companies — refer by industry only (e.g. 'a retail brand', 'a tech startup').",
+- LABELS in order: Acknowledge: Impact: Solve: Bridge: Answer: Close: Ask: Ask:\n\
+- Acknowledge: names a REAL, SPECIFIC limitation — never 'perfectionist' or 'work too hard'. Names professional context.\n\
+- Solve: concrete action taken, not vague aspiration. Draws from ALL candidate context.\n\
+- Bridge: real evidence from background. If none, directional language — NEVER fabricate metric or outcome.\n\
+- Answer: [keyword] compensating strength MUST be directly relevant to employer's specific challenge from system prompt.\n\
+- TONE: no adjectives, no 'passionate'. Facts only.\n\
+- ALWAYS use 'I' — never 'we' or 'our'.\n\
+- ACRONYMS: write in full on first use, abbreviation in parentheses.\n\
+- NEVER invent metrics, percentages, or timeframes not in background.\n\
+- NEVER name specific clients or companies — refer by industry only.",
         ctx_prefix, question
     )
 }
@@ -1043,19 +1000,19 @@ Acknowledge: <One complete sentence spoken aloud. Names the business stakes or r
 Solve: <One sentence. The candidate\\'s first-principles diagnostic lens — how they would frame or investigate the situation before acting. Starts with 'I\\'d' or 'I'. Max 12 words. Names the specific first step. Draws from the candidate\\'s actual methodology and background in the system prompt (CV, LinkedIn, portfolio, extra experience notes).>\n\
 Bridge: <One short sentence transitioning from Solve to the Answer. 5-8 words. Starts with 'I\\'d' or 'I'. Never a question. Never starts with 'We' or 'Here\\'s'.>\n\
 Answer: <Reasoning through the hypothetical on this same line. Each strategy MUST begin with a [1-2 word keyword] immediately before its opening sentence — no space between ] and first word. For each strategy: (A) [keyword] + one outcome sentence naming what this approach achieves. (B) 'I [action verb] [specific approach] because [why this addresses the root cause].' (C) REQUIRED illustration — 'So if [specific trigger from this scenario], I [specific action], which would [directional outcome].' Strategy 2 onward: outcome sentence opens with 'Beyond that,' or 'I also find that'. Last sentence names the overall business outcome. No upfront listing. No adjectives. No invented metrics. 2-3 strategies total. Draws from the candidate\\'s actual working methodology in the system prompt: CV roles, LinkedIn experience, portfolio evidence, and extra experience notes.>\n\
-Close: <One sentence connecting the candidate\\'s reasoning approach to the employer\\'s specific business challenge from the system prompt. Draws from the job description and company information. Starts with 'That\\'s why', 'This is why', or 'I\\'m confident'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
+Close: <One sentence connecting the candidate\\'s reasoning approach to the employer\\'s specific business challenge from the system prompt. Draws from the job description and company information. Starts with 'That\\'s why', 'This is why', 'The work I\\'ve done in', or 'What I\\'d bring here specifically is'. Max 20 words. Never say 'this role', 'this', 'it'.>\n\
 ---\n\
 Ask: <2-4 word noun phrase probing the real context behind the hypothetical> | <Question that surfaces the actual business situation the interviewer had in mind. Names a specific metric, process, or recent event. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\
 Ask: <2-4 word noun phrase — different angle on how success is measured or what\\'s been tried> | <Question about how the team has approached this challenge previously or how success would be measured. Names a concrete metric or process. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I\\'m curious about'. Max 15 words.>\n\n\
 Rules:\n\
-- Output ONLY these lines. No extra text.\n\
-- Answer: candidate reasons through the hypothetical step by step — does NOT recall a story as the main answer. The Example: block may reference a real experience as supporting evidence.\n\
-- Answer: draws reasoning from ALL candidate context in the system prompt: CV roles and responsibilities, LinkedIn experience, portfolio, extra experience notes, early career context, and the job description.\n\
-- Each strategy in Answer MUST complete all 3 steps (keyword + outcome, action + why, illustration) before moving to the next.\n\
-- Acknowledge, Solve, Close: draw from the employer\\'s actual challenge in the job description and company information.\n\
-- Always use 'I' — never 'we' or 'our'.\n\
-- Acronyms: write in full on first use followed by abbreviation in parentheses.\n\
-- NEVER invent metrics, percentages, or numbers. Directional language only if no figure exists in the background.\n\
+- LABELS in order: Acknowledge: Solve: Bridge: Answer: Close: Ask: Ask:\n\
+- Answer: candidate reasons through the hypothetical — does NOT recall a story as the main answer.\n\
+- Answer: each strategy MUST complete all 3 steps (keyword + outcome; action + why; illustration) before moving to next.\n\
+- Answer: draws from ALL candidate context: CV, LinkedIn, portfolio, extra experience notes, early career context.\n\
+- TONE: no adjectives. No invented metrics. Directional language only.\n\
+- ALWAYS use 'I' — never 'we' or 'our'.\n\
+- ACRONYMS: write in full on first use, abbreviation in parentheses.\n\
+- NEVER invent metrics or numbers. Directional language only.\n\
 - NEVER name specific clients or companies — refer by industry only.",
         ctx_prefix, question
     )

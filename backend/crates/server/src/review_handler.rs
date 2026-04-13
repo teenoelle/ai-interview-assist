@@ -13,6 +13,9 @@ fn make_cfg(state: &AppState, keywords: Vec<String>) -> ReviewConfig {
     ReviewConfig {
         gemini_key: state.gemini_key.clone(),
         anthropic_key: state.anthropic_key.clone(),
+        mistral_key: state.mistral_key.clone(),
+        bonsai_url: state.bonsai_url.clone(),
+        bonsai_model: state.bonsai_model.clone(),
         groq_key: state.groq_key.clone(),
         groq_key_2: state.groq_key_2.clone(),
         ollama_url: state.ollama_url.clone(),

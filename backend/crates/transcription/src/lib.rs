@@ -580,7 +580,7 @@ pub async fn run_agent(
                         });
 
                         // Trigger suggestions for any substantive interviewer turn
-                        if speaker == "Interviewer" && wc > 5 {
+                        if speaker == "Interviewer" && wc > 2 {
                             let _ = qtx.send(text).await;
                         }
                     });

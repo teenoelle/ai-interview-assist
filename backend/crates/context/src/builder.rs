@@ -51,14 +51,13 @@ pub fn build_system_prompt(
 
     if !payload.cv_text.is_empty() {
         prompt.push_str("## Candidate CV / Resume\n");
-        let cv_preview = trunc(&payload.cv_text, 20000);
-        prompt.push_str(cv_preview);
+        prompt.push_str(&payload.cv_text);
         prompt.push_str("\n\n");
     }
 
     if !payload.interviewee_linkedin.is_empty() {
         prompt.push_str("## Candidate LinkedIn Profile\n");
-        let li_preview = trunc(&payload.interviewee_linkedin, 10000);
+        let li_preview = trunc(&payload.interviewee_linkedin, 6000);
         prompt.push_str(li_preview);
         prompt.push_str("\n\n");
     }
@@ -79,7 +78,7 @@ pub fn build_system_prompt(
 
     if !company_info.is_empty() {
         prompt.push_str("## Company Information\n");
-        let company_preview = trunc(company_info, 15000);
+        let company_preview = trunc(company_info, 8000);
         prompt.push_str(company_preview);
         prompt.push_str("\n\n");
     }

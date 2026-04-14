@@ -422,15 +422,13 @@ pub async fn run_agent(
                 let ourl = ollama_url.clone();
                 let omodels = ollama_models.clone();
                 let etx = event_tx.clone();
-                let sp = system_prompt.read().await.clone();
-                let tr = transcript.read().await.clone();
-                let rl = rate_limiter.clone();
-                let cc = call_counts.clone();
 
+                // Classify first — before any async locks — so smalltalk/closing fire instantly
                 let (primary_type, secondary_type) = prompt::classify_question(&question);
 
                 // Smalltalk: emit instant pre-written response, skip LLM entirely
                 if matches!(primary_type, prompt::QuestionType::Smalltalk) {
+                    tracing::info!("smalltalk bypass — instant response for: {:?}", question);
                     let _ = etx.send(WsEvent::QuestionDetected {
                         question: question.clone(),
                         secondary_tag: None,
@@ -450,6 +448,11 @@ pub async fn run_agent(
                     });
                     continue;
                 }
+
+                let sp = system_prompt.read().await.clone();
+                let tr = transcript.read().await.clone();
+                let rl = rate_limiter.clone();
+                let cc = call_counts.clone();
 
                 let secondary_tag = secondary_type.map(|qt| prompt::question_type_to_tag(qt).to_string());
 

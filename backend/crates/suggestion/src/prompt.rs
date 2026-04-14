@@ -517,6 +517,18 @@ Close: <2 sentences. First: connect your Next to why this specific employer and 
 ---\n\
 Ask: <2-4 word noun phrase naming what you\\'re asking about — e.g. 'team structure', 'client mix', 'success metrics'> | <Specific grammatical question the candidate asks the interviewer. Directly related to the type of work or challenge described by the interviewer. Ends with '?'.> | <1 sentence if asked 'why do you ask?' — starts with 'I ask because' or 'I\\'m curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic. Max 15 words. Must be a complete sentence.>\n\
 Ask: <2-4 word noun phrase> | <A different specific question about the opportunity. Names the concrete topic — no vague pronouns. Ends with '?'.> | <1 sentence follow-up. Starts with 'I ask because' or 'I\\'m curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic ('I want to understand the team'). Max 15 words. Must be a complete sentence.>\n\n\
+EXAMPLE OUTPUT (adapt every detail to the actual candidate background — structure is fixed):\n\
+Acknowledge: Sure — happy to walk you through my background.\n\
+Summary: I've spent my career in performance marketing across B2B technology companies. My focus has always been on paid acquisition tied directly to pipeline and revenue.\n\
+Thread: The throughline of my career has been connecting paid channel budgets to measurable pipeline outcomes for sales-led businesses.\n\
+Transition1: That started early in my career.\n\
+Story: I began in paid search at a software company, where I learned to link ad spend directly to closed revenue. I moved into multi-channel roles after seeing attribution gaps cost teams budget they could not explain.\n\
+Transition2: Which is why\n\
+Next: I am now focused on cross-channel paid strategy that is fully accountable to pipeline, not just volume.\n\
+Transition3: So when I came across this opportunity,\n\
+Close: Given that I'm focused on pipeline-accountable acquisition, the growth challenge in your market is exactly where I want to build next. And that's why I'm so excited to be speaking with you today.\n\
+Ask: pipeline attribution model | How does the team currently connect paid channel spend to pipeline and closed revenue? | I ask because pipeline attribution drives every channel prioritisation decision I make.\n\
+Ask: paid channel scope | Does this role own the full paid channel mix, or are specific channels managed separately? | I'm curious about the scope because cross-channel efficiency is where I've found the highest leverage.\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Summary: Thread: Transition1: Story: Transition2: Next: Transition3: Close: Ask: Ask:\n\
 - TONE: facts and direction only — no adjectives, no 'passionate', 'excited', 'dedicated', 'driven'.\n\
@@ -546,6 +558,17 @@ Close: <One sentence. Connects your motivation to the employer's specific challe
 ---\n\
 Ask: <2-4 word noun phrase naming what you're asking about — drawn from the specific topic the interviewer raised. e.g. 'business challenge', 'client mix', 'team priorities'> | <Specific grammatical question probing an aspect of what the interviewer asked about. Names a concrete challenge, outcome, or constraint from the system prompt. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic ('I want to understand the team'). Max 15 words. Must be a complete sentence.>\n\
 Ask: <2-4 word noun phrase — a different angle from the first, still related to the interviewer's question> | <A different specific question. Names a concrete metric, process, or domain — no vague pronouns. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
+EXAMPLE OUTPUT (adapt every detail to the actual candidate background — structure is fixed):\n\
+Acknowledge: Happy to — I've been thinking about this carefully.\n\
+Company: I see that the company is focused on scaling paid acquisition in a competitive market. I understand the core challenge is generating qualified pipeline at a sustainable cost.\n\
+Transition1: My background fits because\n\
+Role: I've spent several years running paid acquisition for B2B technology companies with exactly that constraint. I've managed campaigns where cost per pipeline opportunity was the primary success metric.\n\
+Transition2: But beyond the skillset,\n\
+Self: I am looking to own the full acquisition funnel rather than individual channels. This role is the next step from channel execution to acquisition strategy.\n\
+Transition3: Which is why\n\
+Close: What I'd bring here specifically is the ability to connect paid spend to pipeline outcomes — which is the core challenge the job description is asking someone to solve.\n\
+Ask: funnel conversion rate | What does the current conversion rate look like from paid lead to qualified sales opportunity? | I ask because that ratio tells me where campaign optimisation has the highest leverage.\n\
+Ask: channel strategy ownership | Does this role set channel mix strategy, or is the brief to optimise within a defined channel set? | I'm curious because channel strategy ownership is the direction I'm building toward.\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Company: Transition1: Role: Transition2: Self: Transition3: Close: Ask: Ask:\n\
 - Company: describes THEIR challenge from the system prompt — never 'great company'. NEVER say 'I work at [employer]' — you are applying there. NEVER invent tools or strategies.\n\
@@ -578,6 +601,18 @@ Close: <One sentence. Connects the whole framing to the employer's specific chal
 ----\n\
 Ask: <2-4 word noun phrase> | <Question> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
 Ask: <2-4 word noun phrase> | <Question> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
+EXAMPLE OUTPUT (adapt every detail to the actual candidate background and JD — structure is fixed):\n\
+Acknowledge: You're right — my background is at a more senior level.\n\
+Reframe: I am choosing this level deliberately. I am building depth in a channel where my background is currently thinner.\n\
+Transition1: Specifically, the area I am building toward is\n\
+Gap: I have limited hands-on experience in consumer-facing paid social acquisition. My background is B2B performance marketing, so consumer acquisition is the gap I need to close.\n\
+Transition2: I chose this employer specifically because\n\
+Choice: The company's focus on performance advertising gives me direct exposure to consumer acquisition at scale. This environment is the right place to develop that depth alongside existing strengths.\n\
+Transition3: What I bring in the meantime is\n\
+Bring: I contribute cross-channel measurement and attribution knowledge that a career junior typically does not have. I also bring pipeline-linked thinking that sharpens how we evaluate consumer funnel quality.\n\
+Close: That's why this role sits at the exact intersection where my existing depth and the gap I need to close are both in play.\n\
+Ask: channel onboarding structure | How does the team onboard someone with adjacent but not direct channel experience? | I ask because I want to understand how quickly I can contribute independently while building the new channel depth.\n\
+Ask: performance feedback cadence | How frequently does the team review channel decisions and give feedback on optimisation calls? | I'm curious because tighter feedback loops accelerate skill development in a channel that's new to me.\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Reframe: Transition1: Gap: Transition2: Choice: Transition3: Bring: Close: Ask: Ask:\n\
 - Acknowledge: confirms level/seniority observation ONLY — no skills, channels, or JD specifics (those go in Gap). Never repeats Reframe.\n\
@@ -606,6 +641,13 @@ Close: <One sentence. Connects your trajectory to the employer's specific challe
 ---\n\
 Ask: <2-4 word noun phrase naming what you're asking about — drawn from the specific topic the interviewer raised. e.g. 'growth path', 'skill development', 'team challenge'> | <Specific grammatical question probing an aspect of what the interviewer asked about. Names a concrete skill, domain, or outcome. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic ('I want to understand the team'). Max 15 words. Must be a complete sentence.>\n\
 Ask: <2-4 word noun phrase — a different angle, still related to the interviewer's question> | <A different specific question about the opportunity or challenge ahead. Names a concrete metric, process, or domain. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
+EXAMPLE OUTPUT (adapt every detail to the actual candidate background — structure is fixed):\n\
+Acknowledge: Sure — I have given this real thought.\n\
+Direction: I see myself moving from channel execution into commercial acquisition strategy — owning the connection between paid spend and revenue outcomes rather than managing individual campaigns. That path leads directly to roles like this one, where the brief is building acquisition capability that is accountable to pipeline.\n\
+Alignment: I see the company is at an inflection point where paid acquisition needs to scale without proportional cost increases. Concretely, I would build the measurement infrastructure that makes that possible — attribution frameworks and funnel tracking tied to actual revenue.\n\
+Close: The work I've done in pipeline-linked paid acquisition is exactly what's needed to make that growth efficient and defensible here.\n\
+Ask: growth investment horizon | How long does the company expect before paid acquisition is generating a self-sustaining pipeline contribution? | I ask because that timeline shapes how I would sequence the measurement buildout and channel prioritisation.\n\
+Ask: team structure at scale | Is the intent to build a larger paid media team as acquisition scales, or stay lean with more tooling? | I'm curious because the team model determines how I would structure campaign architecture from the start.\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Direction: Alignment: Close: Ask: Ask:\n\
 - CRITICAL — Direction must describe the NEXT level ABOVE current documented experience — not repeat what the CV already shows.\n\
@@ -740,6 +782,12 @@ Close: <One sentence connecting your strengths to the employer's specific busine
 ---\n\
 Ask: <2-4 word noun phrase — directly related to what the interviewer asked about strengths. e.g. 'highest impact area', 'skill application', 'team gap'> | <Question probing where the specific strengths just discussed would have the most impact — names the domain, metric, or challenge from the system prompt. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic ('I want to understand the team'). Max 15 words. Must be a complete sentence.>\n\
 Ask: <2-4 word noun phrase — a different angle on what the interviewer raised> | <A different question about what the team most needs — names the specific skill area or outcome. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
+EXAMPLE OUTPUT (adapt every detail to the actual candidate background — structure is fixed):\n\
+Acknowledge: It sounds like this role needs someone who can connect paid channel performance to pipeline outcomes — which is the core of what I've built my career on.\n\
+Answer: [data analysis]Identifying which metric actually drives the business outcome separates campaigns that scale from campaigns that just spend. At a B2B software company, I rebuilt attribution tracking that revealed a significant budget misallocation toward high-spend, low-pipeline channels. For the growth challenge here, this means spend decisions would be tied to pipeline contribution, not just volume.[campaign architecture]Beyond that, building a structured account framework prevents data loss as campaigns scale. I implemented a naming and tagging standard across paid channels that allowed clean performance comparison and faster optimisation decisions. For a team scaling acquisition, this means every insight starts from clean, comparable data. The combined business value of these strengths is a paid acquisition function that earns budget through measurable pipeline impact.\n\
+Close: What I'd bring here specifically is the ability to build an acquisition engine that leadership can defend with revenue data, not just media metrics.\n\
+Ask: highest-impact skill area | Where would strong attribution analysis have the most direct impact on campaign decisions here? | I ask because understanding where measurement is weakest tells me where I can contribute from day one.\n\
+Ask: team skill gap | What analytical capability is the team currently missing most? | I'm curious because knowing the gap helps me understand where my depth creates the most immediate value.\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Answer: Close: Ask: Ask:\n\
 - Acknowledge: names business priority behind the question — never starts with 'I'.\n\
@@ -768,6 +816,14 @@ Close: <One sentence the candidate says after the Answer. Mirrors the employer\'
 ---\n\
 Ask: <2-4 word noun phrase naming what you're asking about — drawn directly from the topic the interviewer raised. e.g. 'team prioritization', 'success metrics', 'client feedback loop'> | <A genuine question the candidate asks the interviewer. Names a specific metric, tool, process, or concept related to what the interviewer asked about. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic ('I want to understand the team'). Max 15 words. Must be a complete sentence.>\n\
 Ask: <2-4 word noun phrase — a different angle, still related to the interviewer's question> | <A different genuine question. Names the specific topic — no vague pronouns. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
+EXAMPLE OUTPUT (adapt every detail to the actual candidate background — structure is fixed):\n\
+Acknowledge: It sounds like the team is focused on maintaining campaign performance during periods of changing strategy or stakeholder priorities.\n\
+Solve: I've managed paid campaigns through mid-flight brief changes without losing pipeline contribution.\n\
+Bridge: I'd walk through how I approach that.\n\
+Answer: [Situation]In a B2B software campaign, I managed paid acquisition when the target segment shifted mid-flight. [Task]I needed to redirect spend without losing pipeline momentum or wasting committed budget. [Action]I paused automated bidding to prevent the algorithm from optimising toward the wrong audience, then rebuilt targeting criteria based on the revised segment definition. So if the algorithm had continued on stale signals, conversion rates would have dropped and the budget shift would have been invisible until the next reporting cycle. I also updated pipeline tracking tags to reflect the new segment, which allowed clean measurement from the restart date forward. [Result]As a result, pipeline contribution was maintained within the quarter and the new segment data was clean from day one.\n\
+Close: The work I've done managing mid-campaign pivots in performance accounts is directly applicable to keeping acquisition on track when strategy shifts here.\n\
+Ask: brief change frequency | How often do campaign targeting or audience briefs change after launch, and what typically triggers the change? | I ask because the frequency determines how much adaptability buffer I need to build into campaign architecture.\n\
+Ask: stakeholder alignment process | When a brief changes, who confirms the revised audience or success criteria before campaigns restart? | I'm curious about the decision chain because knowing it upfront prevents the alignment delays that cost the most time.\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Solve: Bridge: Answer: Close: Ask: Ask:\n\
 - Acknowledge: names business priority — never starts with 'I'. Never restates question.\n\
@@ -821,6 +877,13 @@ Ask: <2-4 word noun phrase — specific aspect of the thing the interviewer aske
 Ask: <2-4 word noun phrase — a different aspect> | \
 <A different question probing another dimension relevant to the candidate\\'s stated preferences. Ends with '?'.> | \
 <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic ('I want to understand the team'). Max 15 words. Must be a complete sentence.>\n\n\
+EXAMPLE OUTPUT (adapt every detail to the actual candidate background — structure is fixed):\n\
+Acknowledge: It sounds like the focus here is on finding someone whose working style fits how this team operates.\n\
+Solve: [clarity]I do my best work when direction is clear. I moved into a project lead role at a previous employer because clear scope reduced rework. So if this team sets explicit sprint goals, I can own delivery without daily check-ins, which would keep the team moving faster.[autonomy]Beyond that, I find that ownership over my work area drives quality. I restructured a content pipeline at a previous employer because shared ownership meant errors went uncaught. So if this team assigns clear domain ownership, I can catch issues earlier, which would reduce revision cycles.[feedback]I also find that regular feedback loops accelerate growth. I initiated bi-weekly peer reviews at a previous employer because async feedback alone missed nuance. So if this team runs structured peer reviews, I can iterate faster, which would shorten time to impact on new work.\n\
+Bridge: I'd bring that same approach here.\n\
+Close: That's why this team's emphasis on clear ownership and direct feedback aligns with how I work best.\n\
+Ask: sprint goal clarity | How does the team set and communicate sprint priorities when timelines shift? | I ask because clear goal alignment is what lets me take ownership without needing check-ins.\n\
+Ask: feedback cadence | How does the team typically give and receive peer feedback? | I'm curious about whether the team's review rhythm leaves room to iterate quickly.\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Solve: Bridge: Close: Ask: Ask:\n\
 - Solve: draw ONLY from themes in candidate's uploaded background — use their actual stated themes, NOT generic substitutes.\n\
@@ -850,6 +913,15 @@ Close: <One sentence the candidate says after the Answer. Mirrors the employer\'
 Example: [1-2 word keyword] 3-5 word outcome title | <STAR story. 4 sentences maximum. All on ONE line. Each sentence starts with 'I'. Max 10 words per sentence. (1) Situation + Action combined — 'In [brief context], I [action verb] [specific approach].' (2) Optional second action — 'I also [action verb] [approach].' (3) Result — last sentence names the directional outcome achieved. NO inline 'So if' illustration. Draw only from candidate background. No invented metrics. Never use vague pronouns.>\n\
 Ask: <2-4 word noun phrase naming what you're asking about — drawn directly from the topic the interviewer raised. e.g. 'attribution model', 'team prioritization', 'data maturity'> | <A genuine question the candidate asks the interviewer. Names a specific metric, tool, process, or concept related to what the interviewer asked about. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic ('I want to understand the team'). Max 15 words. Must be a complete sentence.>\n\
 Ask: <2-4 word noun phrase — a different angle, still related to the interviewer's question> | <A different genuine question. Names the specific topic — no vague pronouns. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
+EXAMPLE OUTPUT (adapt every detail to the actual candidate background — structure is fixed):\n\
+Acknowledge: It sounds like the company is focused on reducing customer acquisition cost through better targeting discipline.\n\
+Solve: I've built paid search systems that directly reduce customer acquisition cost.\n\
+Bridge: I'd approach that by starting with the data.\n\
+Answer: [targeting]Customer acquisition cost rises when targeting drifts from intent. I audit keyword-to-landing-page alignment first because drift is the most common cost driver. So if a client's cost per acquisition rises, I audit match types and audience segments, which would bring conversion costs down within two weeks.[attribution]Attribution gaps hide which channels drive real revenue. I implement multi-touch attribution because single-touch models misallocate budget toward last click. So if return on ad spend drops without a clear cause, I audit the attribution model, which would reveal true revenue drivers and redirect budget to higher performers.\n\
+Close: That's why my experience diagnosing targeting and attribution gaps maps directly to the growth constraints this team is working through.\n\
+Example: cost per acquisition reduction | In a previous performance marketing role, I audited targeting drift on a high-spend account. I restructured match types and paused low-intent keywords. I also aligned landing pages to keyword intent. Cost per acquisition fell and conversion volume held steady.\n\
+Ask: attribution model maturity | What attribution model does the team currently use across paid channels? | I ask because attribution gaps are often the first place I find budget misallocation.\n\
+Ask: targeting review cadence | How frequently does the team audit keyword and audience targeting for drift? | I'm curious about whether the current review cadence catches drift before it compounds into cost.\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Solve: Bridge: Answer: Close: Example: Ask: Ask:\n\
 - Acknowledge: names business priority — never starts with 'I'. Never restates question.\n\
@@ -880,6 +952,14 @@ Close: <One sentence connecting the candidate\\'s technical approach to the empl
 ---\n\
 Ask: <2-4 word noun phrase — the specific technical challenge or system named in the question> | <Question probing the technical depth of the problem — names the specific system, constraint, or scale involved. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic ('I want to understand the team'). Max 15 words. Must be a complete sentence.>\n\
 Ask: <2-4 word noun phrase — a different technical angle> | <A different question about tooling, architecture decisions, or technical tradeoffs the team faces. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic ('I want to understand the team'). Max 15 words. Must be a complete sentence.>\n\n\
+EXAMPLE OUTPUT (adapt every detail to the actual candidate background — structure is fixed):\n\
+Acknowledge: It sounds like the challenge here is building a system that can scale without linearly increasing compute cost.\n\
+Solve: I've architected distributed data pipelines that reduce processing cost at scale.\n\
+Bridge: I'd tackle that by separating concerns first.\n\
+Answer: [data partitioning]Cost at scale is driven by processing redundancy across all records equally. I partition data by access frequency first because uniform processing ignores how often records are actually read. So if a pipeline processes all records at the same rate, I segment by frequency tier, which would reduce compute cost on cold data without touching hot-path performance.[caching layer]A caching layer reduces repeat computation on frequently accessed results. I introduce a read-through cache at the service boundary because hot-path queries account for the majority of load in most systems. So if query latency rises with volume, I add caching between application and database, which would flatten cost growth and reduce database pressure.\n\
+Close: That's why my experience building cost-aware pipelines maps directly to the scale challenge this team is working on.\n\
+Ask: data access patterns | How does the team currently model access frequency when designing data pipelines? | I ask because partitioning by access pattern is often where the biggest cost savings come from.\n\
+Ask: caching strategy | Does the team currently use a caching layer between the application and the data store? | I'm curious about where the team draws the line between cache complexity and query cost.\n\n\
 Rules:\n\
 - Output ONLY these lines. No extra text.\n\
 - Acknowledge: one sentence naming the technical stake. Never starts with 'I'. Draws from system prompt context.\n\
@@ -910,6 +990,14 @@ Close: <One sentence connecting the candidate\\'s collaboration approach to the 
 ---\n\
 Ask: <2-4 word noun phrase — team collaboration dynamic or working norm> | <Question probing how the team collaborates or handles the specific dynamic the interviewer raised. Names the concrete process, cadence, or challenge. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic ('I want to understand the team'). Max 15 words. Must be a complete sentence.>\n\
 Ask: <2-4 word noun phrase — a different angle on team culture or feedback> | <A different question about how the team gives feedback, resolves disagreement, or works across functions. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic ('I want to understand the team'). Max 15 words. Must be a complete sentence.>\n\n\
+EXAMPLE OUTPUT (adapt every detail to the actual candidate background — structure is fixed):\n\
+Acknowledge: It sounds like the team values collaboration that keeps cross-functional work moving without unnecessary process overhead.\n\
+Solve: I've worked in environments where cross-functional alignment was the main bottleneck to on-time delivery.\n\
+Bridge: I'd address that by building shared context early.\n\
+Answer: In a previous cross-functional project, I mapped dependencies across three teams before the first sprint began. I ran a weekly 30-minute alignment call because async updates alone led to scope drift. So if a project spans multiple functions here, I can facilitate those alignment sessions, which would reduce mid-sprint blockers and keep delivery on track. I also documented decisions in a shared space because tribal knowledge slowed onboarding when team members changed. So if the team has high context-switching between projects, I can maintain a lightweight decision log, which would reduce time lost to re-explaining context.\n\
+Close: That's why my approach to cross-functional alignment maps directly to the coordination challenges this team faces during growth.\n\
+Ask: cross-functional alignment | How does the team currently manage alignment when multiple functions are contributing to a single delivery? | I ask because that coordination layer is where I've had the most impact in past roles.\n\
+Ask: decision documentation | Does the team have a shared space for capturing key decisions and their rationale? | I'm curious about how the team preserves context when priorities shift between sprints.\n\n\
 Rules:\n\
 - Output ONLY these lines. No extra text.\n\
 - Acknowledge: one sentence naming the team or collaboration stake. Never starts with 'I'. Draws from system prompt.\n\
@@ -940,6 +1028,14 @@ Close: <One sentence connecting the candidate\\'s personal qualities to what the
 ---\n\
 Ask: <2-4 word noun phrase about team culture or values — what kind of person thrives here> | <Question about what personal or interpersonal qualities tend to make people successful at this company or in this team. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic ('I want to understand the team'). Max 15 words. Must be a complete sentence.>\n\
 Ask: <2-4 word noun phrase — team dynamics or working style> | <A different question about how the team works together or what values shape day-to-day interactions. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic ('I want to understand the team'). Max 15 words. Must be a complete sentence.>\n\n\
+EXAMPLE OUTPUT (adapt every detail to the actual candidate background — structure is fixed):\n\
+Acknowledge: It sounds like you want to understand what kind of person I am outside of the professional context.\n\
+Solve: My friends would say I am direct, curious, and someone who follows through on commitments.\n\
+Bridge: For example, when I took on a personal project learning data analysis, I finished every module and applied it to a real problem.\n\
+Answer: [directness]Directness at work means stakeholders always know where a project stands. I surface blockers early because delayed transparency creates larger downstream problems. Beyond that, I also bring[curiosity]genuine curiosity to problems I haven't seen before. I've pursued side projects that directly informed how I approach analytical challenges in my work. So if the team values people who learn independently, I can bring new techniques into the workflow, which would keep the team's approach current.[follow-through]Follow-through means every commitment closes cleanly. I track open items weekly because incomplete loops slow down everyone who depends on my output. So if reliability on deliverables matters here, I can be counted on to close without reminders, which would reduce the management overhead the team carries.\n\
+Close: That's why the qualities people see in me outside of work show up the same way in how I operate within a team.\n\
+Ask: success traits | What personal qualities tend to make people successful on this team long-term? | I ask because I want to understand whether the way I naturally operate fits how this team works.\n\
+Ask: team working style | How would you describe the day-to-day interaction style on this team? | I'm curious about whether the team tends to work more independently or collaboratively on a given day.\n\n\
 Rules:\n\
 - Output ONLY these lines. No extra text.\n\
 - Acknowledge: names the character dimension, not the job skill. Never starts with 'I'.\n\
@@ -1002,6 +1098,15 @@ Close: <One sentence connecting the candidate's growth trajectory to the employe
 ---\n\
 Ask: <2-4 word noun phrase related to team growth or development culture> | <Question showing the candidate is actively developing — probes how the team or company supports growth in this specific area. Names a concrete process, tool, or domain. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic ('I want to understand the team'). Max 15 words. Must be a complete sentence.>\n\
 Ask: <2-4 word noun phrase — different angle on development or feedback> | <Question about how the team gives feedback or how performance is measured in this area. Names a specific metric or process. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic ('I want to understand the team'). Max 15 words. Must be a complete sentence.>\n\n\
+EXAMPLE OUTPUT (adapt every detail to the actual candidate background — structure is fixed):\n\
+Acknowledge: One area I have actively worked on is presenting strategic context before going into channel-level detail in stakeholder settings.\n\
+Impact: There was a point where a campaign review with a commercial director focused on budget cuts rather than strategy, because I led with channel metrics instead of pipeline impact.\n\
+Solve: I've since adopted a structure where I open every performance review with pipeline contribution and cost per opportunity before going into channel detail.\n\
+Bridge: I've measurably improved my ability to hold those conversations — senior stakeholders now engage on strategy rather than redirecting to cost reduction.\n\
+Answer: [performance storytelling]Attribution clarity drives confident investment decisions. I've built pipeline-linked reporting frameworks at a B2B software company that translated paid channel data into language sales and finance teams could act on, which meant budget decisions were made faster. For a team scaling acquisition, this means paid media earns its budget through revenue language, not channel jargon.\n\
+Close: That growth is exactly why I'm focused on roles where paid acquisition reports to pipeline and revenue, not just channel KPIs.\n\
+Ask: stakeholder reporting format | How does the team currently present paid performance to commercial leadership — outcome-first or metrics-first? | I ask because the reporting format shapes whether paid media is seen as a strategic function or a cost centre.\n\
+Ask: performance feedback process | How does the team give feedback when communication to non-technical stakeholders needs to improve? | I'm curious because it's the area I continue to actively develop.\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Impact: Solve: Bridge: Answer: Close: Ask: Ask:\n\
 - Acknowledge: names a REAL, SPECIFIC limitation — never 'perfectionist' or 'work too hard'. Draws ONLY from candidate background — NEVER invent a weakness.\n\
@@ -1031,6 +1136,14 @@ Close: <One sentence connecting the candidate\\'s reasoning approach to the empl
 ---\n\
 Ask: <2-4 word noun phrase probing the real context behind the hypothetical> | <Question that surfaces the actual business situation the interviewer had in mind. Names a specific metric, process, or recent event. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic ('I want to understand the team'). Max 15 words. Must be a complete sentence.>\n\
 Ask: <2-4 word noun phrase — different angle on how success is measured or what\\'s been tried> | <Question about how the team has approached this challenge previously or how success would be measured. Names a concrete metric or process. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I\\'m curious about'. Ties to your career direction or this employer's specific challenge — NEVER generic ('I want to understand the team'). Max 15 words. Must be a complete sentence.>\n\n\
+EXAMPLE OUTPUT (adapt every detail to the actual candidate background — structure is fixed):\n\
+Acknowledge: From your question, the concern seems to be maintaining campaign effectiveness when the brief or objectives are unclear from the start.\n\
+Solve: I'd start by separating what is unclear from what is fixed — the constraints that exist regardless of scope.\n\
+Bridge: I'd then work through each layer.\n\
+Answer: [scope clarification]Unclear scope is a stakeholder alignment gap, not a campaign execution problem. I clarify the success metric and non-negotiable constraints before changing any live campaigns, because ambiguous objectives produce rework rather than results. So if a brief arrives with conflicting objectives, I resolve the objective definition first, which prevents spend on outcomes that are already going to change.[priority sequencing]Once the primary objective is clear, I sequence optimisation tasks by impact on that objective, not by urgency. I prioritise the actions that protect pipeline quality before volume or efficiency, because quality degradation is harder to reverse than volume loss. So if the timeline compresses, I would concentrate remaining budget on the highest-converting audience segments, which would maintain pipeline quality even with lower total spend.\n\
+Close: The work I've done navigating ambiguous briefs in performance accounts is exactly what allows this kind of uncertainty to be handled without losing pipeline contribution here.\n\
+Ask: scope ambiguity frequency | How often do campaign briefs arrive with unclear or conflicting objectives, and what typically causes it? | I ask because the frequency determines how much upfront alignment process I need to build into the workflow.\n\
+Ask: success criteria ownership | Who has the final say on what a successful campaign outcome looks like — marketing, sales, or both? | I'm curious about the decision authority because clear ownership is what makes brief resolution fast.\n\n\
 Rules:\n\
 - LABELS in order: Acknowledge: Solve: Bridge: Answer: Close: Ask: Ask:\n\
 - Answer: candidate reasons through the hypothetical — does NOT recall a story as the main answer.\n\

@@ -87,6 +87,22 @@ const FUTURE_TRIGGERS: &[&str] = &[
     "how do you see yourself",
     "what are your long",
     "what is your long",
+    "career path",
+    "career trajectory",
+    "career plan",
+    "fit into your career",
+    "role fit into",
+    "this role fit",
+    "next step in your career",
+    "next steps in your career",
+    "your professional goals",
+    "your growth goals",
+    "your career direction",
+    "where are you headed",
+    "where do you hope to",
+    "what do you hope to achieve",
+    "how does this position",
+    "how does this opportunity",
 ];
 
 const CLOSING_TRIGGERS: &[&str] = &[

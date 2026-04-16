@@ -27,7 +27,7 @@ timeout /t 8 /nobreak >nul
 
 REM Start backend (loads .env automatically, logs to backend\target\release\logs\server.log)
 if not exist backend\logs mkdir backend\logs
-start "AI Interview Backend" /min cmd /c "cd backend && target\release\server.exe"
+start "AI Interview Backend" /min cmd /c "set PATH=%PATH%;%USERPROFILE%\.local\bin && cd backend && target\release\server.exe >> server_new3.log 2>&1"
 
 REM Wait for backend to bind
 timeout /t 3 /nobreak >nul

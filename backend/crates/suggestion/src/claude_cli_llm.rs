@@ -6,7 +6,7 @@ use std::process::Stdio;
 use serde_json::Value;
 use common::messages::{WsEvent, SuggestionMode};
 
-const CLAUDE_CLI_TIMEOUT_SECS: u64 = 30;
+const CLAUDE_CLI_TIMEOUT_SECS: u64 = 90;
 
 pub async fn stream_suggestions(
     system_prompt: &str,
@@ -20,10 +20,15 @@ pub async fn stream_suggestions(
             "--output-format", "stream-json",
             "--verbose",
             "--model", "claude-haiku-4-5-20251001",
+            "--dangerously-skip-permissions", // skip permission prompts in subprocess
+            "--allowedTools", "",            // no tools — pure text generation, skips MCP init
         ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        // Remove API key so the CLI uses its stored Pro login, not the server's .env key
+        .env_remove("ANTHROPIC_API_KEY")
+        .env_remove("ANTHROPIC_AUTH_TOKEN")
         // Neutral dir so it doesn't load project CLAUDE.md / memory
         .current_dir(std::env::temp_dir())
         .spawn()?;

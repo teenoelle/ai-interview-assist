@@ -312,6 +312,7 @@
   let rightTopZoom = $state(Number(localStorage.getItem(SK.zoomRightTop) ?? 100));
   let rightBottomZoom = $state(Number(localStorage.getItem(SK.zoomRightBottom) ?? 100));
   let kwZoom = $state(Number(localStorage.getItem(SK.zoomKw) ?? 100));
+  let questionFontSize = $state(Number(localStorage.getItem(SK.zoomQuestion) ?? 1.0));
   let rightSplitPct = $state(Number(localStorage.getItem(SK.rightSplitPct) ?? 42));
   let leftSplitPct = $state(Number(localStorage.getItem(SK.leftSplitPct) ?? 55));
   let rightColBodyEl = $state<HTMLElement | undefined>();
@@ -2216,6 +2217,8 @@
                     <button class="zoom-btn" onclick={() => adjustZoom('center', +10)} title="Increase font size">A+</button>
                     <button class="zoom-btn" onclick={() => cyclePanelFont('center')} title={fontCenter ? panelFontLabel(fontCenter) : 'Font: global'} class:zoom-btn-active={!!fontCenter}>Ff</button>
                     <button class="zoom-btn" onclick={() => cyclePanelFont('question')} title={fontQuestion ? `Q: ${panelFontLabel(fontQuestion)}` : 'Question font: global'} class:zoom-btn-active={!!fontQuestion}>Qq</button>
+                    <button class="zoom-btn" onclick={() => { questionFontSize = Math.max(0.6, +(questionFontSize - 0.1).toFixed(1)); localStorage.setItem(SK.zoomQuestion, String(questionFontSize)); }} title="Decrease question font size">Q−</button>
+                    <button class="zoom-btn" onclick={() => { questionFontSize = Math.min(3.0, +(questionFontSize + 0.1).toFixed(1)); localStorage.setItem(SK.zoomQuestion, String(questionFontSize)); }} title="Increase question font size">Q+</button>
                     <button class="zoom-btn collapse-btn" onclick={() => toggleColCollapse('center')} title="Collapse">▾</button>
                   </div>
                 {:else}
@@ -2225,7 +2228,7 @@
               {#if !collapsedCols.has('center')}
                 <div class="col-body col-split-body" bind:this={centerColBodyEl}>
                   <div class="col-body-scroll" style="zoom: {centerZoom/100}; padding: 0.25rem 0.5rem 0.5rem; {panelFontStyle(fontCenter)}">
-                    <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} lockOnNew={true} {jumpSignal} {cueExpandSignal} onPinnedChange={(p) => (suggestionPinned = p)} {onClosingSectionOpen} {salaryTactics} {capturing} questionFontStyle={panelFontStyle(fontQuestion)} />
+                    <SuggestionPanel {suggestions} onClear={() => (suggestions = [])} teleprompter={true} lockOnNew={true} {jumpSignal} {cueExpandSignal} onPinnedChange={(p) => (suggestionPinned = p)} {onClosingSectionOpen} {salaryTactics} {capturing} questionFontStyle={panelFontStyle(fontQuestion) + `font-size:${questionFontSize}rem;`} />
                   </div>
                 </div>
               {/if}
@@ -2775,7 +2778,7 @@
             </div>
           </div>
           <div class="focus-panel-wrap" style="zoom:{focusCardFs/100}">
-            <SuggestionPanel {suggestions} onClear={() => {}} teleprompter={true} lockOnNew={true} {jumpSignal} {onClosingSectionOpen} {salaryTactics} {capturing} questionFontStyle={panelFontStyle(fontQuestion)} />
+            <SuggestionPanel {suggestions} onClear={() => {}} teleprompter={true} lockOnNew={true} {jumpSignal} {onClosingSectionOpen} {salaryTactics} {capturing} questionFontStyle={panelFontStyle(fontQuestion) + `font-size:${questionFontSize}rem;`} />
           </div>
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="focus-resize-handle" onmousedown={onFocusResizeDown}></div>
@@ -2896,6 +2899,7 @@
     --ff-mono: 'JetBrains Mono', 'Fira Code', monospace;
     --fs-xs:   0.62rem;
     --fs-sm:   0.74rem;
+    --fs-md:   0.79rem;
     --fs-base: 0.85rem;
     --fs-lg:   1.0rem;
     --fs-mono: 0.72rem;

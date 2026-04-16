@@ -20,6 +20,7 @@ export const SK = {
   zoomRightTop: 'zoom-right-top',
   zoomRightBottom: 'zoom-right-bottom',
   zoomKw: 'zoom-kw',
+  zoomQuestion: 'zoom-question',
   ttsVoice: 'tts-voice',
   ttsRate: 'tts-rate',
   ttsVolume: 'tts-volume',

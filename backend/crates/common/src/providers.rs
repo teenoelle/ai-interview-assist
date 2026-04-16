@@ -18,6 +18,138 @@ impl Provider {
     }
 }
 
+/// All suggestion providers, in the order they are tried.
+/// Serialised as snake_case strings for the frontend settings API.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SuggestionProvider {
+    Groq,
+    Groq2,
+    Mistral,
+    ClaudeCli,
+    ClaudeApi,
+    Ollama,
+    OpenRouter,
+    Qwen,
+    Cerebras,
+    DeepSeek,
+    LanOllama,
+    Gemma,
+    Gemini,
+}
+
+impl SuggestionProvider {
+    pub fn name(self) -> &'static str {
+        match self {
+            SuggestionProvider::Groq      => "Groq",
+            SuggestionProvider::Groq2     => "Groq #2",
+            SuggestionProvider::Mistral   => "Mistral",
+            SuggestionProvider::ClaudeCli => "Claude CLI",
+            SuggestionProvider::ClaudeApi => "Claude API",
+            SuggestionProvider::Ollama    => "Ollama",
+            SuggestionProvider::OpenRouter => "OpenRouter",
+            SuggestionProvider::Qwen      => "Qwen",
+            SuggestionProvider::Cerebras  => "Cerebras",
+            SuggestionProvider::DeepSeek  => "DeepSeek",
+            SuggestionProvider::LanOllama => "LAN Ollama",
+            SuggestionProvider::Gemma     => "Gemma",
+            SuggestionProvider::Gemini    => "Gemini",
+        }
+    }
+
+    /// True when the provider runs on the local machine (affects the `local` field in ProviderUsed events).
+    pub fn is_local(self) -> bool {
+        matches!(self, SuggestionProvider::Ollama | SuggestionProvider::ClaudeCli)
+    }
+
+    /// Default fallback order — tries fastest/cheapest first.
+    pub fn default_order() -> Vec<Self> {
+        vec![
+            SuggestionProvider::Groq,
+            SuggestionProvider::Mistral,
+            SuggestionProvider::Groq2,
+            SuggestionProvider::ClaudeCli,
+            SuggestionProvider::ClaudeApi,
+            SuggestionProvider::Ollama,
+            SuggestionProvider::OpenRouter,
+            SuggestionProvider::Qwen,
+            SuggestionProvider::Cerebras,
+            SuggestionProvider::DeepSeek,
+            SuggestionProvider::LanOllama,
+            SuggestionProvider::Gemma,
+            SuggestionProvider::Gemini,
+        ]
+    }
+}
+
+/// Transcription provider fallback chain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TranscriptionProvider {
+    WhisperLocal,
+    Deepgram,
+    GroqWhisper2,
+    GroqWhisper,
+    Gemini,
+}
+
+impl TranscriptionProvider {
+    pub fn name(self) -> &'static str {
+        match self {
+            TranscriptionProvider::WhisperLocal  => "Whisper (local)",
+            TranscriptionProvider::Deepgram      => "Deepgram",
+            TranscriptionProvider::GroqWhisper2  => "Groq Whisper #2",
+            TranscriptionProvider::GroqWhisper   => "Groq Whisper",
+            TranscriptionProvider::Gemini        => "Gemini",
+        }
+    }
+
+    pub fn is_local(self) -> bool {
+        matches!(self, TranscriptionProvider::WhisperLocal)
+    }
+
+    pub fn default_order() -> Vec<Self> {
+        vec![
+            TranscriptionProvider::WhisperLocal,
+            TranscriptionProvider::Deepgram,
+            TranscriptionProvider::GroqWhisper2,
+            TranscriptionProvider::GroqWhisper,
+            TranscriptionProvider::Gemini,
+        ]
+    }
+}
+
+/// Sentiment / facial-expression analysis provider chain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SentimentProvider {
+    OllamaVision,
+    GeminiVision,
+    ClaudeVision,
+}
+
+impl SentimentProvider {
+    pub fn name(self) -> &'static str {
+        match self {
+            SentimentProvider::OllamaVision => "Ollama Vision",
+            SentimentProvider::GeminiVision => "Gemini Vision",
+            SentimentProvider::ClaudeVision => "Claude API",
+        }
+    }
+
+    pub fn is_local(self) -> bool {
+        matches!(self, SentimentProvider::OllamaVision)
+    }
+
+    pub fn default_order() -> Vec<Self> {
+        vec![
+            SentimentProvider::OllamaVision,
+            SentimentProvider::GeminiVision,
+            SentimentProvider::ClaudeVision,
+        ]
+    }
+}
+
 /// Returns true if the error is a quota / rate-limit error that warrants
 /// falling back to the next provider (rather than retrying the same one).
 pub fn is_quota_exhausted(err: &anyhow::Error) -> bool {

@@ -14,6 +14,7 @@ use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitEx
 use tracing_appender::non_blocking::WorkerGuard;
 use common::config::Config;
 use common::messages::WsEvent;
+use common::providers::{SuggestionProvider, TranscriptionProvider, SentimentProvider};
 use common::rate_limiter::RateLimiter;
 use crate::state::AppState;
 
@@ -290,11 +291,11 @@ async fn main() -> anyhow::Result<()> {
         config.ollama_url,
         config.ollama_model,
     );
-    tracing::info!(
-        "Suggestion order: {} Claude CLI → Claude API → Ollama ({}) → Mistral → Groq → OpenRouter → Qwen → Cerebras → DeepSeek → Gemma → Gemini",
-        if let Some(ref u) = config.bonsai_url { format!("Bonsai ({} @ {}) →", config.bonsai_model, u) } else { String::new() },
-        config.ollama_models.join(", "),
-    );
+    {
+        let default_names: Vec<&str> = SuggestionProvider::default_order()
+            .iter().map(|p| p.name()).collect();
+        tracing::info!("Default suggestion order: {}", default_names.join(" → "));
+    }
     tracing::info!(
         "Transcription order: {} Groq Whisper → Gemini (both streams)",
         config.whisper_url.as_deref().map(|u| format!("Local Whisper ({u}) →")).unwrap_or_default()
@@ -357,6 +358,12 @@ async fn main() -> anyhow::Result<()> {
         ffmpeg_bin: config.ffmpeg_bin.clone(),
         reviews_dir,
         review_sessions: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        suggestion_order: Arc::new(RwLock::new(SuggestionProvider::default_order())),
+        transcription_order: Arc::new(RwLock::new(TranscriptionProvider::default_order())),
+        sentiment_order: Arc::new(RwLock::new(SentimentProvider::default_order())),
+        runtime_keys: Arc::new(RwLock::new(std::collections::HashMap::new())),
+        runtime_urls: Arc::new(RwLock::new(std::collections::HashMap::new())),
+        runtime_models: Arc::new(RwLock::new(std::collections::HashMap::new())),
     };
 
     // Mic agent: microphone audio → always "You", never triggers suggestions
@@ -372,6 +379,9 @@ async fn main() -> anyhow::Result<()> {
         config.whisper_model.clone(),
         mic_rl,
         Some(call_counts.clone()),
+        state.transcription_order.clone(),
+        state.runtime_keys.clone(),
+        state.runtime_urls.clone(),
     ));
 
     // System audio agent: meeting playback → "Interviewer" (+ heuristic/diarize refinement)
@@ -389,6 +399,9 @@ async fn main() -> anyhow::Result<()> {
         config.diarize_url.clone(),
         system_rl,
         Some(call_counts.clone()),
+        state.transcription_order.clone(),
+        state.runtime_keys.clone(),
+        state.runtime_urls.clone(),
     ));
 
     tokio::spawn(sentiment::run_agent(
@@ -399,6 +412,9 @@ async fn main() -> anyhow::Result<()> {
         config.ollama_url.clone(),
         config.ollama_vision_model.clone(),
         sentiment_rl,
+        state.sentiment_order.clone(),
+        state.runtime_keys.clone(),
+        state.runtime_urls.clone(),
     ));
 
     tokio::spawn(suggestion::run_agent(
@@ -421,6 +437,10 @@ async fn main() -> anyhow::Result<()> {
         config.ollama_models.clone(),
         suggestion_rl,
         Some(call_counts.clone()),
+        state.suggestion_order.clone(),
+        state.runtime_keys.clone(),
+        state.runtime_urls.clone(),
+        state.runtime_models.clone(),
     ));
 
     let frontend_path = std::env::current_dir()
@@ -452,6 +472,11 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/draft-followup", post(http_handler::handle_draft_followup))
         .route("/api/interviewer-summaries", post(http_handler::handle_interviewer_summaries))
         .route("/api/interviewer-summary", post(http_handler::handle_interviewer_summary_single))
+        .route("/api/settings", get(http_handler::handle_settings_get).post(http_handler::handle_settings))
+        .route("/api/probe", get(http_handler::handle_probe))
+        .route("/api/ollama/models", get(http_handler::handle_ollama_models))
+        .route("/api/ollama/pull", post(http_handler::handle_ollama_pull))
+        .route("/api/claude-cli/install", post(http_handler::handle_claude_cli_install))
         .route("/api/usage", get(http_handler::handle_usage))
         .route("/api/tts/voices", get(tts_handler::handle_tts_voices))
         .route("/api/tts/speak", post(tts_handler::handle_speak))

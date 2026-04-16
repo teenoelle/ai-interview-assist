@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use tokio::sync::{broadcast, mpsc, RwLock, watch};
 use common::messages::{TranscriptSegment, WsEvent};
 use common::rate_limiter::RateLimiter;
+use common::providers::{SuggestionProvider, TranscriptionProvider, SentimentProvider};
 use crate::review::ReviewProgress;
 
 #[derive(Clone)]
@@ -49,4 +50,15 @@ pub struct AppState {
     pub ffmpeg_bin: Option<String>,
     pub reviews_dir: PathBuf,
     pub review_sessions: Arc<std::sync::Mutex<std::collections::HashMap<String, watch::Receiver<ReviewProgress>>>>,
+    pub suggestion_order: Arc<RwLock<Vec<SuggestionProvider>>>,
+    pub transcription_order: Arc<RwLock<Vec<TranscriptionProvider>>>,
+    pub sentiment_order: Arc<RwLock<Vec<SentimentProvider>>>,
+    /// Keys added at runtime via POST /api/settings (override .env values).
+    pub runtime_keys: Arc<RwLock<std::collections::HashMap<String, String>>>,
+    /// URLs added at runtime via POST /api/settings (override .env values).
+    /// Keys: "ollama", "lan_ollama", "whisper"
+    pub runtime_urls: Arc<RwLock<std::collections::HashMap<String, String>>>,
+    /// Models set at runtime via POST /api/settings.
+    /// Keys: "ollama", "openrouter"
+    pub runtime_models: Arc<RwLock<std::collections::HashMap<String, String>>>,
 }

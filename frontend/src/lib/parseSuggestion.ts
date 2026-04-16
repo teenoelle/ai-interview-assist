@@ -1,3 +1,20 @@
+export interface CompanyAd {
+  type: 'Awareness' | 'Consideration' | 'High Intent';
+  headline: string;
+  body: string;
+  cta: string;
+}
+
+export interface CompanySegment {
+  name: string;
+  pain: string;
+  why: string;
+  titles: string;
+  verticals: string;
+  size: string;
+  ads: CompanyAd[];
+}
+
 export interface ParsedSuggestion {
   acknowledge: string;
   impact: string;      // Impact: moment where weakness had a real cost (weaknesses type)
@@ -42,6 +59,13 @@ export interface ParsedSuggestion {
   reiterate: string;    // Reiterate: qualification fit
   echo_moment: string;  // Echo: callback to interview moment
   forward_lean: string; // Forward: forward lean
+  // Company Research (CoreOffering → Positioning → Segments → Growth → Backers → Enthusiasm)
+  core_offering: string;
+  positioning: string;
+  company_segments: CompanySegment[];
+  growth_financials: string;
+  capital_backers: string;
+  personal_alignment: string;
 }
 
 export function parseSuggestion(text: string | null | undefined, streaming = false): ParsedSuggestion {
@@ -54,6 +78,8 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
   let direction = '', alignment = '', contribution = '';
   let transition1 = '', transition2 = '', transition3 = '';
   let thanks = '', reiterate = '', echo_moment = '', forward_lean = '';
+  let core_offering = '', positioning = '', growth_financials = '', capital_backers = '', personal_alignment = '';
+  const company_segments: CompanySegment[] = [];
   const asks: { topic: string; question: string; followUp?: string; section?: string }[] = [];
   const bodyLines: string[] = [];
   let pendingAskTopic = '';
@@ -63,7 +89,7 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
   // Strip markdown bold markers e.g. **Affirm:** → Affirm:
   const clean = (s: string) => s.replace(/^\*+([^*]+)\*+\s*/, '$1 ').trim();
   const isCueLabel = (s: string) =>
-    /^(Principle|Context|Action|Result|Point|Metric|General|Example|Story|Pivot|Acknowledge|Affirm|Impact|Solve|Bridge|Close|Answer|Say|Tell|Ask|Present|Summary|Thread|Past|Story|Future|Next|Company|Role|Self|Reframe|Gap|Choice|Bring|Trade|Value|Direction|Alignment|Contribution|Transition1|Transition2|Transition3|Section|Thanks|Reiterate|Echo|Forward):/i.test(s);
+    /^(Principle|Context|Action|Result|Point|Metric|General|Example|Story|Pivot|Acknowledge|Affirm|Impact|Solve|Bridge|Close|Answer|Say|Tell|Ask|Present|Summary|Thread|Past|Story|Future|Next|Company|Role|Self|Reframe|Gap|Choice|Bring|Trade|Value|Direction|Alignment|Contribution|Transition1|Transition2|Transition3|Section|Thanks|Reiterate|Echo|Forward|CoreOffering|Positioning|Segment|Growth|Backers|Enthusiasm):/i.test(s);
 
   for (const line of lines) {
     const t = line.trim();
@@ -99,6 +125,11 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
         else if (field === 'reiterate') reiterate = val;
         else if (field === 'echo_moment') echo_moment = val;
         else if (field === 'forward_lean') forward_lean = val;
+        else if (field === 'core_offering') core_offering = val;
+        else if (field === 'positioning') positioning = val;
+        else if (field === 'growth_financials') growth_financials = val;
+        else if (field === 'capital_backers') capital_backers = val;
+        else if (field === 'personal_alignment') personal_alignment = val;
       }
     };
 
@@ -171,6 +202,38 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
       setNF('echo_moment', c.replace(/^Echo:\s*/i, '').trim());
     } else if (c.match(/^Forward:/i)) {
       setNF('forward_lean', c.replace(/^Forward:\s*/i, '').trim());
+    } else if (c.match(/^CoreOffering:/i)) {
+      setNF('core_offering', c.replace(/^CoreOffering:\s*/i, '').trim());
+    } else if (c.match(/^Positioning:/i)) {
+      setNF('positioning', c.replace(/^Positioning:\s*/i, '').trim());
+    } else if (c.match(/^Segment:/i)) {
+      pendingTell = false; pendingNewField = null; pendingAskTopic = '';
+      const raw = c.replace(/^Segment:\s*/i, '').trim();
+      const parts = raw.split(/\s*\|\s*/);
+      const nameWhy = parts[0] ?? '';
+      const dashIdx = nameWhy.indexOf(' — ');
+      const name = dashIdx !== -1 ? nameWhy.slice(0, dashIdx).replace(/^\[/, '').replace(/\]$/, '').trim() : nameWhy.replace(/^\[/, '').replace(/\]$/, '').trim();
+      const why  = dashIdx !== -1 ? nameWhy.slice(dashIdx + 3).trim() : '';
+      const AD_TYPES = ['Awareness', 'Consideration', 'High Intent'] as const;
+      const rawAds = parts[4]?.trim() ?? '';
+      const ads: CompanyAd[] = rawAds.split(/\s*::\s*/).slice(0, 3).map((entry, idx) => {
+        const ap = entry.split(/\s*\/\/\s*/);
+        return { type: AD_TYPES[idx] ?? 'Awareness', headline: ap[0]?.trim() ?? '', body: ap[1]?.trim() ?? '', cta: ap[2]?.trim() ?? '' };
+      }).filter(ad => ad.headline || ad.body || ad.cta);
+      company_segments.push({
+        name, why,
+        pain:      parts[5]?.trim() ?? '',
+        titles:    parts[1]?.trim() ?? '',
+        verticals: parts[2]?.trim() ?? '',
+        size:      parts[3]?.trim() ?? '',
+        ads,
+      });
+    } else if (c.match(/^Growth:/i)) {
+      setNF('growth_financials', c.replace(/^Growth:\s*/i, '').trim());
+    } else if (c.match(/^Backers:/i)) {
+      setNF('capital_backers', c.replace(/^Backers:\s*/i, '').trim());
+    } else if (c.match(/^Enthusiasm:/i)) {
+      setNF('personal_alignment', c.replace(/^Enthusiasm:\s*/i, '').trim());
     } else if (c.match(/^(Answer|Say|Tell):/i)) {
       pendingNewField = null;
       cue = 'Answer';
@@ -231,6 +294,11 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
       else if (f === 'reiterate') reiterate = reiterate ? reiterate + ' ' + t : t;
       else if (f === 'echo_moment') echo_moment = echo_moment ? echo_moment + ' ' + t : t;
       else if (f === 'forward_lean') forward_lean = forward_lean ? forward_lean + ' ' + t : t;
+      else if (f === 'core_offering') core_offering = core_offering ? core_offering + ' ' + t : t;
+      else if (f === 'positioning') positioning = positioning ? positioning + ' ' + t : t;
+      else if (f === 'growth_financials') growth_financials = growth_financials ? growth_financials + ' ' + t : t;
+      else if (f === 'capital_backers') capital_backers = capital_backers ? capital_backers + ' ' + t : t;
+      else if (f === 'personal_alignment') personal_alignment = personal_alignment ? personal_alignment + ' ' + t : t;
     } else if (pendingTell && t && !isCueLabel(c)) {
       // Capture answer text that was on its own line after Answer:
       tell = tell ? tell + ' ' + t : t;
@@ -247,7 +315,7 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
 
   // Positional fallback: if the model dropped all labels
   // Skip if we already have typed sections or ask entries (e.g. Closing type)
-  if (!acknowledge && !tell && !present && !company && !reframe && !gap && !direction && asks.length === 0) {
+  if (!acknowledge && !tell && !present && !company && !reframe && !gap && !direction && !core_offering && asks.length === 0) {
     const nonEmpty = lines.map(l => l.trim()).filter(l => l && l !== '---');
     if (nonEmpty.length >= 2) {
       acknowledge = clean(nonEmpty[0]);
@@ -273,7 +341,7 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
     }
   }
 
-  if (!tell && text && asks.length === 0 && !present && !company && !direction) {
+  if (!tell && text && asks.length === 0 && !present && !company && !direction && !core_offering) {
     // If there's no structure at all, show the full text rather than truncating at 80 chars
     const cleaned = text.replace(/^(Acknowledge:|Answer:|Say:)[^\n]*/im, '').trim();
     tell = cleaned;
@@ -337,6 +405,8 @@ export function parseSuggestion(text: string | null | undefined, streaming = fal
     direction: sc(direction), alignment: sc(alignment), contribution: sc(contribution),
     transition1: sc(transition1), transition2: sc(transition2), transition3: sc(transition3),
     thanks: sc(thanks), reiterate: sc(reiterate), echo_moment: sc(echo_moment), forward_lean: sc(forward_lean),
+    core_offering: sc(core_offering), positioning: sc(positioning), company_segments,
+    growth_financials: sc(growth_financials), capital_backers: sc(capital_backers), personal_alignment: sc(personal_alignment),
   };
 }
 
@@ -395,6 +465,8 @@ export function getAnswerType(
   if (tag === 'character')   return { framework: 'A: Trait',     label: 'Acknowledge → Trait → Context → Relevance' };
   if (tag === 'values')      return { framework: 'A: Align',     label: 'Context → Preferences → Bridge → Connect' };
   if (tag === 'candidate_questions') return { framework: 'A: Engage',  label: 'Questions to Ask' };
+  if (tag === 'company_research' || parsed.core_offering || parsed.company_segments.length > 0)
+    return { framework: 'A: Landscape', label: 'Core Offering → Competitive Positioning → Market Segments → Growth & Financials → Capital & Backers → Personal Alignment' };
   if (tag === 'wrap_up' || parsed.thanks || parsed.reiterate || parsed.echo_moment || parsed.forward_lean)
     return { framework: 'A: Close', label: 'Thanks · Fit · Echo · Forward' };
 

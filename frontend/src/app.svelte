@@ -8,6 +8,7 @@
   import TestQuestionBar from './components/TestQuestionBar.svelte';
   import PracticeQuestionsBar from './components/PracticeQuestionsBar.svelte';
   import RateLimitPanel from './components/RateLimitPanel.svelte';
+  import ProviderOrderPanel from './components/ProviderOrderPanel.svelte';
   import ReviewPanel from './components/ReviewPanel.svelte';
   import type { ReviewReport } from './components/ReviewPanel.svelte';
   import PracticePanel from './components/PracticePanel.svelte';
@@ -163,6 +164,16 @@
   // Audio meter levels (lifted from CaptureButton for display in stats panel)
   let captureMicLevel = $state(0);
   let captureSystemLevel = $state(0);
+
+  // Mic device picker
+  let micDevices = $state<MediaDeviceInfo[]>([]);
+  let selectedMicId = $state(localStorage.getItem('selected-mic-id') ?? '');
+  async function refreshMicDevices() {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      micDevices = all.filter(d => d.kind === 'audioinput');
+    } catch {}
+  }
 
   // Async capture-before-transition state
 
@@ -1299,6 +1310,19 @@
     eventWs.onEvent(handleWsEvent);
     eventWs.onStatus((status, attempt) => { wsStatus = status; wsAttempt = attempt; });
     eventWs.connect();
+    // Re-push saved provider order so server restarts don't lose the user's configuration
+    try {
+      const saved = localStorage.getItem('provider-settings');
+      if (saved) {
+        const p = JSON.parse(saved) as Record<string, unknown>;
+        const body: Record<string, unknown> = {};
+        if (p['suggestion_order'])    body['suggestion_order']    = p['suggestion_order'];
+        if (p['transcription_order']) body['transcription_order'] = p['transcription_order'];
+        if (p['sentiment_order'])     body['sentiment_order']     = p['sentiment_order'];
+        if (Object.keys(body).length > 0)
+          fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {});
+      }
+    } catch {}
   }
 
   function handleWsEvent(event: WsEvent) {
@@ -2024,7 +2048,7 @@
           <button class="history-btn" onclick={() => showPastInterviews = true}>Reports</button>
           <CaptureButton
             initialCapture={captureInst}
-            onCapture={(v) => { capturing = v; if (v) { connectWs(); if (!localStorage.getItem('tts-enabled')) ttsEnabled = true; ttsClient.getAudioOutputs().then(o => { ttsOutputDevices = o; }); } if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); captureMicLevel = 0; captureSystemLevel = 0; } }}
+            onCapture={(v) => { capturing = v; if (v) { connectWs(); if (!localStorage.getItem('tts-enabled')) ttsEnabled = true; ttsClient.getAudioOutputs().then(o => { ttsOutputDevices = o; }); refreshMicDevices(); } if (!v) { webcamStream = null; screenStream = null; captureInst = null; resetAnswerTimer(); captureMicLevel = 0; captureSystemLevel = 0; micDevices = []; } }}
             onStreams={(screen, webcam) => { screenStream = screen; webcamStream = webcam; }}
             onReady={(cap) => { captureInst = cap; }}
             onLevel={(mic, sys) => { captureMicLevel = mic; captureSystemLevel = sys; updateSysEnergy(sys); }}
@@ -2515,6 +2539,18 @@
                   {#if capturing}
                     <div class="stats-audio-meter">
                       <AudioMeter micLevel={captureMicLevel} systemLevel={captureSystemLevel} capturing={capturing} />
+                      {#if micDevices.length > 1}
+                        <select class="mic-select" value={selectedMicId} onchange={(e) => {
+                          selectedMicId = (e.currentTarget as HTMLSelectElement).value;
+                          localStorage.setItem('selected-mic-id', selectedMicId);
+                          captureInst?.switchMic(selectedMicId);
+                        }}>
+                          <option value="">Default mic</option>
+                          {#each micDevices as d}
+                            <option value={d.deviceId}>{d.label || `Mic ${d.deviceId.slice(0, 8)}`}</option>
+                          {/each}
+                        </select>
+                      {/if}
                     </div>
                   {/if}
                   {#if energySignal || youLog.length > 0 || suggestions.some(s => s.answerFeedback || s.vocalFeedback) || Object.keys(pendingVocalData).length > 0}
@@ -2599,6 +2635,9 @@
                     {#if modelUsageExpanded}
                       <RateLimitPanel {rateLimits} {callCounts} {providerStatus} />
                     {/if}
+                    <div class="provider-order-wrap">
+                      <ProviderOrderPanel />
+                    </div>
                   </div>
                 {/if}
               {/if}
@@ -3018,6 +3057,7 @@
   .side-section-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; background: none; border: none; cursor: pointer; padding: 0; }
   .side-section-toggle:hover .side-section-label { color: #475569; }
   .side-section-chevron { font-size: var(--fs-xs); color: #1e293b; }
+  .provider-order-wrap { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #1e293b; }
 
 
   .interview-layout { display: flex; flex-direction: column; height: 100dvh; }
@@ -3975,6 +4015,13 @@
     width: 100%;
     box-sizing: border-box;
   }
+  .mic-select {
+    width: 100%; margin-top: 0.3rem;
+    background: #0f1e33; border: 1px solid #1e3a5f; border-radius: 0.3rem;
+    color: #64748b; font-size: 10px; padding: 0.15rem 0.3rem; outline: none;
+    cursor: pointer;
+  }
+  .mic-select:focus { border-color: #3b82f6; color: #94a3b8; }
   .side-stats {
     display: flex; flex-direction: column; gap: 0.1rem;
     padding: 0.5rem 0.25rem;

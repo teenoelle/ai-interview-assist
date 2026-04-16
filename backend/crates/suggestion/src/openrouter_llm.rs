@@ -12,15 +12,26 @@ const FREE_MODELS: &[&str] = &[
     "google/gemma-3-27b-it:free",
 ];
 
+/// `custom_model`: if Some, use that specific model instead of the free-tier rotation list.
 pub async fn stream_suggestions(
     api_key: &str,
+    custom_model: Option<&str>,
     system_prompt: &str,
     user_prompt: &str,
     mode: SuggestionMode,
     event_tx: broadcast::Sender<WsEvent>,
 ) -> Result<()> {
-    let mut last_err = anyhow::anyhow!("No OpenRouter free models available");
-    for model in FREE_MODELS {
+    // If the user pinned a specific model, use only that one.
+    let custom_arr;
+    let models: &[&str] = if let Some(m) = custom_model {
+        custom_arr = [m];
+        &custom_arr
+    } else {
+        FREE_MODELS
+    };
+
+    let mut last_err = anyhow::anyhow!("No OpenRouter models available");
+    for model in models {
         match stream_openai_compat(
             api_key,
             "https://openrouter.ai/api/v1/chat/completions",

@@ -827,18 +827,27 @@ pub struct PracticeScore {
     pub strong: String,
 }
 
-pub async fn generate_company_brief(company_info: &str, cfg: &AiConfig<'_>) -> CompanyBrief {
+/// `from_jd`: true when `company_info` is JD text (no website crawl available).
+pub async fn generate_company_brief(company_info: &str, from_jd: bool, cfg: &AiConfig<'_>) -> CompanyBrief {
+    let empty = CompanyBrief {
+        name: String::new(), what_they_do: String::new(),
+        products: vec![], culture: String::new(),
+        recent_news: String::new(), why_join: String::new(),
+    };
     if company_info.trim().is_empty() {
-        return CompanyBrief {
-            name: String::new(), what_they_do: String::new(),
-            products: vec![], culture: String::new(),
-            recent_news: String::new(), why_join: String::new(),
-        };
+        return empty;
     }
-    let prompt = format!(
-        "Based on this company website content, extract a structured brief for a job candidate preparing for an interview.\n\nRespond in EXACTLY this format:\nNAME: [company name]\nWHAT: [1-2 sentences on what the company does]\nPRODUCTS: [product1] | [product2] | [product3]\nCULTURE: [1 sentence on work culture/values]\nNEWS: [1 sentence on recent notable news or achievements, or 'Not found']\nJOIN: [1 compelling reason why someone would want to work there]\n\n---\n{}",
-        trunc(&company_info, 5000)
-    );
+    let prompt = if from_jd {
+        format!(
+            "Based on this job description, extract what you can about the hiring company for a candidate preparing for an interview. If no company name is explicitly stated, write 'Unknown Company' for NAME.\n\nRespond in EXACTLY this format:\nNAME: [company name or 'Unknown Company']\nWHAT: [1-2 sentences on what the company does, inferred from the JD]\nPRODUCTS: [product1] | [product2] (or 'Not specified')\nCULTURE: [1 sentence on likely culture/values based on the JD tone and requirements]\nNEWS: Not found\nJOIN: [1 reason why someone would want this role, based on the JD]\n\n---\n{}",
+            trunc(company_info, 3000)
+        )
+    } else {
+        format!(
+            "Based on this company website content, extract a structured brief for a job candidate preparing for an interview.\n\nRespond in EXACTLY this format:\nNAME: [company name]\nWHAT: [1-2 sentences on what the company does]\nPRODUCTS: [product1] | [product2] | [product3]\nCULTURE: [1 sentence on work culture/values]\nNEWS: [1 sentence on recent notable news or achievements, or 'Not found']\nJOIN: [1 compelling reason why someone would want to work there]\n\n---\n{}",
+            trunc(company_info, 5000)
+        )
+    };
     let text = call_ai(cfg, &prompt, 400).await.unwrap_or_default();
     let mut brief = CompanyBrief {
         name: String::new(), what_they_do: String::new(),

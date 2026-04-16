@@ -10,6 +10,7 @@ export type QuestionTag =
   | 'wrap_up'
   | 'personal'
   | 'motivation'
+  | 'company_research'
   | 'fit'
   | 'future'
   | 'strengths'
@@ -22,6 +23,7 @@ export type QuestionTag =
 const SMALLTALK   = ['how are you', "how's it going", 'how is it going', 'how have you been', 'how is your day', 'how was your day', 'how was your weekend', 'how was your morning', 'how are you doing', 'how are you today', 'nice to meet you', 'great to meet you', 'pleasure to meet you', 'lovely to meet you', 'good to meet you', 'wonderful to meet you', 'ready to get started', 'shall we get started', 'before we begin', 'before we get started'];
 const PERSONAL    = ['tell me about yourself', 'tell us about yourself', 'walk me through your background', 'walk us through your background', 'walk me through your experience', 'walk us through your experience', 'introduce yourself', 'give me a brief overview', 'tell me a little about yourself', 'share your background', 'tell me about your background', 'tell me about your experience', 'take me through your background'];
 const MOTIVATION  = ['why do you want', 'why are you interested', 'why this role', 'why this company', 'why our company', 'why this position', 'what draws you to', 'what attracted you to', 'why did you apply', 'what interests you about', 'what excites you about', 'what brings you to'];
+const COMPANY_RESEARCH = ['what do you know about us', 'what do you know about our company', 'what do you know about what we do', 'have you heard of us', 'have you heard about us', 'have you heard of our company', 'have you heard about our company', 'have you heard about what we do', 'tell me about our company', 'tell me about what we do', 'what can you tell me about us', 'how familiar are you with us', 'how familiar are you with our company', 'how familiar are you with what we do', 'how familiar are you with our product', 'what do you think of our company', 'what do you know about the company', 'do you know what we do', 'what have you heard about us', 'what do you know about our product'];
 const FIT         = ['overqualified', 'seem overqualified', 'appears overqualified', 'why junior', 'why a junior', 'why a lower', 'why a more junior', 'why are you applying for a junior', 'why are you applying for such', 'step back', 'step down', 'lower level', 'more entry-level', 'why would you take a', 'seems like a step back', 'seems like a step down', 'taking a step back', 'taking a step down'];
 const FUTURE      = ['five years', '5 years', 'see yourself in', 'career goals', 'long-term goal', 'long term goal', 'where do you see yourself', 'how do you see yourself growing', 'where do you want to be', 'what are your long', 'career path'];
 const STRENGTHS   = ['greatest strength', 'biggest strength', 'what are your strengths', 'key strengths', 'what do you do well', 'strongest skill', 'what makes you good at', 'what are you good at', 'what would your colleagues say about you', 'what would your colleagues say you', 'what would your coworkers say about you', 'what would your manager say about you', 'what would your teammates say about you', 'how would your colleagues describe you', 'how would your coworkers describe you', 'how would your manager describe you', 'how would your teammates describe you', 'how would others describe you', 'how would people describe you'];
@@ -45,10 +47,11 @@ function score(triggers: string[], lower: string): number {
 // Priority-ordered: higher-priority types listed first — tiebreaker when scores are equal.
 // Order mirrors the backend classify_question priority.
 const PRIORITY: Array<[string[], QuestionTag]> = [
-  [SMALLTALK,   'smalltalk'],
-  [PERSONAL,    'personal'],
-  [FIT,         'fit'],
-  [MOTIVATION,  'motivation'],
+  [SMALLTALK,        'smalltalk'],
+  [PERSONAL,         'personal'],
+  [FIT,              'fit'],
+  [COMPANY_RESEARCH, 'company_research'],
+  [MOTIVATION,       'motivation'],
   [FUTURE,      'future'],
   [WRAP_UP,            'wrap_up'],
   [CANDIDATE_QUESTIONS, 'candidate_questions'],
@@ -76,7 +79,8 @@ export function tagQuestion(q: string): QuestionTag {
 export const TAG_CONFIG: Record<QuestionTag, { label: string; color: string; bg: string }> = {
   smalltalk:   { label: 'Q: Small Talk',  color: '#67e8f9', bg: '#031a20' },
   personal:    { label: 'Q: Intro',       color: '#f472b6', bg: '#1a0a1a' },
-  motivation:  { label: 'Q: Motivation',  color: '#fb923c', bg: '#1a0e00' },
+  motivation:       { label: 'Q: Motivation',  color: '#fb923c', bg: '#1a0e00' },
+  company_research: { label: 'Q: Company',    color: '#fcd34d', bg: '#1a1500' },
   fit:         { label: 'Q: Fit',         color: '#22d3ee', bg: '#031a20' },
   future:      { label: 'Q: Future',      color: '#38bdf8', bg: '#031a2e' },
   strengths:   { label: 'Q: Strengths',   color: '#4ade80', bg: '#011a0a' },

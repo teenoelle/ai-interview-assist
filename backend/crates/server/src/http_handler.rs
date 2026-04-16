@@ -1,8 +1,12 @@
 use axum::{
-    extract::{Multipart, State},
+    extract::{Multipart, Query, State},
     http::StatusCode,
+    response::sse::{Event, KeepAlive, Sse},
     Json,
 };
+use futures::Stream;
+use std::convert::Infallible;
+use tokio_stream::wrappers::ReceiverStream;
 use sentiment::gemini_vision::analyze_presence;
 use common::messages::SetupPayload;
 use context::ai_helper::{generate_debrief, predict_questions, call_ai_simple, call_ai_fast, generate_company_brief, generate_interviewer_summary, extract_jd_keywords, extract_jd_location, assess_vocal_delivery, AiConfig};
@@ -758,33 +762,250 @@ pub async fn handle_suggest_mode(
     };
     let sp = state.system_prompt.read().await.clone();
     let tr = state.transcript.read().await.clone();
+    let order = state.suggestion_order.read().await.clone();
+    // Resolve runtime key overrides
+    let rk = state.runtime_keys.read().await;
+    let resolve = |name: &str, env: Option<String>| rk.get(name).cloned().or(env);
+    let akey  = resolve("anthropic",  state.anthropic_key.clone());
+    let grkey = resolve("groq",       state.groq_key.clone());
+    let grkey2= resolve("groq2",      state.groq_key_2.clone());
+    let orkey = resolve("openrouter", state.openrouter_key.clone());
+    let dkey  = resolve("deepseek",   state.deepseek_key.clone());
+    let mkey  = resolve("mistral",    state.mistral_key.clone());
+    let ckey  = resolve("cerebras",   state.cerebras_key.clone());
+    let qkey  = resolve("qwen",       state.qwen_key.clone());
+    drop(rk);
+    // Resolve runtime URL/model overrides
+    let ru = state.runtime_urls.read().await;
+    let ourl   = ru.get("ollama").cloned().unwrap_or_else(|| state.ollama_url.clone());
+    let burl   = ru.get("lan_ollama").cloned().or_else(|| state.bonsai_url.clone());
+    drop(ru);
+    let rm = state.runtime_models.read().await;
+    let ormodel = rm.get("openrouter").cloned();
+    let omodels = if let Some(m) = rm.get("ollama").cloned() { vec![m] } else { state.ollama_models.clone() };
+    let bmodel  = rm.get("lan_ollama").cloned().unwrap_or_else(|| state.bonsai_model.clone());
+    drop(rm);
     let etx = state.event_tx.clone();
     let gkey = state.gemini_key.clone();
-    let akey = state.anthropic_key.clone();
-    let grkey = state.groq_key.clone();
-    let grkey2 = state.groq_key_2.clone();
-    let orkey = state.openrouter_key.clone();
-    let dkey = state.deepseek_key.clone();
-    let mkey = state.mistral_key.clone();
-    let ckey = state.cerebras_key.clone();
-    let qkey = state.qwen_key.clone();
-    let burl = state.bonsai_url.clone();
-    let bmodel = state.bonsai_model.clone();
-    let ourl = state.ollama_url.clone();
-    let omodels = state.ollama_models.clone();
     let rl = state.rate_limiter.clone();
     let cc = Some(state.call_counts.clone());
     tokio::spawn(async move {
         if let Err(e) = suggestion::run_single(
             &q, mode, &sp, &tr,
             &gkey, akey.as_deref(), grkey.as_deref(), grkey2.as_deref(),
-            orkey.as_deref(), dkey.as_deref(), mkey.as_deref(), ckey.as_deref(), qkey.as_deref(),
-            burl.as_deref(), &bmodel, &ourl, &omodels, &rl, etx, &cc,
+            orkey.as_deref(), ormodel.as_deref(),
+            dkey.as_deref(), mkey.as_deref(), ckey.as_deref(), qkey.as_deref(),
+            burl.as_deref(), &bmodel, &ourl, &omodels, &rl, etx, &cc, &order,
         ).await {
             tracing::error!("suggest-mode error: {}", e);
         }
     });
     Ok(StatusCode::OK)
+}
+
+// ── GET /api/settings ────────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct SettingsResponse {
+    /// Which named keys are currently configured (env or runtime).
+    /// Names: groq, groq2, mistral, anthropic, openrouter, qwen, cerebras, deepseek, deepgram
+    pub configured_keys: std::collections::HashMap<String, bool>,
+    /// Current effective URLs for local/LAN providers.
+    pub urls: std::collections::HashMap<String, String>,
+    /// Current effective model slugs for configurable providers.
+    pub models: std::collections::HashMap<String, String>,
+}
+
+pub async fn handle_settings_get(
+    State(state): State<AppState>,
+) -> Json<SettingsResponse> {
+    let rk = state.runtime_keys.read().await;
+    let ru = state.runtime_urls.read().await;
+    let rm = state.runtime_models.read().await;
+
+    let has = |env_val: &Option<String>, name: &str| -> bool {
+        env_val.is_some() || rk.contains_key(name)
+    };
+    let url = |env_val: &Option<String>, default: &str, name: &str| -> String {
+        ru.get(name).cloned()
+            .or_else(|| env_val.clone())
+            .unwrap_or_else(|| default.to_string())
+    };
+    let model = |env_val: &str, name: &str| -> String {
+        rm.get(name).cloned().unwrap_or_else(|| env_val.to_string())
+    };
+
+    let mut configured_keys = std::collections::HashMap::new();
+    configured_keys.insert("groq".into(),        has(&state.groq_key,        "groq"));
+    configured_keys.insert("groq2".into(),       has(&state.groq_key_2,      "groq2"));
+    configured_keys.insert("mistral".into(),     has(&state.mistral_key,     "mistral"));
+    configured_keys.insert("anthropic".into(),   has(&state.anthropic_key,   "anthropic"));
+    configured_keys.insert("openrouter".into(),  has(&state.openrouter_key,  "openrouter"));
+    configured_keys.insert("qwen".into(),        has(&state.qwen_key,        "qwen"));
+    configured_keys.insert("cerebras".into(),    has(&state.cerebras_key,    "cerebras"));
+    configured_keys.insert("deepseek".into(),    has(&state.deepseek_key,    "deepseek"));
+    configured_keys.insert("deepgram".into(),    has(&state.deepgram_key,    "deepgram"));
+    // Gemini key is always required — always true
+    configured_keys.insert("gemini".into(), true);
+
+    let mut urls = std::collections::HashMap::new();
+    urls.insert("ollama".into(),     url(&None, &state.ollama_url, "ollama"));
+    urls.insert("lan_ollama".into(), url(&state.bonsai_url, "", "lan_ollama"));
+    urls.insert("whisper".into(),    url(&state.whisper_url, "", "whisper"));
+
+    let mut models = std::collections::HashMap::new();
+    models.insert("ollama".into(),     model(&state.ollama_model, "ollama"));
+    models.insert("openrouter".into(), model("", "openrouter"));
+
+    Json(SettingsResponse { configured_keys, urls, models })
+}
+
+// ── POST /api/settings ───────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+pub struct SettingsRequest {
+    pub suggestion_order: Option<Vec<common::providers::SuggestionProvider>>,
+    pub transcription_order: Option<Vec<common::providers::TranscriptionProvider>>,
+    pub sentiment_order: Option<Vec<common::providers::SentimentProvider>>,
+    /// New or updated API keys — empty string value removes a key.
+    pub api_keys: Option<std::collections::HashMap<String, String>>,
+    /// New or updated URLs — empty string value resets to env default.
+    pub urls: Option<std::collections::HashMap<String, String>>,
+    /// New or updated model slugs — empty string value resets to env default.
+    pub models: Option<std::collections::HashMap<String, String>>,
+}
+
+pub async fn handle_settings(
+    State(state): State<AppState>,
+    Json(req): Json<SettingsRequest>,
+) -> StatusCode {
+    if let Some(order) = req.suggestion_order {
+        *state.suggestion_order.write().await = order;
+    }
+    if let Some(order) = req.transcription_order {
+        *state.transcription_order.write().await = order;
+    }
+    if let Some(order) = req.sentiment_order {
+        *state.sentiment_order.write().await = order;
+    }
+    if let Some(keys) = req.api_keys {
+        let mut rk = state.runtime_keys.write().await;
+        for (name, val) in keys {
+            if val.is_empty() { rk.remove(&name); } else { rk.insert(name, val); }
+        }
+    }
+    if let Some(urls) = req.urls {
+        let mut ru = state.runtime_urls.write().await;
+        for (name, val) in urls {
+            if val.is_empty() { ru.remove(&name); } else { ru.insert(name, val); }
+        }
+    }
+    if let Some(models) = req.models {
+        let mut rm = state.runtime_models.write().await;
+        for (name, val) in models {
+            if val.is_empty() { rm.remove(&name); } else { rm.insert(name, val); }
+        }
+    }
+    StatusCode::OK
+}
+
+// ── GET /api/probe ────────────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+pub struct ProbeQuery {
+    pub target: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct ProbeResponse {
+    pub ok: bool,
+    pub url: String,
+    pub latency_ms: u64,
+    pub error: Option<String>,
+}
+
+pub async fn handle_probe(
+    State(state): State<AppState>,
+    Query(q): Query<ProbeQuery>,
+) -> Json<ProbeResponse> {
+    let ru = state.runtime_urls.read().await;
+    let (url, check_path) = match q.target.as_str() {
+        "ollama" => {
+            let base = ru.get("ollama").cloned().unwrap_or_else(|| state.ollama_url.clone());
+            let check = format!("{}/api/tags", base.trim_end_matches('/'));
+            (base, check)
+        }
+        "lan_ollama" => {
+            let base = ru.get("lan_ollama").cloned()
+                .or_else(|| state.bonsai_url.clone())
+                .unwrap_or_default();
+            if base.is_empty() {
+                return Json(ProbeResponse { ok: false, url: String::new(), latency_ms: 0, error: Some("No URL configured".into()) });
+            }
+            let check = format!("{}/health", base.trim_end_matches('/'));
+            (base, check)
+        }
+        "whisper" => {
+            let base = ru.get("whisper").cloned()
+                .or_else(|| state.whisper_url.clone())
+                .unwrap_or_default();
+            if base.is_empty() {
+                return Json(ProbeResponse { ok: false, url: String::new(), latency_ms: 0, error: Some("No URL configured".into()) });
+            }
+            let check = format!("{}/v1/models", base.trim_end_matches('/'));
+            (base, check)
+        }
+        "claude_cli" => {
+            drop(ru);
+            let start = std::time::Instant::now();
+            match tokio::process::Command::new("claude")
+                .arg("--version")
+                .output()
+                .await
+            {
+                Ok(out) if out.status.success() => {
+                    let version = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    let latency_ms = start.elapsed().as_millis() as u64;
+                    return Json(ProbeResponse { ok: true, url: version, latency_ms, error: None });
+                }
+                Ok(out) => {
+                    let latency_ms = start.elapsed().as_millis() as u64;
+                    let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                    return Json(ProbeResponse { ok: false, url: String::new(), latency_ms, error: Some(if err.is_empty() { "Command failed".into() } else { err }) });
+                }
+                Err(e) => {
+                    let latency_ms = start.elapsed().as_millis() as u64;
+                    return Json(ProbeResponse { ok: false, url: String::new(), latency_ms, error: Some(format!("Not installed: {}", e)) });
+                }
+            }
+        }
+        _ => {
+            return Json(ProbeResponse { ok: false, url: String::new(), latency_ms: 0, error: Some("Unknown target".into()) });
+        }
+    };
+    drop(ru);
+
+    let start = std::time::Instant::now();
+    match reqwest::Client::new()
+        .get(&check_path)
+        .timeout(std::time::Duration::from_secs(3))
+        .send()
+        .await
+    {
+        Ok(resp) => {
+            let latency_ms = start.elapsed().as_millis() as u64;
+            if resp.status().is_success() || resp.status().as_u16() == 404 {
+                // 404 means the server is up but the path doesn't exist — still reachable
+                Json(ProbeResponse { ok: true, url, latency_ms, error: None })
+            } else {
+                Json(ProbeResponse { ok: false, url, latency_ms, error: Some(format!("HTTP {}", resp.status())) })
+            }
+        }
+        Err(e) => {
+            let latency_ms = start.elapsed().as_millis() as u64;
+            Json(ProbeResponse { ok: false, url, latency_ms, error: Some(e.to_string()) })
+        }
+    }
 }
 
 #[derive(serde::Serialize)]
@@ -840,7 +1061,7 @@ pub async fn handle_enrich(
         if s.is_empty() { body.jd_text.unwrap_or_default() } else { s }
     };
 
-    const CRAWL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+    const CRAWL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(12);
 
     // Crawl company + portfolio in parallel
     let (company_info, portfolio_text) = tokio::join!(
@@ -895,9 +1116,18 @@ pub async fn handle_enrich(
         usage: Some(state.call_counts.clone()),
     };
 
+    // Company brief source: prefer crawled website, fall back to JD text snippet
+    let from_jd = company_info.trim().is_empty();
+    let brief_source = if from_jd {
+        let jd_snippet: String = jd_text.chars().take(3000).collect();
+        jd_snippet
+    } else {
+        company_info.clone()
+    };
+
     // Run company brief + keyword extraction + location extraction in parallel
     let (brief, jd_keywords, jd_location) = tokio::join!(
-        generate_company_brief(&company_info, &cfg),
+        generate_company_brief(&brief_source, from_jd, &cfg),
         extract_jd_keywords(&jd_text, &cfg),
         extract_jd_location(&jd_text, &cfg),
     );
@@ -913,7 +1143,7 @@ pub async fn handle_enrich(
     }
 
     Json(EnrichResponse {
-        company_brief: if brief.name.is_empty() { None } else { Some(brief) },
+        company_brief: if brief.what_they_do.is_empty() && brief.name.is_empty() { None } else { Some(brief) },
         jd_keywords,
         jd_location,
     })
@@ -1020,4 +1250,201 @@ pub async fn handle_interviewer_summary_single(
         Some(s) => Json(s).into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
     }
+}
+
+// ── GET /api/ollama/models ────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+pub struct OllamaModelsQuery {
+    pub target: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct OllamaModelsResponse {
+    pub models: Vec<String>,
+    pub error: Option<String>,
+}
+
+pub async fn handle_ollama_models(
+    State(state): State<AppState>,
+    Query(q): Query<OllamaModelsQuery>,
+) -> Json<OllamaModelsResponse> {
+    let ru = state.runtime_urls.read().await;
+    let base_url = match q.target.as_str() {
+        "ollama" => ru.get("ollama").cloned().unwrap_or_else(|| state.ollama_url.clone()),
+        "lan_ollama" => {
+            let url = ru.get("lan_ollama").cloned().or_else(|| state.bonsai_url.clone()).unwrap_or_default();
+            if url.is_empty() {
+                return Json(OllamaModelsResponse { models: vec![], error: Some("No URL configured".into()) });
+            }
+            url
+        }
+        _ => return Json(OllamaModelsResponse { models: vec![], error: Some("Unknown target".into()) }),
+    };
+    drop(ru);
+
+    let tags_url = format!("{}/api/tags", base_url.trim_end_matches('/'));
+    match reqwest::Client::new()
+        .get(&tags_url)
+        .timeout(std::time::Duration::from_secs(4))
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => {
+            #[derive(serde::Deserialize)]
+            struct TagsResp { models: Vec<OllamaModelEntry> }
+            #[derive(serde::Deserialize)]
+            struct OllamaModelEntry { name: String }
+            match resp.json::<TagsResp>().await {
+                Ok(tags) => Json(OllamaModelsResponse {
+                    models: tags.models.into_iter().map(|m| m.name).collect(),
+                    error: None,
+                }),
+                Err(e) => Json(OllamaModelsResponse { models: vec![], error: Some(e.to_string()) }),
+            }
+        }
+        Ok(resp) => Json(OllamaModelsResponse { models: vec![], error: Some(format!("HTTP {}", resp.status())) }),
+        Err(e) => Json(OllamaModelsResponse { models: vec![], error: Some(e.to_string()) }),
+    }
+}
+
+// ── POST /api/ollama/pull  (SSE stream of NDJSON progress) ────────────────────
+
+#[derive(serde::Deserialize)]
+pub struct OllamaPullRequest {
+    pub model: String,
+}
+
+pub async fn handle_ollama_pull(
+    State(state): State<AppState>,
+    Json(req): Json<OllamaPullRequest>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let ru = state.runtime_urls.read().await;
+    let base_url = ru.get("ollama").cloned().unwrap_or_else(|| state.ollama_url.clone());
+    drop(ru);
+
+    let (tx, rx) = tokio::sync::mpsc::channel::<String>(64);
+    let model = req.model.clone();
+
+    tokio::spawn(async move {
+        let client = reqwest::Client::new();
+        let url = format!("{}/api/pull", base_url.trim_end_matches('/'));
+        let body = serde_json::json!({ "name": model, "stream": true });
+
+        match client
+            .post(&url)
+            .json(&body)
+            .timeout(std::time::Duration::from_secs(600))
+            .send()
+            .await
+        {
+            Ok(resp) if resp.status().is_success() => {
+                use futures::StreamExt as _;
+                let mut stream = resp.bytes_stream();
+                let mut buf = String::new();
+                while let Some(chunk) = stream.next().await {
+                    match chunk {
+                        Ok(bytes) => {
+                            buf.push_str(&String::from_utf8_lossy(&bytes));
+                            while let Some(pos) = buf.find('\n') {
+                                let line = buf[..pos].trim().to_string();
+                                buf = buf[pos + 1..].to_string();
+                                if !line.is_empty() {
+                                    if tx.send(line).await.is_err() { return; }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            let _ = tx.send(serde_json::json!({ "error": e.to_string() }).to_string()).await;
+                            return;
+                        }
+                    }
+                }
+                // Flush remaining buffer
+                if !buf.trim().is_empty() {
+                    let _ = tx.send(buf.trim().to_string()).await;
+                }
+            }
+            Ok(resp) => {
+                let _ = tx.send(serde_json::json!({ "error": format!("HTTP {}", resp.status()) }).to_string()).await;
+            }
+            Err(e) => {
+                let _ = tx.send(serde_json::json!({ "error": e.to_string() }).to_string()).await;
+            }
+        }
+    });
+
+    use futures::StreamExt as _;
+    let stream = ReceiverStream::new(rx)
+        .map(|data| Ok::<_, Infallible>(Event::default().data(data)));
+
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+// ── POST /api/claude-cli/install ─────────────────────────────────────────────
+
+pub async fn handle_claude_cli_install() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let (tx, rx) = tokio::sync::mpsc::channel::<String>(128);
+
+    tokio::spawn(async move {
+        use tokio::io::AsyncBufReadExt as _;
+
+        let _ = tx.send(r#"{"status":"Launching npm…"}"#.to_string()).await;
+
+        let mut child = match tokio::process::Command::new("npm")
+            .args(["install", "-g", "@anthropic-ai/claude-code"])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                let _ = tx.send(serde_json::json!({ "error": format!("Failed to launch npm: {}", e) }).to_string()).await;
+                return;
+            }
+        };
+
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+
+        let tx2 = tx.clone();
+        let stdout_task = tokio::spawn(async move {
+            if let Some(out) = stdout {
+                let mut lines = tokio::io::BufReader::new(out).lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    if tx2.send(serde_json::json!({ "status": line }).to_string()).await.is_err() { break; }
+                }
+            }
+        });
+
+        let tx3 = tx.clone();
+        let stderr_task = tokio::spawn(async move {
+            if let Some(err) = stderr {
+                let mut lines = tokio::io::BufReader::new(err).lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    if tx3.send(serde_json::json!({ "log": line }).to_string()).await.is_err() { break; }
+                }
+            }
+        });
+
+        // Drain output first, then reap the child
+        let _ = tokio::join!(stdout_task, stderr_task);
+
+        match child.wait().await {
+            Ok(s) if s.success() => {
+                let _ = tx.send(r#"{"success":true,"status":"Claude CLI installed!"}"#.to_string()).await;
+            }
+            Ok(s) => {
+                let _ = tx.send(serde_json::json!({ "error": format!("npm exited with {}", s) }).to_string()).await;
+            }
+            Err(e) => {
+                let _ = tx.send(serde_json::json!({ "error": e.to_string() }).to_string()).await;
+            }
+        }
+    });
+
+    use futures::StreamExt as _;
+    let stream = ReceiverStream::new(rx)
+        .map(|data| Ok::<_, Infallible>(Event::default().data(data)));
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }

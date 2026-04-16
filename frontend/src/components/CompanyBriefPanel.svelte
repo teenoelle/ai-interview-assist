@@ -32,6 +32,10 @@
       <div class="brief-body">
         {#if loading}
           <span class="brief-loading">Loading…</span>
+        {:else if !brief && loadTriggered}
+          <span class="brief-empty">No company info found.
+            {#if onLoad}<button class="brief-retry" onclick={() => { loadTriggered = false; toggle(); }}>Retry</button>{/if}
+          </span>
         {:else if brief}
           <div class="brief-row">
             <span class="brief-label">What they do</span>
@@ -74,6 +78,9 @@
   .brief-val { font-size: var(--fs-sm); color: #94a3b8; line-height: 1.4; }
   .why-join .brief-val { color: #94a3b8; }
   .brief-loading { font-size: var(--fs-xs); color: #475569; font-style: italic; }
+  .brief-empty { font-size: var(--fs-xs); color: #475569; font-style: italic; display: flex; align-items: center; gap: 0.5rem; }
+  .brief-retry { font-size: var(--fs-xs); background: transparent; border: 1px solid #334155; border-radius: 0.25rem; color: #64748b; cursor: pointer; padding: 0.1rem 0.35rem; }
+  .brief-retry:hover { color: #94a3b8; }
   .brief-toggle-inner { display: flex; flex-direction: column; gap: 0.1rem; text-align: left; }
   .brief-label-header { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #334155; }
 </style>

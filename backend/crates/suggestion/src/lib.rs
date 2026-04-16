@@ -18,7 +18,7 @@ use std::sync::OnceLock;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use common::messages::{TranscriptSegment, WsEvent, SuggestionMode};
 use common::rate_limiter::RateLimiter;
-use common::providers::{is_quota_exhausted, is_rate_limit, is_server_error};
+use common::providers::{is_quota_exhausted, is_rate_limit, is_server_error, SuggestionProvider};
 use common::circuit_breaker::CircuitBreaker;
 
 pub type CallCounts = Arc<std::sync::Mutex<std::collections::HashMap<String, u64>>>;
@@ -31,13 +31,7 @@ fn inc(counts: &Option<CallCounts>, name: &str) {
     }
 }
 
-fn provider_is_local(name: &str) -> bool {
-    name.starts_with("Ollama") || name == "Bonsai" || name == "Claude CLI" || name == "Whisper (local)"
-}
-
 // All circuit breakers use a 1-year reset — effectively permanent until server restart.
-// A browser page refresh does not restart the server, so once a provider hits quota
-// it stays skipped for the entire session.
 const CB_PERMANENT: u64 = 86_400 * 365;
 
 static CLAUDE_CLI_CB: OnceLock<CircuitBreaker> = OnceLock::new();
@@ -65,8 +59,7 @@ fn mistral_cb() -> &'static CircuitBreaker {
     MISTRAL_CB.get_or_init(|| CircuitBreaker::new("mistral", 1, CB_PERMANENT))
 }
 
-/// Quick reachability check for a local server (1.5 s timeout).
-/// Returns true if the server responds to a GET on its health/root endpoint.
+/// Quick reachability check for a local/LAN server (1.5 s timeout).
 async fn is_reachable(url: &str) -> bool {
     reqwest::Client::new()
         .get(url)
@@ -76,312 +69,308 @@ async fn is_reachable(url: &str) -> bool {
         .is_ok()
 }
 
-macro_rules! try_provider {
-    ($name:expr, $call:expr, $counts:expr, $etx:expr) => {
-        match $call.await {
-            Ok(()) => {
-                inc($counts, $name);
-                let _ = $etx.send(WsEvent::ProviderUsed {
-                    service: "suggestions".to_string(),
-                    provider: $name.to_string(),
-                    local: provider_is_local($name),
-                });
-                return Ok(());
-            }
-            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                tracing::warn!("{} unavailable (quota/rate-limit), trying next provider: {}", $name, e);
-                let _ = $etx.send(WsEvent::Error { message: format!("{}: {}", $name, e) });
-            }
-            Err(e) if is_server_error(&e) => {
-                tracing::warn!("{} server error, trying next provider: {}", $name, e);
-                let _ = $etx.send(WsEvent::Error { message: format!("{}: {}", $name, e) });
-            }
-            Err(e) => return Err(e),
-        }
+// ── Context passed to every provider attempt ────────────────────────────────
+
+struct SuggestCtx<'a> {
+    gemini_key: &'a str,
+    anthropic_key: Option<&'a str>,
+    groq_key: Option<&'a str>,
+    groq_key_2: Option<&'a str>,
+    openrouter_key: Option<&'a str>,
+    openrouter_model: Option<&'a str>,
+    deepseek_key: Option<&'a str>,
+    mistral_key: Option<&'a str>,
+    cerebras_key: Option<&'a str>,
+    qwen_key: Option<&'a str>,
+    bonsai_url: Option<&'a str>,
+    bonsai_model: &'a str,
+    ollama_url: &'a str,
+    ollama_models: &'a [String],
+    system_prompt: &'a str,
+    user_prompt: &'a str,
+    mode: SuggestionMode,
+    rate_limiter: &'a RateLimiter,
+    event_tx: broadcast::Sender<WsEvent>,
+    call_counts: &'a Option<CallCounts>,
+}
+
+enum ProviderOutcome {
+    /// This provider succeeded — stop the chain.
+    Success,
+    /// Provider not configured, circuit open, or unreachable — skip silently.
+    Skip,
+    /// Quota/rate-limit/server error — log and try next provider.
+    Fallthrough,
+    /// Hard error — propagate up, don't try further providers.
+    Fatal(anyhow::Error),
+}
+
+async fn try_one(provider: SuggestionProvider, ctx: &SuggestCtx<'_>) -> ProviderOutcome {
+    let etx = ctx.event_tx.clone();
+    let name = provider.name();
+
+    // Helper closures so match arms stay concise
+    let fallthrough = |e: anyhow::Error| {
+        tracing::warn!("{} unavailable (quota/rate-limit), trying next: {}", name, e);
+        let _ = etx.send(WsEvent::Error { message: format!("{}: {}", name, e) });
+        ProviderOutcome::Fallthrough
     };
+    let server_err = |e: anyhow::Error| {
+        tracing::warn!("{} server error, trying next: {}", name, e);
+        let _ = etx.send(WsEvent::Error { message: format!("{}: {}", name, e) });
+        ProviderOutcome::Fallthrough
+    };
+    let success = || {
+        inc(ctx.call_counts, name);
+        let _ = ctx.event_tx.send(WsEvent::ProviderUsed {
+            service: "suggestions".to_string(),
+            provider: name.to_string(),
+            local: provider.is_local(),
+        });
+        ProviderOutcome::Success
+    };
+
+    match provider {
+        // ── Groq key 1 ──────────────────────────────────────────────────────
+        SuggestionProvider::Groq => {
+            if groq_cb().is_open() { return ProviderOutcome::Skip; }
+            let Some(key) = ctx.groq_key else { return ProviderOutcome::Skip; };
+            match groq_llm::stream_suggestions(key, ctx.system_prompt, ctx.user_prompt, ctx.mode, etx.clone()).await {
+                Ok(()) => { groq_cb().record_success(); success() }
+                Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
+                    if is_quota_exhausted(&e) { groq_cb().record_failure(); }
+                    fallthrough(e)
+                }
+                Err(e) if is_server_error(&e) => server_err(e),
+                Err(e) => ProviderOutcome::Fatal(e),
+            }
+        }
+
+        // ── Groq key 2 ──────────────────────────────────────────────────────
+        SuggestionProvider::Groq2 => {
+            if groq2_cb().is_open() { return ProviderOutcome::Skip; }
+            let Some(key) = ctx.groq_key_2 else { return ProviderOutcome::Skip; };
+            match groq_llm::stream_suggestions(key, ctx.system_prompt, ctx.user_prompt, ctx.mode, etx.clone()).await {
+                Ok(()) => { groq2_cb().record_success(); success() }
+                Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
+                    if is_quota_exhausted(&e) { groq2_cb().record_failure(); }
+                    fallthrough(e)
+                }
+                Err(e) if is_server_error(&e) => server_err(e),
+                Err(e) => ProviderOutcome::Fatal(e),
+            }
+        }
+
+        // ── Mistral ─────────────────────────────────────────────────────────
+        SuggestionProvider::Mistral => {
+            if mistral_cb().is_open() {
+                tracing::warn!("Mistral: circuit breaker open (tripped by a prior quota/auth error) — skipping");
+                return ProviderOutcome::Skip;
+            }
+            let Some(key) = ctx.mistral_key else {
+                tracing::warn!("Mistral: no API key — skipping (set MISTRAL_API_KEY in .env or add via Providers panel)");
+                return ProviderOutcome::Skip;
+            };
+            match mistral_llm::stream_suggestions(key, ctx.system_prompt, ctx.user_prompt, ctx.mode, etx.clone()).await {
+                Ok(()) => { mistral_cb().record_success(); success() }
+                Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
+                    if is_quota_exhausted(&e) { mistral_cb().record_failure(); }
+                    fallthrough(e)
+                }
+                Err(e) if is_server_error(&e) => server_err(e),
+                Err(e) => ProviderOutcome::Fatal(e),
+            }
+        }
+
+        // ── Claude CLI ──────────────────────────────────────────────────────
+        // Unique: classifies errors as transient (rate/overload) vs permanent (not installed).
+        SuggestionProvider::ClaudeCli => {
+            if claude_cli_cb().is_open() { return ProviderOutcome::Skip; }
+            match claude_cli_llm::stream_suggestions(ctx.system_prompt, ctx.user_prompt, ctx.mode, etx.clone()).await {
+                Ok(()) => { claude_cli_cb().record_success(); success() }
+                Err(e) => {
+                    let msg = e.to_string();
+                    let transient = msg.contains("rate") || msg.contains("overload")
+                        || msg.contains("529") || msg.contains("Too Many") || msg.contains("capacity");
+                    if !transient { claude_cli_cb().record_failure(); }
+                    tracing::warn!("Claude CLI unavailable, falling back: {}", e);
+                    let _ = etx.send(WsEvent::Error { message: format!("Claude CLI: {}", e) });
+                    ProviderOutcome::Fallthrough
+                }
+            }
+        }
+
+        // ── Claude API ──────────────────────────────────────────────────────
+        SuggestionProvider::ClaudeApi => {
+            if claude_api_cb().is_open() { return ProviderOutcome::Skip; }
+            let Some(key) = ctx.anthropic_key else { return ProviderOutcome::Skip; };
+            match claude_llm::stream_suggestions(key, ctx.system_prompt, ctx.user_prompt, ctx.mode, etx.clone()).await {
+                Ok(()) => { claude_api_cb().record_success(); success() }
+                Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
+                    if is_quota_exhausted(&e) { claude_api_cb().record_failure(); }
+                    fallthrough(e)
+                }
+                Err(e) if is_server_error(&e) => server_err(e),
+                Err(e) => ProviderOutcome::Fatal(e),
+            }
+        }
+
+        // ── Ollama (local) ──────────────────────────────────────────────────
+        // Loops over all configured models; single reachability check up front.
+        SuggestionProvider::Ollama => {
+            let ollama_up = is_reachable(
+                &format!("{}/api/tags", ctx.ollama_url.trim_end_matches('/'))
+            ).await;
+            if !ollama_up {
+                tracing::debug!("Ollama unreachable — skipping all local models");
+                return ProviderOutcome::Skip;
+            }
+            for model in ctx.ollama_models {
+                match ollama_llm::stream_suggestions(
+                    ctx.ollama_url, model, ctx.system_prompt, ctx.user_prompt, ctx.mode, etx.clone()
+                ).await {
+                    Ok(()) => {
+                        let label = format!("Ollama ({})", model);
+                        inc(ctx.call_counts, &label);
+                        let _ = ctx.event_tx.send(WsEvent::ProviderUsed {
+                            service: "suggestions".to_string(),
+                            provider: label,
+                            local: true,
+                        });
+                        return ProviderOutcome::Success;
+                    }
+                    Err(e) => {
+                        tracing::warn!("Ollama {} failed, trying next model: {}", model, e);
+                        let _ = etx.send(WsEvent::Error { message: format!("Ollama ({}): {}", model, e) });
+                    }
+                }
+            }
+            ProviderOutcome::Fallthrough
+        }
+
+        // ── OpenRouter ──────────────────────────────────────────────────────
+        SuggestionProvider::OpenRouter => {
+            let Some(key) = ctx.openrouter_key else { return ProviderOutcome::Skip; };
+            match openrouter_llm::stream_suggestions(key, ctx.openrouter_model, ctx.system_prompt, ctx.user_prompt, ctx.mode, etx.clone()).await {
+                Ok(()) => success(),
+                Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => fallthrough(e),
+                Err(e) if is_server_error(&e) => server_err(e),
+                Err(e) => ProviderOutcome::Fatal(e),
+            }
+        }
+
+        // ── Qwen ────────────────────────────────────────────────────────────
+        SuggestionProvider::Qwen => {
+            let Some(key) = ctx.qwen_key else { return ProviderOutcome::Skip; };
+            match qwen_llm::stream_suggestions(key, ctx.system_prompt, ctx.user_prompt, ctx.mode, etx.clone()).await {
+                Ok(()) => success(),
+                Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => fallthrough(e),
+                Err(e) if is_server_error(&e) => server_err(e),
+                Err(e) => ProviderOutcome::Fatal(e),
+            }
+        }
+
+        // ── Cerebras ────────────────────────────────────────────────────────
+        SuggestionProvider::Cerebras => {
+            let Some(key) = ctx.cerebras_key else { return ProviderOutcome::Skip; };
+            match cerebras_llm::stream_suggestions(key, ctx.system_prompt, ctx.user_prompt, ctx.mode, etx.clone()).await {
+                Ok(()) => success(),
+                Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => fallthrough(e),
+                Err(e) if is_server_error(&e) => server_err(e),
+                Err(e) => ProviderOutcome::Fatal(e),
+            }
+        }
+
+        // ── DeepSeek ────────────────────────────────────────────────────────
+        SuggestionProvider::DeepSeek => {
+            let Some(key) = ctx.deepseek_key else { return ProviderOutcome::Skip; };
+            match deepseek_llm::stream_suggestions(key, ctx.system_prompt, ctx.user_prompt, ctx.mode, etx.clone()).await {
+                Ok(()) => success(),
+                Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => fallthrough(e),
+                Err(e) if is_server_error(&e) => server_err(e),
+                Err(e) => ProviderOutcome::Fatal(e),
+            }
+        }
+
+        // ── LAN Ollama (Bonsai) ──────────────────────────────────────────────
+        // Tries /health endpoint first, falls back to root ping.
+        SuggestionProvider::LanOllama => {
+            let Some(url) = ctx.bonsai_url else { return ProviderOutcome::Skip; };
+            let base = url.trim_end_matches('/');
+            let reachable = {
+                let r = reqwest::Client::new()
+                    .get(format!("{}/health", base))
+                    .timeout(std::time::Duration::from_millis(1500))
+                    .send().await;
+                match r {
+                    Ok(resp) if resp.status().is_success() => true,
+                    _ => is_reachable(base).await,
+                }
+            };
+            if !reachable {
+                tracing::debug!("LAN Ollama unreachable — skipping");
+                return ProviderOutcome::Skip;
+            }
+            match bonsai_llm::stream_suggestions(url, ctx.bonsai_model, ctx.system_prompt, ctx.user_prompt, ctx.mode, ctx.event_tx.clone()).await {
+                Ok(()) => {
+                    let label = format!("LAN Ollama ({})", ctx.bonsai_model);
+                    inc(ctx.call_counts, &label);
+                    let _ = ctx.event_tx.send(WsEvent::ProviderUsed {
+                        service: "suggestions".to_string(),
+                        provider: label,
+                        local: false,
+                    });
+                    ProviderOutcome::Success
+                }
+                Err(e) => {
+                    tracing::warn!("LAN Ollama ({}) unavailable, falling back: {}", ctx.bonsai_model, e);
+                    let _ = etx.send(WsEvent::Error { message: format!("LAN Ollama ({}): {}", ctx.bonsai_model, e) });
+                    ProviderOutcome::Fallthrough
+                }
+            }
+        }
+
+        // ── Gemma (Gemini API) ───────────────────────────────────────────────
+        // Acquires a rate-limiter slot — shared with Gemini below.
+        SuggestionProvider::Gemma => {
+            ctx.rate_limiter.acquire().await;
+            match gemma_llm::stream_suggestions(ctx.gemini_key, ctx.system_prompt, ctx.user_prompt, ctx.mode, etx.clone()).await {
+                Ok(()) => success(),
+                Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
+                    tracing::warn!("Gemma quota/rate-limit, trying Gemini: {}", e);
+                    ProviderOutcome::Fallthrough
+                }
+                Err(e) => ProviderOutcome::Fatal(e),
+            }
+        }
+
+        // ── Gemini ──────────────────────────────────────────────────────────
+        SuggestionProvider::Gemini => {
+            ctx.rate_limiter.acquire().await;
+            match gemini_llm::stream_suggestions(ctx.gemini_key, ctx.system_prompt, ctx.user_prompt, ctx.mode, etx.clone()).await {
+                Ok(()) => success(),
+                Err(e) if is_quota_exhausted(&e) => {
+                    tracing::warn!("Gemini suggestions quota exhausted: {}", e);
+                    ProviderOutcome::Fallthrough
+                }
+                Err(e) => ProviderOutcome::Fatal(e),
+            }
+        }
+    }
 }
 
 async fn suggest_with_fallback(
-    gemini_key: &str,
-    anthropic_key: Option<&str>,
-    groq_key: Option<&str>,
-    groq_key_2: Option<&str>,
-    openrouter_key: Option<&str>,
-    deepseek_key: Option<&str>,
-    mistral_key: Option<&str>,
-    cerebras_key: Option<&str>,
-    qwen_key: Option<&str>,
-    bonsai_url: Option<&str>,
-    bonsai_model: &str,
-    ollama_url: &str,
-    ollama_models: &[String],
-    system_prompt: &str,
-    user_prompt: &str,
-    mode: SuggestionMode,
-    rate_limiter: &RateLimiter,
-    event_tx: broadcast::Sender<WsEvent>,
-    call_counts: &Option<CallCounts>,
+    order: &[SuggestionProvider],
+    ctx: SuggestCtx<'_>,
 ) -> anyhow::Result<()> {
-    // 1. Groq key 1 — fast (~2-5 s), good format compliance
-    if groq_cb().is_open() {
-        tracing::debug!("Groq circuit open — skipping");
-    } else if let Some(key) = groq_key {
-        match groq_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()).await {
-            Ok(()) => {
-                groq_cb().record_success();
-                inc(call_counts, "Groq");
-                let _ = event_tx.send(WsEvent::ProviderUsed { service: "suggestions".to_string(), provider: "Groq".to_string(), local: false });
-                return Ok(());
-            }
-            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                if is_quota_exhausted(&e) { groq_cb().record_failure(); }
-                tracing::warn!("Groq unavailable (quota/rate-limit): {}", e);
-                let _ = event_tx.send(WsEvent::Error { message: format!("Groq: {}", e) });
-            }
-            Err(e) if is_server_error(&e) => {
-                tracing::warn!("Groq server error, trying next: {}", e);
-                let _ = event_tx.send(WsEvent::Error { message: format!("Groq: {}", e) });
-            }
-            Err(e) => return Err(e),
+    for &provider in order {
+        match try_one(provider, &ctx).await {
+            ProviderOutcome::Success => return Ok(()),
+            ProviderOutcome::Skip | ProviderOutcome::Fallthrough => continue,
+            ProviderOutcome::Fatal(e) => return Err(e),
         }
     }
-
-    // 2. Mistral — higher monthly limits, fallback when Groq exhausted
-    if mistral_cb().is_open() {
-        tracing::debug!("Mistral circuit open — skipping");
-    } else if let Some(key) = mistral_key {
-        match mistral_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()).await {
-            Ok(()) => {
-                mistral_cb().record_success();
-                inc(call_counts, "Mistral");
-                let _ = event_tx.send(WsEvent::ProviderUsed { service: "suggestions".to_string(), provider: "Mistral".to_string(), local: false });
-                return Ok(());
-            }
-            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                if is_quota_exhausted(&e) { mistral_cb().record_failure(); }
-                tracing::warn!("Mistral unavailable (quota/rate-limit): {}", e);
-                let _ = event_tx.send(WsEvent::Error { message: format!("Mistral: {}", e) });
-            }
-            Err(e) if is_server_error(&e) => {
-                tracing::warn!("Mistral server error, trying next: {}", e);
-                let _ = event_tx.send(WsEvent::Error { message: format!("Mistral: {}", e) });
-            }
-            Err(e) => return Err(e),
-        }
-    }
-
-    // 3. Groq key 2 — independent quota, same model pool
-    if groq2_cb().is_open() {
-        tracing::debug!("Groq #2 circuit open — skipping");
-    } else if let Some(key) = groq_key_2 {
-        match groq_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()).await {
-            Ok(()) => {
-                groq2_cb().record_success();
-                inc(call_counts, "Groq #2");
-                let _ = event_tx.send(WsEvent::ProviderUsed { service: "suggestions".to_string(), provider: "Groq #2".to_string(), local: false });
-                return Ok(());
-            }
-            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                if is_quota_exhausted(&e) { groq2_cb().record_failure(); }
-                tracing::warn!("Groq #2 unavailable (quota/rate-limit): {}", e);
-                let _ = event_tx.send(WsEvent::Error { message: format!("Groq #2: {}", e) });
-            }
-            Err(e) if is_server_error(&e) => {
-                tracing::warn!("Groq #2 server error, trying next: {}", e);
-                let _ = event_tx.send(WsEvent::Error { message: format!("Groq #2: {}", e) });
-            }
-            Err(e) => return Err(e),
-        }
-    }
-
-    // 4. Claude CLI — circuit breaker: 1 failure → permanent skip
-    if claude_cli_cb().is_open() {
-        tracing::debug!("Claude CLI circuit open — skipping");
-    } else {
-        match claude_cli_llm::stream_suggestions(system_prompt, user_prompt, mode, event_tx.clone()).await {
-            Ok(()) => {
-                claude_cli_cb().record_success();
-                inc(call_counts, "Claude CLI");
-                let _ = event_tx.send(WsEvent::ProviderUsed {
-                    service: "suggestions".to_string(),
-                    provider: "Claude CLI".to_string(),
-                    local: true,
-                });
-                return Ok(());
-            }
-            Err(e) => {
-                let msg = e.to_string();
-                let transient = msg.contains("rate") || msg.contains("overload")
-                    || msg.contains("529") || msg.contains("Too Many") || msg.contains("capacity");
-                if !transient {
-                    claude_cli_cb().record_failure();
-                }
-                tracing::warn!("Claude CLI unavailable, falling back: {}", e);
-                let _ = event_tx.send(WsEvent::Error { message: format!("Claude CLI: {}", e) });
-            }
-        }
-    }
-
-    // 5. Claude API — circuit breaker: 1 quota failure → permanent skip
-    if claude_api_cb().is_open() {
-        tracing::debug!("Claude API circuit open — skipping");
-    } else if let Some(key) = anthropic_key {
-        match claude_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()).await {
-            Ok(()) => {
-                claude_api_cb().record_success();
-                inc(call_counts, "Claude API");
-                let _ = event_tx.send(WsEvent::ProviderUsed {
-                    service: "suggestions".to_string(),
-                    provider: "Claude API".to_string(),
-                    local: false,
-                });
-                return Ok(());
-            }
-            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                if is_quota_exhausted(&e) { claude_api_cb().record_failure(); }
-                tracing::warn!("Claude API unavailable (quota/rate-limit), trying next: {}", e);
-                let _ = event_tx.send(WsEvent::Error { message: format!("Claude API: {}", e) });
-            }
-            Err(e) if is_server_error(&e) => {
-                tracing::warn!("Claude API server error, trying next: {}", e);
-                let _ = event_tx.send(WsEvent::Error { message: format!("Claude API: {}", e) });
-            }
-            Err(e) => return Err(e),
-        }
-    }
-
-    // 6. Ollama — local models; single reachability check before looping
-    let ollama_up = is_reachable(&format!("{}/api/tags", ollama_url.trim_end_matches('/'))).await;
-    if !ollama_up {
-        tracing::debug!("Ollama unreachable — skipping all local models");
-    } else {
-        for model in ollama_models {
-            match ollama_llm::stream_suggestions(ollama_url, model, system_prompt, user_prompt, mode, event_tx.clone()).await {
-                Ok(()) => {
-                    let name = format!("Ollama ({})", model);
-                    inc(call_counts, &name);
-                    let _ = event_tx.send(WsEvent::ProviderUsed {
-                        service: "suggestions".to_string(),
-                        provider: name,
-                        local: true,
-                    });
-                    return Ok(());
-                }
-                Err(e) => {
-                    tracing::warn!("Ollama {} unavailable, trying next: {}", model, e);
-                    let _ = event_tx.send(WsEvent::Error { message: format!("Ollama ({}): {}", model, e) });
-                }
-            }
-        }
-    }
-
-    // 7. OpenRouter
-    if let Some(key) = openrouter_key {
-        try_provider!("OpenRouter",
-            openrouter_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()),
-            call_counts, event_tx);
-    }
-
-    // 8. Qwen
-    if let Some(key) = qwen_key {
-        try_provider!("Qwen",
-            qwen_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()),
-            call_counts, event_tx);
-    }
-
-    // 9. Cerebras
-    if let Some(key) = cerebras_key {
-        try_provider!("Cerebras",
-            cerebras_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()),
-            call_counts, event_tx);
-    }
-
-    // 10. DeepSeek
-    if let Some(key) = deepseek_key {
-        try_provider!("DeepSeek",
-            deepseek_llm::stream_suggestions(key, system_prompt, user_prompt, mode, event_tx.clone()),
-            call_counts, event_tx);
-    }
-
-    // 11. LAN Ollama — remote machine; health-check first (/health or /)
-    if let Some(url) = bonsai_url {
-        let base = url.trim_end_matches('/');
-        let reachable = {
-            let r = reqwest::Client::new().get(format!("{}/health", base))
-                .timeout(std::time::Duration::from_millis(1500)).send().await;
-            match r {
-                Ok(resp) if resp.status().is_success() => true,
-                _ => is_reachable(base).await,
-            }
-        };
-        if !reachable {
-            tracing::debug!("LAN Ollama unreachable — skipping");
-        } else {
-            match bonsai_llm::stream_suggestions(url, bonsai_model, system_prompt, user_prompt, mode, event_tx.clone()).await {
-                Ok(()) => {
-                    let name = format!("LAN Ollama ({})", bonsai_model);
-                    inc(call_counts, &name);
-                    let _ = event_tx.send(WsEvent::ProviderUsed {
-                        service: "suggestions".to_string(),
-                        provider: name,
-                        local: false,
-                    });
-                    return Ok(());
-                }
-                Err(e) => {
-                    tracing::warn!("LAN Ollama ({}) unavailable, falling back: {}", bonsai_model, e);
-                    let _ = event_tx.send(WsEvent::Error { message: format!("LAN Ollama ({}): {}", bonsai_model, e) });
-                }
-            }
-        }
-    }
-
-    // 12. Gemma 4 — Gemini API, rate-limited
-    rate_limiter.acquire().await;
-    match gemma_llm::stream_suggestions(gemini_key, system_prompt, user_prompt, mode, event_tx.clone()).await {
-        Ok(()) => {
-            inc(call_counts, "Gemma");
-            let _ = event_tx.send(WsEvent::ProviderUsed {
-                service: "suggestions".to_string(),
-                provider: "Gemma".to_string(),
-                local: false,
-            });
-            return Ok(());
-        }
-        Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => tracing::warn!("Gemma suggestions quota/rate-limit, trying Gemini"),
-        Err(e) => return Err(e),
-    }
-
-    // 14. Gemini — absolute last resort, keep credits for sentiment analysis
-    rate_limiter.acquire().await;
-    match gemini_llm::stream_suggestions(gemini_key, system_prompt, user_prompt, mode, event_tx.clone()).await {
-        Ok(()) => {
-            inc(call_counts, "Gemini");
-            let _ = event_tx.send(WsEvent::ProviderUsed {
-                service: "suggestions".to_string(),
-                provider: "Gemini".to_string(),
-                local: false,
-            });
-            return Ok(());
-        }
-        Err(e) if is_quota_exhausted(&e) => tracing::warn!("Gemini suggestions quota exhausted"),
-        Err(e) => return Err(e),
-    }
-
     anyhow::bail!("All suggestion providers exhausted")
-}
-
-// Helper to run suggest_with_fallback with all provider keys cloned from run_agent scope
-macro_rules! run_suggest {
-    ($mode:expr, $prompt:expr, $gkey:expr, $akey:expr, $grkey:expr, $grkey2:expr,
-     $orkey:expr, $dkey:expr, $mkey:expr, $ckey:expr, $qkey:expr,
-     $burl:expr, $bmodel:expr, $ourl:expr, $omodels:expr, $sp:expr, $rl:expr, $etx:expr, $cc:expr) => {
-        suggest_with_fallback(
-            &$gkey, $akey.as_deref(), $grkey.as_deref(), $grkey2.as_deref(),
-            $orkey.as_deref(), $dkey.as_deref(), $mkey.as_deref(), $ckey.as_deref(), $qkey.as_deref(),
-            $burl.as_deref(), &$bmodel, &$ourl, &$omodels, &$sp, $prompt, $mode, &$rl, $etx.clone(), &$cc,
-        )
-    };
 }
 
 pub async fn run_agent(
@@ -404,23 +393,14 @@ pub async fn run_agent(
     ollama_models: Vec<String>,
     rate_limiter: RateLimiter,
     call_counts: Option<CallCounts>,
+    suggestion_order: Arc<RwLock<Vec<SuggestionProvider>>>,
+    runtime_keys: Arc<RwLock<std::collections::HashMap<String, String>>>,
+    runtime_urls: Arc<RwLock<std::collections::HashMap<String, String>>>,
+    runtime_models: Arc<RwLock<std::collections::HashMap<String, String>>>,
 ) {
     loop {
         match question_rx.recv().await {
             Some(question) => {
-                let gkey = gemini_key.clone();
-                let akey = anthropic_key.clone();
-                let grkey = groq_key.clone();
-                let grkey2 = groq_key_2.clone();
-                let orkey = openrouter_key.clone();
-                let dkey = deepseek_key.clone();
-                let mkey = mistral_key.clone();
-                let ckey = cerebras_key.clone();
-                let qkey = qwen_key.clone();
-                let burl = bonsai_url.clone();
-                let bmodel = bonsai_model.clone();
-                let ourl = ollama_url.clone();
-                let omodels = ollama_models.clone();
                 let etx = event_tx.clone();
 
                 // Classify first — before any async locks — so smalltalk/closing fire instantly
@@ -440,7 +420,7 @@ pub async fn run_agent(
                     continue;
                 }
 
-                // Closing: sections fetched on-demand — just signal detection, no auto-generation
+                // Closing: signal detection only, no auto-generation
                 if matches!(primary_type, prompt::QuestionType::Closing) {
                     let _ = etx.send(WsEvent::QuestionDetected {
                         question: question.clone(),
@@ -453,9 +433,38 @@ pub async fn run_agent(
                 let tr = transcript.read().await.clone();
                 let rl = rate_limiter.clone();
                 let cc = call_counts.clone();
+                let order = suggestion_order.read().await.clone();
+
+                // Resolve runtime key overrides
+                let rk = runtime_keys.read().await;
+                let resolve = |name: &str, env: Option<String>| rk.get(name).cloned().or(env);
+                let gkey  = gemini_key.clone();
+                let akey  = resolve("anthropic",  anthropic_key.clone());
+                let grkey = resolve("groq",        groq_key.clone());
+                let grkey2= resolve("groq2",       groq_key_2.clone());
+                let orkey = resolve("openrouter",  openrouter_key.clone());
+                let dkey  = resolve("deepseek",    deepseek_key.clone());
+                let mkey  = resolve("mistral",     mistral_key.clone());
+                let ckey  = resolve("cerebras",    cerebras_key.clone());
+                let qkey  = resolve("qwen",        qwen_key.clone());
+                drop(rk);
+                // Resolve runtime URL overrides
+                let ru = runtime_urls.read().await;
+                let ourl   = ru.get("ollama").cloned().unwrap_or_else(|| ollama_url.clone());
+                let burl   = ru.get("lan_ollama").cloned().or_else(|| bonsai_url.clone());
+                drop(ru);
+                // Resolve runtime model overrides
+                let rm = runtime_models.read().await;
+                let ormodel = rm.get("openrouter").cloned();
+                let omodels = if let Some(m) = rm.get("ollama").cloned() {
+                    vec![m]
+                } else {
+                    ollama_models.clone()
+                };
+                let bmodel = rm.get("lan_ollama").cloned().unwrap_or_else(|| bonsai_model.clone());
+                drop(rm);
 
                 let secondary_tag = secondary_type.map(|qt| prompt::question_type_to_tag(qt).to_string());
-
                 let _ = etx.send(WsEvent::QuestionDetected {
                     question: question.clone(),
                     secondary_tag: secondary_tag.clone(),
@@ -463,20 +472,39 @@ pub async fn run_agent(
 
                 tokio::spawn(async move {
                     let run = async {
-                        if let Some(sec_type) = secondary_type {
-                            // Compound only — primary/secondary generated on demand when user clicks tab
-                            let compound_prompt = prompt::build_compound_user_prompt(&question, &tr, primary_type, sec_type);
-                            run_suggest!(SuggestionMode::Compound, &compound_prompt,
-                                gkey, akey, grkey, grkey2, orkey, dkey, mkey, ckey, qkey,
-                                burl, bmodel, ourl, omodels, sp, rl, etx, cc).await?;
+                        let user_prompt = if let Some(sec_type) = secondary_type {
+                            prompt::build_compound_user_prompt(&question, &tr, primary_type, sec_type)
                         } else {
-                            // Single type — primary only
-                            let user_prompt = prompt::build_user_prompt(&question, &tr);
-                            run_suggest!(SuggestionMode::Primary, &user_prompt,
-                                gkey, akey, grkey, grkey2, orkey, dkey, mkey, ckey, qkey,
-                                burl, bmodel, ourl, omodels, sp, rl, etx, cc).await?;
-                        }
-                        anyhow::Ok(())
+                            prompt::build_user_prompt(&question, &tr)
+                        };
+                        let mode = if secondary_type.is_some() {
+                            SuggestionMode::Compound
+                        } else {
+                            SuggestionMode::Primary
+                        };
+                        let ctx = SuggestCtx {
+                            gemini_key: &gkey,
+                            anthropic_key: akey.as_deref(),
+                            groq_key: grkey.as_deref(),
+                            groq_key_2: grkey2.as_deref(),
+                            openrouter_key: orkey.as_deref(),
+                            openrouter_model: ormodel.as_deref(),
+                            deepseek_key: dkey.as_deref(),
+                            mistral_key: mkey.as_deref(),
+                            cerebras_key: ckey.as_deref(),
+                            qwen_key: qkey.as_deref(),
+                            bonsai_url: burl.as_deref(),
+                            bonsai_model: &bmodel,
+                            ollama_url: &ourl,
+                            ollama_models: &omodels,
+                            system_prompt: &sp,
+                            user_prompt: &user_prompt,
+                            mode,
+                            rate_limiter: &rl,
+                            event_tx: etx.clone(),
+                            call_counts: &cc,
+                        };
+                        suggest_with_fallback(&order, ctx).await
                     };
                     if let Err(e) = run.await {
                         tracing::error!("Suggestion error: {}", e);
@@ -492,6 +520,7 @@ pub async fn run_agent(
 }
 
 /// Generate a single suggestion mode on demand (called from HTTP handler for opt-in primary/secondary).
+/// Keys have already been resolved by the caller (runtime overrides applied).
 pub async fn run_single(
     question: &str,
     mode: SuggestionMode,
@@ -502,6 +531,7 @@ pub async fn run_single(
     groq_key: Option<&str>,
     groq_key_2: Option<&str>,
     openrouter_key: Option<&str>,
+    openrouter_model: Option<&str>,
     deepseek_key: Option<&str>,
     mistral_key: Option<&str>,
     cerebras_key: Option<&str>,
@@ -513,6 +543,7 @@ pub async fn run_single(
     rate_limiter: &RateLimiter,
     event_tx: broadcast::Sender<WsEvent>,
     call_counts: &Option<CallCounts>,
+    suggestion_order: &[SuggestionProvider],
 ) -> anyhow::Result<()> {
     let (primary_type, secondary_type) = prompt::classify_question(question);
 
@@ -523,7 +554,7 @@ pub async fn run_single(
         return Ok(());
     }
 
-    let ctx = prompt::make_ctx_prefix(transcript);
+    let ctx_prompt = prompt::make_ctx_prefix(transcript);
     let user_prompt = match mode {
         SuggestionMode::Secondary => {
             if let Some(sec_type) = secondary_type {
@@ -539,16 +570,33 @@ pub async fn run_single(
                 prompt::build_user_prompt(question, transcript)
             }
         }
-        SuggestionMode::ClosingHr  => prompt::build_closing_hr_prompt(&ctx, question),
-        SuggestionMode::ClosingHm  => prompt::build_closing_hm_prompt(&ctx, question),
-        SuggestionMode::ClosingCeo => prompt::build_closing_ceo_prompt(&ctx, question),
-        SuggestionMode::Primary => prompt::build_user_prompt_for_type(question, transcript, primary_type),
+        SuggestionMode::ClosingHr  => prompt::build_closing_hr_prompt(&ctx_prompt, question),
+        SuggestionMode::ClosingHm  => prompt::build_closing_hm_prompt(&ctx_prompt, question),
+        SuggestionMode::ClosingCeo => prompt::build_closing_ceo_prompt(&ctx_prompt, question),
+        SuggestionMode::Primary    => prompt::build_user_prompt_for_type(question, transcript, primary_type),
     };
-    suggest_with_fallback(
-        gemini_key, anthropic_key, groq_key, groq_key_2,
-        openrouter_key, deepseek_key, mistral_key, cerebras_key, qwen_key,
-        bonsai_url, bonsai_model, ollama_url, ollama_models,
-        system_prompt, &user_prompt, mode,
-        rate_limiter, event_tx, call_counts,
-    ).await
+
+    let ctx = SuggestCtx {
+        gemini_key,
+        anthropic_key,
+        groq_key,
+        groq_key_2,
+        openrouter_key,
+        openrouter_model,
+        deepseek_key,
+        mistral_key,
+        cerebras_key,
+        qwen_key,
+        bonsai_url,
+        bonsai_model,
+        ollama_url,
+        ollama_models,
+        system_prompt,
+        user_prompt: &user_prompt,
+        mode,
+        rate_limiter,
+        event_tx,
+        call_counts,
+    };
+    suggest_with_fallback(suggestion_order, ctx).await
 }

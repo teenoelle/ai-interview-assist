@@ -18,6 +18,13 @@
       'How was your morning?',
       'Ready to get started?',
     ]},
+    { label: 'Company', tag: 'company_research', questions: [
+      'What do you know about our company?',
+      'Have you heard about what we do?',
+      'How familiar are you with our product?',
+      'What can you tell me about us?',
+      'What do you know about what we do?',
+    ]},
     { label: 'Intro', tag: 'personal', questions: [
       'Tell me about yourself.',
       'Walk me through your background.',
@@ -97,7 +104,7 @@
 
   const TAG_COLOR: Record<string, string> = {
     smalltalk: '#67e8f9',
-    personal: '#f472b6', motivation: '#fb923c', future: '#38bdf8',
+    personal: '#f472b6', motivation: '#fb923c', company_research: '#fcd34d', future: '#38bdf8',
     strengths: '#4ade80', character: '#e879f9', weaknesses: '#f87171', behavioral: '#a78bfa',
     situational: '#a3e635', technical: '#60a5fa', culture: '#34d399',
     values: '#f0abfc', salary: '#fbbf24', candidate_questions: '#94a3b8', wrap_up: '#f59e0b',

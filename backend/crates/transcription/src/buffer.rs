@@ -7,9 +7,9 @@
 
 const SAMPLE_RATE: usize = 16000;
 const BYTES_PER_SAMPLE: usize = 2;
-pub(crate) const MIN_SEGMENT_BYTES: usize = SAMPLE_RATE * 4 * BYTES_PER_SAMPLE;
-pub(crate) const MAX_SEGMENT_BYTES: usize = SAMPLE_RATE * 15 * BYTES_PER_SAMPLE;
-pub(crate) const SILENCE_THRESHOLD_BYTES: usize = SAMPLE_RATE * BYTES_PER_SAMPLE * 5 / 10;
+pub(crate) const MIN_SEGMENT_BYTES: usize = SAMPLE_RATE * 2 * BYTES_PER_SAMPLE;  // 2s min (was 4s)
+pub(crate) const MAX_SEGMENT_BYTES: usize = SAMPLE_RATE * 10 * BYTES_PER_SAMPLE; // 10s max (was 15s)
+pub(crate) const SILENCE_THRESHOLD_BYTES: usize = SAMPLE_RATE * BYTES_PER_SAMPLE * 4 / 10; // 0.4s silence
 
 pub struct RingBuffer {
     data: Vec<u8>,
@@ -46,7 +46,7 @@ impl RingBuffer {
 
         if energy > self.peak_energy { self.peak_energy = energy; }
 
-        if energy > 5.0 {
+        if energy > 2.0 {
             self.has_speech = true;
             self.silent_bytes = 0;
         } else {

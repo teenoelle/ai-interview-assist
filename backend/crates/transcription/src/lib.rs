@@ -9,7 +9,7 @@ use std::sync::{Arc, OnceLock};
 use tokio::sync::{broadcast, mpsc, RwLock};
 use common::messages::{TranscriptSegment, WsEvent};
 use common::rate_limiter::{RateLimiter, with_retry};
-use common::providers::{is_quota_exhausted, is_rate_limit};
+use common::providers::{is_quota_exhausted, TranscriptionProvider};
 use common::circuit_breaker::CircuitBreaker;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -36,7 +36,134 @@ fn inc(counts: &Option<CallCounts>, name: &str) {
 
 // ── Transcription provider chain ──────────────────────────────────────────────
 
+struct TxCtx<'a> {
+    gemini_key: &'a str,
+    groq_key: Option<&'a str>,
+    groq_key_2: Option<&'a str>,
+    deepgram_key: Option<&'a str>,
+    whisper_url: Option<&'a str>,
+    whisper_model: &'a str,
+    pcm: &'a [u8],
+    rate_limiter: &'a RateLimiter,
+    call_counts: &'a Option<CallCounts>,
+    event_tx: &'a broadcast::Sender<WsEvent>,
+}
+
+enum TxOutcome {
+    Success(String),
+    Skip,
+    Fallthrough,
+    Fatal(anyhow::Error),
+}
+
+async fn try_one_tx(provider: TranscriptionProvider, ctx: &TxCtx<'_>) -> TxOutcome {
+    let name = provider.name();
+
+    match provider {
+        TranscriptionProvider::WhisperLocal => {
+            let Some(url) = ctx.whisper_url else { return TxOutcome::Skip; };
+            if whisper_cb().is_open() {
+                tracing::debug!("Local Whisper circuit open ({} failures) — skipping", whisper_cb().failure_count());
+                return TxOutcome::Skip;
+            }
+            let endpoint = format!("{}/v1/audio/transcriptions", url.trim_end_matches('/'));
+            match groq::transcribe_openai_asr(&endpoint, "", ctx.whisper_model, ctx.pcm, 30).await {
+                Ok(text) => {
+                    whisper_cb().record_success();
+                    inc(ctx.call_counts, name);
+                    tracing::info!("transcription ✓ {} — {} chars", name, text.len());
+                    let _ = ctx.event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: name.to_string(), local: true });
+                    TxOutcome::Success(text)
+                }
+                Err(e) => {
+                    whisper_cb().record_failure();
+                    tracing::warn!("Local Whisper failed (failure #{}): {}", whisper_cb().failure_count(), e);
+                    TxOutcome::Fallthrough
+                }
+            }
+        }
+
+        TranscriptionProvider::Deepgram => {
+            let Some(key) = ctx.deepgram_key else { return TxOutcome::Skip; };
+            match deepgram::transcribe(key, ctx.pcm).await {
+                Ok(text) => {
+                    inc(ctx.call_counts, name);
+                    tracing::info!("transcription ✓ {} — {} chars", name, text.len());
+                    let _ = ctx.event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: name.to_string(), local: false });
+                    TxOutcome::Success(text)
+                }
+                Err(e) => {
+                    tracing::warn!("{} error, trying next: {}", name, e);
+                    TxOutcome::Fallthrough
+                }
+            }
+        }
+
+        TranscriptionProvider::GroqWhisper2 => {
+            let Some(key) = ctx.groq_key_2 else { return TxOutcome::Skip; };
+            match groq::transcribe(key, ctx.pcm).await {
+                Ok(text) => {
+                    inc(ctx.call_counts, name);
+                    tracing::info!("transcription ✓ {} — {} chars", name, text.len());
+                    let _ = ctx.event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: name.to_string(), local: false });
+                    TxOutcome::Success(text)
+                }
+                Err(e) => {
+                    tracing::warn!("{} error, trying next: {}", name, e);
+                    TxOutcome::Fallthrough
+                }
+            }
+        }
+
+        TranscriptionProvider::GroqWhisper => {
+            let Some(key) = ctx.groq_key else { return TxOutcome::Skip; };
+            if groq_key1_cb().is_open() {
+                tracing::debug!("Groq Whisper circuit open ({} failures) — skipping", groq_key1_cb().failure_count());
+                return TxOutcome::Skip;
+            }
+            match groq::transcribe(key, ctx.pcm).await {
+                Ok(text) => {
+                    groq_key1_cb().record_success();
+                    inc(ctx.call_counts, name);
+                    tracing::info!("transcription ✓ {} — {} chars", name, text.len());
+                    let _ = ctx.event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: name.to_string(), local: false });
+                    TxOutcome::Success(text)
+                }
+                Err(e) => {
+                    groq_key1_cb().record_failure();
+                    tracing::warn!("{} error (failure #{}), trying next: {}", name, groq_key1_cb().failure_count(), e);
+                    TxOutcome::Fallthrough
+                }
+            }
+        }
+
+        TranscriptionProvider::Gemini => {
+            let k = ctx.gemini_key.to_string();
+            let p = ctx.pcm.to_vec();
+            let result = with_retry(ctx.rate_limiter, || {
+                let k = k.clone();
+                let p = p.clone();
+                async move { gemini::transcribe(&k, &p).await }
+            }).await;
+            match result {
+                Ok(text) => {
+                    inc(ctx.call_counts, "Gemini Transcription");
+                    tracing::info!("transcription ✓ Gemini — {} chars", text.len());
+                    let _ = ctx.event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Gemini".to_string(), local: false });
+                    TxOutcome::Success(text)
+                }
+                Err(e) if is_quota_exhausted(&e) => {
+                    tracing::warn!("Gemini transcription quota exhausted");
+                    TxOutcome::Fallthrough
+                }
+                Err(e) => TxOutcome::Fatal(e),
+            }
+        }
+    }
+}
+
 async fn transcribe_with_fallback(
+    order: &[TranscriptionProvider],
     gemini_key: &str,
     groq_key: Option<&str>,
     groq_key_2: Option<&str>,
@@ -48,110 +175,14 @@ async fn transcribe_with_fallback(
     call_counts: &Option<CallCounts>,
     event_tx: &broadcast::Sender<WsEvent>,
 ) -> Result<String, anyhow::Error> {
-    // 1. Local Whisper — completely free, no quota; silently skip if not running or circuit open
-    if let Some(url) = whisper_url {
-        if whisper_cb().is_open() {
-            tracing::debug!("Local Whisper circuit open ({} failures) — skipping", whisper_cb().failure_count());
-        } else {
-            let endpoint = format!("{}/v1/audio/transcriptions", url.trim_end_matches('/'));
-            match groq::transcribe_openai_asr(&endpoint, "", whisper_model, pcm, 30).await {
-                Ok(text) => {
-                    whisper_cb().record_success();
-                    inc(call_counts, "Whisper (local)");
-                    tracing::info!("transcription ✓ Whisper (local) — {} chars", text.len());
-                    let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Whisper (local)".to_string(), local: true });
-                    return Ok(text);
-                }
-                Err(e) => {
-                    whisper_cb().record_failure();
-                    tracing::warn!("Local Whisper failed (failure #{}): {}", whisper_cb().failure_count(), e);
-                }
-            }
+    let ctx = TxCtx { gemini_key, groq_key, groq_key_2, deepgram_key, whisper_url, whisper_model, pcm, rate_limiter, call_counts, event_tx };
+    for &provider in order {
+        match try_one_tx(provider, &ctx).await {
+            TxOutcome::Success(text) => return Ok(text),
+            TxOutcome::Skip | TxOutcome::Fallthrough => continue,
+            TxOutcome::Fatal(e) => return Err(e),
         }
     }
-
-    // 2. Deepgram Nova-2 — 200 hours/month free, no RPM limit; most reliable API option
-    if let Some(key) = deepgram_key {
-        match deepgram::transcribe(key, pcm).await {
-            Ok(text) => {
-                inc(call_counts, "Deepgram");
-                tracing::info!("transcription ✓ Deepgram — {} chars", text.len());
-                let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Deepgram".to_string(), local: false });
-                return Ok(text);
-            }
-            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                tracing::warn!("Deepgram quota/rate-limit, trying Groq");
-            }
-            Err(e) => {
-                tracing::warn!("Deepgram error, trying Groq: {}", e);
-            }
-        }
-    }
-
-    // 3. Groq Whisper key 2 — fallback when Deepgram unavailable
-    if let Some(key) = groq_key_2 {
-        match groq::transcribe(key, pcm).await {
-            Ok(text) => {
-                inc(call_counts, "Groq Whisper #2");
-                tracing::info!("transcription ✓ Groq Whisper #2 — {} chars", text.len());
-                let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Groq Whisper #2".to_string(), local: false });
-                return Ok(text);
-            }
-            Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                tracing::warn!("Groq key 2 rate-limit/quota, trying key 1");
-            }
-            Err(e) => {
-                tracing::warn!("Groq key 2 error, trying key 1: {}", e);
-            }
-        }
-    }
-
-    // 3. Groq Whisper key 1 — circuit breaker: 5 consecutive rate-limits → skip 15min
-    if let Some(key) = groq_key {
-        if groq_key1_cb().is_open() {
-            tracing::debug!("Groq key 1 circuit open ({} failures) — skipping", groq_key1_cb().failure_count());
-        } else {
-            match groq::transcribe(key, pcm).await {
-                Ok(text) => {
-                    groq_key1_cb().record_success();
-                    inc(call_counts, "Groq Whisper");
-                    tracing::info!("transcription ✓ Groq Whisper — {} chars", text.len());
-                    let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Groq Whisper".to_string(), local: false });
-                    return Ok(text);
-                }
-                Err(e) if is_quota_exhausted(&e) || is_rate_limit(&e) => {
-                    groq_key1_cb().record_failure();
-                    tracing::warn!("Groq key 1 rate-limit/quota (failure #{}), falling back to Gemini", groq_key1_cb().failure_count());
-                }
-                Err(e) => {
-                    groq_key1_cb().record_failure();
-                    tracing::warn!("Groq key 1 error (failure #{}), falling back to Gemini: {}", groq_key1_cb().failure_count(), e);
-                }
-            }
-        }
-    }
-
-    // 5. Gemini — final fallback; conserves vision quota for sentiment
-    let result = with_retry(rate_limiter, || {
-        let k = gemini_key.to_string();
-        let p = pcm.to_vec();
-        async move { gemini::transcribe(&k, &p).await }
-    })
-    .await;
-
-    match result {
-        Ok(text) => {
-            inc(call_counts, "Gemini Transcription");
-            tracing::info!("transcription ✓ Gemini — {} chars", text.len());
-            let _ = event_tx.send(WsEvent::ProviderUsed { service: "transcription".to_string(), provider: "Gemini".to_string(), local: false });
-            return Ok(text);
-        }
-        Err(e) if is_quota_exhausted(&e) => {
-            tracing::warn!("Gemini transcription quota exhausted");
-        }
-        Err(e) => return Err(e),
-    }
-
     anyhow::bail!("All transcription providers exhausted")
 }
 
@@ -371,6 +402,9 @@ pub async fn run_mic_agent(
     whisper_model: String,
     rate_limiter: RateLimiter,
     call_counts: Option<CallCounts>,
+    transcription_order: Arc<RwLock<Vec<TranscriptionProvider>>>,
+    runtime_keys: Arc<RwLock<std::collections::HashMap<String, String>>>,
+    runtime_urls: Arc<RwLock<std::collections::HashMap<String, String>>>,
 ) {
     let mut ring_buf = buffer::RingBuffer::new();
     let mut mic_chunks_received: u64 = 0;
@@ -395,18 +429,24 @@ pub async fn run_mic_agent(
                     tracing::info!("mic: sending {:.1}s segment to transcription", pcm.len() as f32 / (16000.0 * 2.0));
 
                     let gkey = gemini_key.clone();
-                    let grkey = groq_key.clone();
-                    let grkey2 = groq_key_2.clone();
-                    let dgkey = deepgram_key.clone();
-                    let wurl = whisper_url.clone();
                     let wmodel = whisper_model.clone();
                     let etx = event_tx.clone();
                     let tr = transcript.clone();
                     let rl = rate_limiter.clone();
                     let cc = call_counts.clone();
+                    let order = transcription_order.read().await.clone();
+                    let rk = runtime_keys.read().await;
+                    let resolve = |name: &str, env: Option<String>| rk.get(name).cloned().or(env);
+                    let grkey  = resolve("groq",     groq_key.clone());
+                    let grkey2 = resolve("groq2",    groq_key_2.clone());
+                    let dgkey  = resolve("deepgram", deepgram_key.clone());
+                    drop(rk);
+                    let ru = runtime_urls.read().await;
+                    let wurl = ru.get("whisper").cloned().or_else(|| whisper_url.clone());
+                    drop(ru);
 
                     tokio::spawn(async move {
-                        match transcribe_with_fallback(&gkey, grkey.as_deref(), grkey2.as_deref(), dgkey.as_deref(), wurl.as_deref(), &wmodel, &pcm, &rl, &cc, &etx).await {
+                        match transcribe_with_fallback(&order, &gkey, grkey.as_deref(), grkey2.as_deref(), dgkey.as_deref(), wurl.as_deref(), &wmodel, &pcm, &rl, &cc, &etx).await {
                             Ok(text) if !text.trim().is_empty() => {
                                 let ts = SystemTime::now()
                                     .duration_since(UNIX_EPOCH)
@@ -463,6 +503,9 @@ pub async fn run_agent(
     diarize_url: Option<String>,
     rate_limiter: RateLimiter,
     call_counts: Option<CallCounts>,
+    transcription_order: Arc<RwLock<Vec<TranscriptionProvider>>>,
+    runtime_keys: Arc<RwLock<std::collections::HashMap<String, String>>>,
+    runtime_urls: Arc<RwLock<std::collections::HashMap<String, String>>>,
 ) {
     let mut ring_buf = buffer::RingBuffer::new();
     let speaker_tracker: diarize::SharedTracker =
@@ -493,10 +536,6 @@ pub async fn run_agent(
                     tracing::info!("system: sending {:.1}s segment to transcription", segment_pcm.len() as f32 / (16000.0 * 2.0));
 
                     let gkey = gemini_key.clone();
-                    let grkey = groq_key.clone();
-                    let grkey2 = groq_key_2.clone();
-                    let dgkey = deepgram_key.clone();
-                    let wurl = whisper_url.clone();
                     let wmodel = whisper_model.clone();
                     let durl = diarize_url.clone();
                     let qtx = question_tx.clone();
@@ -507,6 +546,16 @@ pub async fn run_agent(
                     let ps = prev_speaker.clone();
                     let pwc = prev_word_count;
                     let cc = call_counts.clone();
+                    let order = transcription_order.read().await.clone();
+                    let rk = runtime_keys.read().await;
+                    let resolve = |name: &str, env: Option<String>| rk.get(name).cloned().or(env);
+                    let grkey  = resolve("groq",     groq_key.clone());
+                    let grkey2 = resolve("groq2",    groq_key_2.clone());
+                    let dgkey  = resolve("deepgram", deepgram_key.clone());
+                    drop(rk);
+                    let ru = runtime_urls.read().await;
+                    let wurl = ru.get("whisper").cloned().or_else(|| whisper_url.clone());
+                    drop(ru);
 
                     tokio::spawn(async move {
                         // Build WAV bytes once — used for diarization
@@ -514,7 +563,7 @@ pub async fn run_agent(
 
                         // Run transcription and diarization concurrently
                         let (transcription_result, diarization_result) = tokio::join!(
-                            transcribe_with_fallback(&gkey, grkey.as_deref(), grkey2.as_deref(), dgkey.as_deref(), wurl.as_deref(), &wmodel, &segment_pcm, &rl, &cc, &etx),
+                            transcribe_with_fallback(&order, &gkey, grkey.as_deref(), grkey2.as_deref(), dgkey.as_deref(), wurl.as_deref(), &wmodel, &segment_pcm, &rl, &cc, &etx),
                             async {
                                 match (durl.as_deref(), wav_for_diarize) {
                                     (Some(url), Some(wav)) => {

@@ -29,6 +29,7 @@
     "@fontsource/inter-tight": "^5.2.7",
     "@fontsource/outfit": "^5.2.8",
     "@fontsource/plus-jakarta-sans": "^5.2.8",
-    "@mediapipe/tasks-vision": "^0.10.32"
+    "@mediapipe/tasks-vision": "^0.10.32",
+    "svelte-dnd-action": "^0.9.69"
   }
 }

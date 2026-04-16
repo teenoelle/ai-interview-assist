@@ -308,6 +308,31 @@ const SITUATIONAL_TRIGGERS: &[&str] = &[
     "given a situation",
 ];
 
+const COMPANY_RESEARCH_TRIGGERS: &[&str] = &[
+    "what do you know about us",
+    "what do you know about our company",
+    "what do you know about what we do",
+    "have you heard of us",
+    "have you heard about us",
+    "have you heard of our company",
+    "have you heard about our company",
+    "tell me about our company",
+    "tell me about what we do",
+    "what can you tell me about us",
+    "what can you tell me about our company",
+    "how familiar are you with us",
+    "how familiar are you with our company",
+    "how familiar are you with what we do",
+    "how familiar are you with our product",
+    "have you heard about what we do",
+    "what do you think of our company",
+    "what do you know about the company",
+    "do you know what we do",
+    "what have you heard about us",
+    "what do you know about our product",
+    "what do you know about our work",
+];
+
 const SMALLTALK_TRIGGERS: &[&str] = &[
     "how are you",
     "how's it going",
@@ -338,6 +363,7 @@ pub enum QuestionType {
     Smalltalk,
     Introduction,
     Motivation,
+    CompanyResearch,
     Fit,
     Future,
     Closing,
@@ -360,21 +386,22 @@ pub fn classify_question(question: &str) -> (QuestionType, Option<QuestionType>)
     let q = question.to_lowercase();
 
     let candidates: &[(usize, QuestionType)] = &[
-        (score_triggers(SMALLTALK_TRIGGERS,    &q), QuestionType::Smalltalk),
-        (score_triggers(INTRODUCTION_TRIGGERS, &q), QuestionType::Introduction),
-        (score_triggers(FIT_TRIGGERS,          &q), QuestionType::Fit),
-        (score_triggers(MOTIVATION_TRIGGERS,   &q), QuestionType::Motivation),
-        (score_triggers(FUTURE_TRIGGERS,       &q), QuestionType::Future),
-        (score_triggers(CLOSING_TRIGGERS,      &q), QuestionType::Closing),
-        (score_triggers(WRAP_UP_TRIGGERS,      &q), QuestionType::WrapUp),
-        (score_triggers(STRENGTHS_TRIGGERS,    &q), QuestionType::Strengths),
-        (score_triggers(WEAKNESSES_TRIGGERS,   &q), QuestionType::Weaknesses),
-        (score_triggers(BEHAVIORAL_TRIGGERS,   &q), QuestionType::Behavioral),
-        (score_triggers(SITUATIONAL_TRIGGERS,  &q), QuestionType::Situational),
-        (score_triggers(TECHNICAL_TRIGGERS,    &q), QuestionType::Technical),
-        (score_triggers(CULTURE_TRIGGERS,      &q), QuestionType::Culture),
-        (score_triggers(CHARACTER_TRIGGERS,    &q), QuestionType::Character),
-        (score_triggers(VALUES_TRIGGERS,       &q), QuestionType::Values),
+        (score_triggers(SMALLTALK_TRIGGERS,         &q), QuestionType::Smalltalk),
+        (score_triggers(INTRODUCTION_TRIGGERS,      &q), QuestionType::Introduction),
+        (score_triggers(COMPANY_RESEARCH_TRIGGERS,  &q), QuestionType::CompanyResearch),
+        (score_triggers(FIT_TRIGGERS,               &q), QuestionType::Fit),
+        (score_triggers(MOTIVATION_TRIGGERS,        &q), QuestionType::Motivation),
+        (score_triggers(FUTURE_TRIGGERS,            &q), QuestionType::Future),
+        (score_triggers(CLOSING_TRIGGERS,           &q), QuestionType::Closing),
+        (score_triggers(WRAP_UP_TRIGGERS,           &q), QuestionType::WrapUp),
+        (score_triggers(STRENGTHS_TRIGGERS,         &q), QuestionType::Strengths),
+        (score_triggers(WEAKNESSES_TRIGGERS,        &q), QuestionType::Weaknesses),
+        (score_triggers(BEHAVIORAL_TRIGGERS,        &q), QuestionType::Behavioral),
+        (score_triggers(SITUATIONAL_TRIGGERS,       &q), QuestionType::Situational),
+        (score_triggers(TECHNICAL_TRIGGERS,         &q), QuestionType::Technical),
+        (score_triggers(CULTURE_TRIGGERS,           &q), QuestionType::Culture),
+        (score_triggers(CHARACTER_TRIGGERS,         &q), QuestionType::Character),
+        (score_triggers(VALUES_TRIGGERS,            &q), QuestionType::Values),
     ];
 
     let max_score = candidates.iter().map(|(s, _)| *s).max().unwrap_or(0);
@@ -395,8 +422,8 @@ pub fn classify_question(question: &str) -> (QuestionType, Option<QuestionType>)
         }
     }
 
-    // Fit questions never compound — they have their own dedicated structure
-    if matches!(primary, QuestionType::Fit) {
+    // CompanyResearch and Fit never compound — they have dedicated structures
+    if matches!(primary, QuestionType::CompanyResearch | QuestionType::Fit) {
         return (primary, None);
     }
 
@@ -410,43 +437,45 @@ pub fn is_behavioral(question: &str) -> bool {
 
 fn question_type_topic(qt: QuestionType) -> &'static str {
     match qt {
-        QuestionType::Smalltalk     => "small talk and pleasantries",
-        QuestionType::Introduction => "your career background and story",
-        QuestionType::Motivation   => "why you want this role and company",
-        QuestionType::Fit          => "why you are applying at this level or channel — a deliberate trade-off",
-        QuestionType::Future       => "your career direction and goals",
-        QuestionType::Closing      => "questions you have for the interviewer",
-        QuestionType::WrapUp       => "a closing statement reiterating your fit and enthusiasm",
-        QuestionType::Strengths    => "your key strengths",
-        QuestionType::Weaknesses   => "an area you are actively developing",
-        QuestionType::Behavioral   => "a specific past behavioral example",
-        QuestionType::Situational  => "how you would handle a hypothetical situation",
-        QuestionType::Technical    => "your technical approach and design thinking",
-        QuestionType::Culture      => "how you collaborate and work with others",
-        QuestionType::Character    => "your personal qualities and how others perceive you",
-        QuestionType::Values       => "what you look for in a company, manager, or role",
-        QuestionType::Competency   => "your professional approach and methodology",
+        QuestionType::Smalltalk        => "small talk and pleasantries",
+        QuestionType::Introduction     => "your career background and story",
+        QuestionType::Motivation       => "why you want this role and company",
+        QuestionType::CompanyResearch  => "what you know about the company — their offering, positioning, market, growth, and backers",
+        QuestionType::Fit              => "why you are applying at this level or channel — a deliberate trade-off",
+        QuestionType::Future           => "your career direction and goals",
+        QuestionType::Closing          => "questions you have for the interviewer",
+        QuestionType::WrapUp           => "a closing statement reiterating your fit and enthusiasm",
+        QuestionType::Strengths        => "your key strengths",
+        QuestionType::Weaknesses       => "an area you are actively developing",
+        QuestionType::Behavioral       => "a specific past behavioral example",
+        QuestionType::Situational      => "how you would handle a hypothetical situation",
+        QuestionType::Technical        => "your technical approach and design thinking",
+        QuestionType::Culture          => "how you collaborate and work with others",
+        QuestionType::Character        => "your personal qualities and how others perceive you",
+        QuestionType::Values           => "what you look for in a company, manager, or role",
+        QuestionType::Competency       => "your professional approach and methodology",
     }
 }
 
 pub fn question_type_to_tag(qt: QuestionType) -> &'static str {
     match qt {
-        QuestionType::Smalltalk    => "smalltalk",
-        QuestionType::Introduction => "personal",
-        QuestionType::Motivation   => "motivation",
-        QuestionType::Fit          => "fit",
-        QuestionType::Future       => "future",
-        QuestionType::Closing      => "candidate_questions",
-        QuestionType::WrapUp       => "wrap_up",
-        QuestionType::Strengths    => "strengths",
-        QuestionType::Weaknesses   => "weaknesses",
-        QuestionType::Behavioral   => "behavioral",
-        QuestionType::Situational  => "situational",
-        QuestionType::Technical    => "technical",
-        QuestionType::Culture      => "culture",
-        QuestionType::Character    => "character",
-        QuestionType::Values       => "values",
-        QuestionType::Competency   => "general",
+        QuestionType::Smalltalk       => "smalltalk",
+        QuestionType::Introduction    => "personal",
+        QuestionType::Motivation      => "motivation",
+        QuestionType::CompanyResearch => "company_research",
+        QuestionType::Fit             => "fit",
+        QuestionType::Future          => "future",
+        QuestionType::Closing         => "candidate_questions",
+        QuestionType::WrapUp          => "wrap_up",
+        QuestionType::Strengths       => "strengths",
+        QuestionType::Weaknesses      => "weaknesses",
+        QuestionType::Behavioral      => "behavioral",
+        QuestionType::Situational     => "situational",
+        QuestionType::Technical       => "technical",
+        QuestionType::Culture         => "culture",
+        QuestionType::Character       => "character",
+        QuestionType::Values          => "values",
+        QuestionType::Competency      => "general",
     }
 }
 
@@ -495,26 +524,67 @@ fn dispatch_prompt(ctx_prefix: &str, question: &str, qtype: QuestionType, transc
     let ctx = format!("{}{}", ROLE_HEADER, ctx_prefix);
     let ctx_prefix = ctx.as_str();
     match qtype {
-        QuestionType::Smalltalk    => build_competency_prompt(ctx_prefix, question), // fallback; normally short-circuited before LLM
-        QuestionType::Introduction => build_introduction_prompt(ctx_prefix, question),
-        QuestionType::Motivation   => build_motivation_prompt(ctx_prefix, question),
-        QuestionType::Fit          => build_fit_prompt(ctx_prefix, question),
-        QuestionType::Future       => build_future_prompt(ctx_prefix, question),
-        QuestionType::Closing      => build_closing_hm_prompt(ctx_prefix, question),
-        QuestionType::WrapUp       => build_wrap_up_prompt(ctx_prefix, question, transcript),
-        QuestionType::Strengths    => build_strengths_prompt(ctx_prefix, question),
-        QuestionType::Weaknesses   => build_weaknesses_prompt(ctx_prefix, question),
-        QuestionType::Behavioral   => build_behavioral_prompt(ctx_prefix, question),
-        QuestionType::Situational  => build_situational_prompt(ctx_prefix, question),
-        QuestionType::Technical    => build_technical_prompt(ctx_prefix, question),
-        QuestionType::Culture      => build_culture_prompt(ctx_prefix, question),
-        QuestionType::Character    => build_character_prompt(ctx_prefix, question),
-        QuestionType::Values       => build_values_prompt(ctx_prefix, question),
-        QuestionType::Competency   => build_competency_prompt(ctx_prefix, question),
+        QuestionType::Smalltalk       => build_competency_prompt(ctx_prefix, question), // fallback; normally short-circuited before LLM
+        QuestionType::Introduction    => build_introduction_prompt(ctx_prefix, question),
+        QuestionType::Motivation      => build_motivation_prompt(ctx_prefix, question),
+        QuestionType::CompanyResearch => build_company_research_prompt(ctx_prefix, question),
+        QuestionType::Fit             => build_fit_prompt(ctx_prefix, question),
+        QuestionType::Future          => build_future_prompt(ctx_prefix, question),
+        QuestionType::Closing         => build_closing_hm_prompt(ctx_prefix, question),
+        QuestionType::WrapUp          => build_wrap_up_prompt(ctx_prefix, question, transcript),
+        QuestionType::Strengths       => build_strengths_prompt(ctx_prefix, question),
+        QuestionType::Weaknesses      => build_weaknesses_prompt(ctx_prefix, question),
+        QuestionType::Behavioral      => build_behavioral_prompt(ctx_prefix, question),
+        QuestionType::Situational     => build_situational_prompt(ctx_prefix, question),
+        QuestionType::Technical       => build_technical_prompt(ctx_prefix, question),
+        QuestionType::Culture         => build_culture_prompt(ctx_prefix, question),
+        QuestionType::Character       => build_character_prompt(ctx_prefix, question),
+        QuestionType::Values          => build_values_prompt(ctx_prefix, question),
+        QuestionType::Competency      => build_competency_prompt(ctx_prefix, question),
     }
 }
 
 // ── Template builders ─────────────────────────────────────────────────────────
+
+fn build_company_research_prompt(ctx_prefix: &str, question: &str) -> String {
+    format!(
+        "{}The interviewer asked a company knowledge question: '{}'\n\n\
+CRITICAL: This is a COMPANY RESEARCH question. Output ONLY the labeled fields below, in order.\n\
+Draw from the company information in the system prompt (brief, JD, website). Where specific data is absent, synthesise plausible details from product/industry context — never leave a field empty and never say 'I don't know'.\n\
+NEVER use 'we', 'our', or 'us' about the company — you are a candidate interviewing, not an employee.\n\n\
+CoreOffering: <2-3 sentences. What the company builds, the core problem it solves, and the delivery model or product category. Plain language, no buzzwords. Do NOT restate the company tagline verbatim.>\n\
+Positioning: <2-3 key differentiators from competitors. Each on the same line separated by ' · '. Format per item: [edge name] — one sentence on why it is defensible or hard to replicate.>\n\
+Segment: <[Segment name] — one sentence on why this group has the sharpest need for the product> | <Economic Buyer title · Champion title · End User title> | <Industry1 · Industry2 · Industry3> | <headcount range or revenue/funding stage> | <Awareness headline // problem-aware copy that names their pain and links to where they can learn more // Learn more CTA text> :: <Consideration headline // copy promising a high-value gated asset they should download or register for (guide, report, or webinar) // Download or Register CTA text> :: <High-intent headline // copy for buyers ready to act now // Start free or Request demo CTA text> | <1-2 sentences: the specific friction or cost this segment experiences without a solution, from the buyer's perspective — not the product's value prop>\n\
+Segment: <[Second segment name] — one sentence on why this group needs it> | <EB title · Champion title · EU title> | <Industry1 · Industry2 · Industry3> | <headcount range or stage> | <Awareness headline // awareness copy // CTA> :: <Consideration headline // consideration copy // CTA> :: <High-intent headline // high-intent copy // CTA> | <1-2 sentences: the specific friction or cost>\n\
+Growth: <2-4 sentences. YoY trajectory (revenue/ARR/users growth direction), net profit trend (profitable, path to profitability, or pre-profit growth phase), one named industry headwind they navigated and how. If hard numbers are absent, use directional language only — never invent specific revenue figures.>\n\
+Backers: <2-3 sentences. Most recent funding round: stage and approximate amount if known, or bootstrapped/public if applicable. 1-2 notable investor names if available. One sentence on what their investment signals: domain expertise, market confidence, strategic network, or growth thesis. If no funding data is available, say so and explain what that signals about their growth model.>\n\
+Enthusiasm: <2-3 sentences. Personal hook tying the candidate's skills, domain experience, or career direction (from background in system prompt) specifically to this company's growth trajectory or mission. Must reference something concrete from CoreOffering or Growth — not generic aspiration. Each sentence starts with 'I'.>\n\
+---\n\
+Ask: <2-4 word noun phrase — probing a genuine aspect of the company's direction, product, or market> | <Specific grammatical question showing genuine research depth. Names a concrete challenge, growth area, or strategic decision from the system prompt. Ends with '?'.> | <1 sentence — what YOU say if the interviewer asks why YOU are asking THEM this question. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\
+Ask: <2-4 word noun phrase — a different angle from the first> | <A different specific question about the company's trajectory, competitive position, or product direction. Names a concrete metric, challenge, or domain. Ends with '?'.> | <1 sentence. Starts with 'I ask because' or 'I'm curious about'. Max 15 words.>\n\n\
+EXAMPLE OUTPUT (adapt every detail to the actual company context from the system prompt — never copy this example):\n\
+CoreOffering: They build a revenue operations platform that connects paid marketing spend to closed pipeline for B2B sales teams. The product sits between CRM and marketing automation, aggregating attribution data so sales and marketing share a single source of truth on what is generating revenue. It is delivered as a SaaS product with API integrations to the major CRM and ad platforms.\n\
+Positioning: [attribution depth] — unlike point solutions, their model tracks multi-touch paths across 12+ channels including dark social, which competitors cannot replicate at the same fidelity · [CRM-native architecture] — built to live inside Salesforce and HubSpot rather than alongside them, which eliminates the adoption friction that kills most standalone tools · [pipeline as north star] — the primary output metric is pipeline value, not MQL volume, which aligns with how CFOs now measure marketing ROI\n\
+Segment: [Mid-market B2B SaaS] — they outgrow spreadsheet-based attribution before they can justify enterprise-tier tooling | VP of Revenue Ops · RevOps Manager · Account Executive | SaaS · FinTech · HR Tech | 200–1,500 employees / Series B–D | Your ops team is drowning in attribution spreadsheets // RevOps teams at your stage spend 12+ hours a week reconciling marketing data that still doesn't agree. See how teams like yours solved it. // See how it works :: The attribution playbook for $10M–$50M ARR companies // Download the guide we built with 40 RevOps leaders on what actually drives pipeline at your stage. // Download the guide :: You already know your pipeline problem — fix it this week // Book a 30-minute session and walk away with a working attribution model for your CRM. // Request a demo | Their ops team is manually stitching together attribution data across disconnected tools, burning hours on reconciliation that still produces results nobody trusts when it hits the board deck.\n\
+Segment: [High-growth DTC brands] — rising customer acquisition cost makes multi-touch attribution the difference between profitable scaling and burn | CMO · Performance Marketing Director · Media Buyer | eCommerce · Consumer Subscription · Retail Tech | $5M–$50M revenue / Seed–Series B | You're scaling ad spend but can't see what's actually converting // Most DTC brands at $5M–$50M are flying blind on attribution. Here's what multi-touch measurement actually looks like at your scale. // Learn more :: Which channels drove your last 500 customers? Find out. // Join our live webinar — we'll show you how fast-growing DTC brands cut wasted spend by attributing every dollar. // Register for the webinar :: Stop guessing. Start scaling channels that actually close. // See your real attribution picture in one session — then decide where to scale next quarter. // Start free | They are scaling ad spend without reliable signal on which channels are actually closing customers, forcing gut-feel budget decisions at exactly the moment investor scrutiny on unit economics is highest.\n\
+Growth: The company has grown ARR consistently over the past two years, benefiting from the shift toward pipeline-accountable marketing as CFO scrutiny on marketing budgets increased post-2022. They are in a pre-profit growth phase, investing heavily in product expansion and go-to-market reach. The industry headwind of reduced software budgets in 2023 appears to have accelerated their sales cycle as companies prioritised ROI measurement over incremental spend.\n\
+Backers: Their most recent round was a Series B of approximately $20M, led by Sequoia with participation from a specialist B2B SaaS fund. Sequoia's involvement signals confidence in the scalability of the revenue operations category and access to their enterprise network for go-to-market expansion. The round also indicates the company is on a trajectory toward a Series C or eventual public market path within the next two to three years.\n\
+Enthusiasm: I have spent several years working in B2B pipeline marketing and experienced the attribution problem from the inside — the gap between paid spend and pipeline outcomes was a constant constraint I built workarounds for. I'm drawn to the company's decision to make pipeline value the primary metric rather than MQL volume, which is where I believe the market is heading as finance teams take a harder look at marketing ROI. That framing maps directly to the direction I'm building toward in my career.\n\n\
+Rules:\n\
+- NEVER say 'I work at the company' or use 'we' / 'our' / 'us' about the company — you are a candidate.\n\
+- CoreOffering: plain language — no buzzwords, no jargon, no tagline recitation.\n\
+- Positioning: exactly 2-3 differentiators separated by ' · ' on a SINGLE line.\n\
+- Segment: exactly 2 Segment: lines with 6 pipe-delimited sections each. Segment name in square brackets.\n\
+- Growth: directional language only if hard numbers are unavailable — NEVER invent revenue or ARR figures.\n\
+- Backers: if funding info is not in the system prompt, say so — NEVER invent investor names.\n\
+- Enthusiasm: must reference something specific from CoreOffering or Growth — not generic.\n\
+- TONE: facts and direction only — no 'passionate', 'excited', 'innovative', 'dynamic'.\n\
+- ALWAYS use 'I' — never 'we' or 'our' about the candidate's employer either.\n\
+- NEVER name specific companies the candidate worked at — refer by industry category only.\n\
+- Ask noun phrase: names the underlying business concept — NEVER copies words from the interviewer's question.",
+        ctx_prefix, question
+    )
+}
 
 fn build_introduction_prompt(ctx_prefix: &str, question: &str) -> String {
     format!(
@@ -1242,6 +1312,42 @@ mod tests {
         assert!(p.contains("Company:"));
         assert!(p.contains("Role:"));
         assert!(p.contains("Self:"));
+    }
+
+    #[test]
+    fn company_research_uses_core_offering_labels() {
+        let p = build_user_prompt("What do you know about our company?", &[]);
+        assert!(p.contains("CoreOffering:"));
+        assert!(p.contains("Positioning:"));
+        assert!(p.contains("Segment:"));
+        assert!(p.contains("Growth:"));
+        assert!(p.contains("Backers:"));
+        assert!(p.contains("Enthusiasm:"));
+    }
+
+    #[test]
+    fn company_research_classified_correctly() {
+        assert!(matches!(
+            classify_question("What do you know about us?").0,
+            QuestionType::CompanyResearch
+        ));
+        assert!(matches!(
+            classify_question("Have you heard about our company?").0,
+            QuestionType::CompanyResearch
+        ));
+        assert!(matches!(
+            classify_question("How familiar are you with what we do?").0,
+            QuestionType::CompanyResearch
+        ));
+    }
+
+    #[test]
+    fn company_research_beats_motivation_for_company_knowledge() {
+        // "what do you know about us" is company_research, not motivation
+        assert!(matches!(
+            classify_question("What do you know about our company and why are you excited about us?").0,
+            QuestionType::CompanyResearch
+        ));
     }
 
     #[test]

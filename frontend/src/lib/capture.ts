@@ -42,6 +42,7 @@ export class MediaCapture {
   private screenChunks: Blob[] = [];
 
   public micActive = false;
+  private micDeviceId: string | null = null;
 
   constructor() {
     this.systemAudioWs = new AudioWebSocket('/ws/audio');
@@ -78,6 +79,7 @@ export class MediaCapture {
       console.log('[capture] requesting mic...');
       this.micStream = await navigator.mediaDevices.getUserMedia({
         audio: {
+          ...(this.micDeviceId ? { deviceId: { exact: this.micDeviceId } } : {}),
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: true,
@@ -292,7 +294,10 @@ export class MediaCapture {
     const CHUNK_NATIVE = Math.round(CHUNK_TARGET * ratio);
     let buf: number[] = [];
     let micDiag = 0;
-    this.micWorklet = this.micAudioCtx.createScriptProcessor(BUFFER, 2, 1);
+    // Use the actual channel count (mic is usually mono=1). Requesting more channels
+    // than the track provides causes Chrome on Windows to deliver all-zero buffers.
+    const numMicCh = settings.channelCount ?? 1;
+    this.micWorklet = this.micAudioCtx.createScriptProcessor(BUFFER, numMicCh, 1);
     this.micWorklet.onaudioprocess = (e) => {
       const ch0 = e.inputBuffer.getChannelData(0);
       const ch1 = e.inputBuffer.numberOfChannels > 1 ? e.inputBuffer.getChannelData(1) : ch0;
@@ -457,6 +462,36 @@ export class MediaCapture {
       this.screenRecordStream = null;
     }
     this.screenRecorder = null;
+  }
+
+  /** Switch to a different microphone without stopping the full capture session. */
+  async switchMic(deviceId: string): Promise<void> {
+    this.micDeviceId = deviceId || null;
+    if (!this.micActive || !this.micAudioCtx) return;
+
+    // Tear down the current mic pipeline
+    this.micWorklet?.disconnect();
+    this.micWorklet = null;
+    this.micStream?.getTracks().forEach(t => t.stop());
+    this.micStream = null;
+    this._micLevel = 0;
+
+    try {
+      this.micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: true,
+        },
+        video: false,
+      });
+      this.startMicCapture();
+      console.log('[capture] switched mic to', deviceId || 'default');
+    } catch (e) {
+      console.warn('[capture] switchMic failed:', e);
+      this.micActive = false;
+    }
   }
 
   get active() { return this.systemStream !== null; }

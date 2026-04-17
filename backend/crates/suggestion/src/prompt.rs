@@ -482,9 +482,20 @@ pub fn question_type_to_tag(qt: QuestionType) -> &'static str {
 // ── Public entry point ────────────────────────────────────────────────────────
 
 pub fn make_ctx_prefix(transcript: &[TranscriptSegment]) -> String {
-    let recent: Vec<&TranscriptSegment> = transcript.iter().rev().take(10).collect();
+    make_ctx_prefix_n(transcript, 10)
+}
+
+pub fn make_ctx_prefix_n(transcript: &[TranscriptSegment], n: usize) -> String {
+    let recent: Vec<&TranscriptSegment> = transcript.iter().rev().take(n).collect();
     let context = recent.iter().rev().map(|s| s.text.as_str()).collect::<Vec<_>>().join(" ... ");
     if context.is_empty() { String::new() } else { format!("Recent conversation: {}\n\n", context) }
+}
+
+pub fn build_user_prompt_slim(question: &str, transcript: &[TranscriptSegment]) -> String {
+    let (qtype, _) = classify_question(question);
+    const ROLE_HEADER: &str = "ROLES: YOU = the job candidate applying for this position. THEM = the employer interviewing you. You are NOT currently working there. Never say 'I work at [employer]' or use 'we'/'our' about the employer.\n\n";
+    let ctx_prefix = format!("{}{}", ROLE_HEADER, make_ctx_prefix_n(transcript, 3));
+    dispatch_prompt_with_ctx(&ctx_prefix, question, qtype, transcript)
 }
 
 pub fn build_user_prompt(question: &str, transcript: &[TranscriptSegment]) -> String {
@@ -519,10 +530,12 @@ pub fn build_compound_user_prompt(question: &str, transcript: &[TranscriptSegmen
 }
 
 fn dispatch_prompt(ctx_prefix: &str, question: &str, qtype: QuestionType, transcript: &[TranscriptSegment]) -> String {
-    // Prepended to every prompt so small models cannot confuse candidate with employer.
     const ROLE_HEADER: &str = "ROLES: YOU = the job candidate applying for this position. THEM = the employer interviewing you. You are NOT currently working there. Never say 'I work at [employer]' or use 'we'/'our' about the employer.\n\n";
     let ctx = format!("{}{}", ROLE_HEADER, ctx_prefix);
-    let ctx_prefix = ctx.as_str();
+    dispatch_prompt_with_ctx(&ctx, question, qtype, transcript)
+}
+
+fn dispatch_prompt_with_ctx(ctx_prefix: &str, question: &str, qtype: QuestionType, transcript: &[TranscriptSegment]) -> String {
     match qtype {
         QuestionType::Smalltalk       => build_competency_prompt(ctx_prefix, question), // fallback; normally short-circuited before LLM
         QuestionType::Introduction    => build_introduction_prompt(ctx_prefix, question),

@@ -44,6 +44,16 @@
 
   const SERVICES: ServiceDef[] = [
     {
+      key: 'transcription', label: 'Transcription', settingsField: 'transcription_order',
+      rows: [
+        { id: 'whisper_local',  label: 'Whisper',         connectionType: 'local', urlKey: 'whisper'  },
+        { id: 'deepgram',       label: 'Deepgram',        connectionType: 'api',   keyName: 'deepgram' },
+        { id: 'groq_whisper_2', label: 'Groq Whisper #2', connectionType: 'api',   keyName: 'groq2'   },
+        { id: 'groq_whisper',   label: 'Groq Whisper',    connectionType: 'api',   keyName: 'groq'    },
+        { id: 'gemini',         label: 'Gemini',          connectionType: 'api',   keyName: 'gemini'  },
+      ],
+    },
+    {
       key: 'suggestion', label: 'Suggestions', settingsField: 'suggestion_order',
       rows: [
         { id: 'groq',        label: 'Groq',        connectionType: 'api',   keyName: 'groq'        },
@@ -59,16 +69,6 @@
         { id: 'lan_ollama',  label: 'LAN Ollama (Bonsai)', connectionType: 'lan', urlKey: 'lan_ollama', modelKey: 'lan_ollama' },
         { id: 'gemma',       label: 'Gemma',       connectionType: 'api',   keyName: 'gemini'      },
         { id: 'gemini',      label: 'Gemini',      connectionType: 'api',   keyName: 'gemini'      },
-      ],
-    },
-    {
-      key: 'transcription', label: 'Transcription', settingsField: 'transcription_order',
-      rows: [
-        { id: 'whisper_local',  label: 'Whisper',         connectionType: 'local', urlKey: 'whisper'  },
-        { id: 'deepgram',       label: 'Deepgram',        connectionType: 'api',   keyName: 'deepgram' },
-        { id: 'groq_whisper_2', label: 'Groq Whisper #2', connectionType: 'api',   keyName: 'groq2'   },
-        { id: 'groq_whisper',   label: 'Groq Whisper',    connectionType: 'api',   keyName: 'groq'    },
-        { id: 'gemini',         label: 'Gemini',          connectionType: 'api',   keyName: 'gemini'  },
       ],
     },
     {
@@ -130,8 +130,8 @@
   }
 
   let lists = $state<Record<ServiceKey, ProviderRow[]>>({
-    suggestion:    buildRows(SERVICES[0]),
-    transcription: buildRows(SERVICES[1]),
+    transcription: buildRows(SERVICES[0]),
+    suggestion:    buildRows(SERVICES[1]),
     sentiment:     buildRows(SERVICES[2]),
   });
 
@@ -191,7 +191,7 @@
   let saving = $state(false);
   let savedOk = $state(false);
   let expanded = $state<Record<ServiceKey, boolean>>({
-    suggestion: true, transcription: false, sentiment: false,
+    transcription: false, suggestion: false, sentiment: false,
   });
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -283,11 +283,23 @@
 
   async function submitModel(row: ProviderRow) {
     if (!row.modelKey) return;
+    const val = row.modelDraft.trim();
     await fetch('/api/settings', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ models: { [row.modelKey]: row.modelDraft.trim() } }),
+      body: JSON.stringify({ models: { [row.modelKey]: val } }),
     }).catch(() => {});
-    serverModels[row.modelKey] = row.modelDraft.trim();
+    serverModels[row.modelKey] = val;
+    // Persist to localStorage so it survives server restarts
+    try {
+      const stored = JSON.parse(localStorage.getItem('provider-models') ?? '{}') as Record<string, string>;
+      stored[row.modelKey] = val;
+      localStorage.setItem('provider-models', JSON.stringify(stored));
+    } catch {}
+    // Add to available models immediately so it shows in the datalist
+    if (val && row.urlKey) {
+      const existing = availableModels[row.urlKey] ?? [];
+      if (!existing.includes(val)) availableModels[row.urlKey] = [...existing, val];
+    }
   }
 
   // ── Probe + model list ────────────────────────────────────────────────────
@@ -328,7 +340,7 @@
 
   // ── Pull a model (local Ollama only) ──────────────────────────────────────
 
-  async function pullModel(modelName: string) {
+  async function pullModel(modelName: string, target: 'ollama' | 'lan_ollama' = 'ollama') {
     if (!modelName.trim()) return;
     pullProgress[modelName] = { status: 'starting…', pct: 0, done: false };
 
@@ -336,7 +348,7 @@
       const res = await fetch('/api/ollama/pull', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: modelName }),
+        body: JSON.stringify({ model: modelName, target }),
       });
       if (!res.body) { pullProgress[modelName] = { status: 'No response body', pct: 0, done: true, error: true }; return; }
 
@@ -367,7 +379,7 @@
               pullProgress[modelName] = { status: evt.status ?? 'pulling', pct, done };
               if (done) {
                 // Refresh model list so it shows up in the combobox
-                await fetchModels('ollama');
+                await fetchModels(target);
               }
             }
           } catch {}
@@ -394,6 +406,11 @@
     };
     const stored = loadLocalKeys();
     if (Object.keys(stored).length > 0) body['api_keys'] = stored;
+    // Re-send persisted model settings so server restarts don't lose them
+    try {
+      const storedModels = JSON.parse(localStorage.getItem('provider-models') ?? '{}') as Record<string, string>;
+      if (Object.keys(storedModels).length > 0) body['models'] = storedModels;
+    } catch {}
     fetch('/api/settings', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -411,6 +428,13 @@
         configuredKeys = data.configured_keys ?? {};
         serverUrls     = data.urls ?? {};
         serverModels   = data.models ?? {};
+        // Merge in localStorage model overrides for keys the server doesn't return
+        try {
+          const lsModels = JSON.parse(localStorage.getItem('provider-models') ?? '{}') as Record<string, string>;
+          for (const [k, v] of Object.entries(lsModels)) {
+            if (!serverModels[k]) serverModels[k] = v;
+          }
+        } catch {}
         // Pre-fill model drafts
         for (const svc of SERVICES) {
           lists[svc.key] = lists[svc.key].map(r => ({
@@ -628,29 +652,28 @@
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div class="po-model-row" onclick={(e) => e.stopPropagation()}>
                   <span class="po-model-label">model</span>
-                  <input class="po-model-input" type="text" list={models.length ? listId : undefined}
+                  <input class="po-model-input" type="text" list={listId}
                     placeholder={row.modelKey === 'openrouter'
                       ? 'auto (free tier) or e.g. google/gemini-2.0-flash-exp:free'
                       : 'e.g. llama3.2:latest'}
                     bind:value={row.modelDraft}
+                    onfocus={() => { if (urlKey) fetchModels(urlKey); }}
                     onkeydown={(e) => { if (e.key === 'Enter') submitModel(row); }}
                     onblur={() => submitModel(row)}
                   />
-                  {#if models.length}
-                    <datalist id={listId}>
-                      {#each models as m}<option value={m}></option>{/each}
-                    </datalist>
-                  {/if}
+                  <datalist id={listId}>
+                    {#each models as m}<option value={m}></option>{/each}
+                  </datalist>
 
-                  <!-- Local Ollama: pull button when model not found -->
-                  {#if row.connectionType === 'local' && notFound && !isPulling && !pullDone}
+                  <!-- Pull button: local or LAN -->
+                  {#if (row.connectionType === 'local' || row.connectionType === 'lan') && notFound && !isPulling && !pullDone}
                     <button class="po-pull-btn"
-                      title="Pull this model from Ollama registry"
-                      onclick={() => pullModel(row.modelDraft)}>Pull</button>
+                      title={row.connectionType === 'lan' ? 'Pull this model on the remote Ollama' : 'Pull this model from Ollama registry'}
+                      onclick={() => pullModel(row.modelDraft, row.urlKey === 'lan_ollama' ? 'lan_ollama' : 'ollama')}>Pull</button>
                   {/if}
-                  <!-- LAN Ollama: "not on remote" hint -->
-                  {#if row.connectionType === 'lan' && notFound}
-                    <span class="po-not-remote" title="Pull this model on the remote machine first">not on remote</span>
+                  <!-- Refresh model list -->
+                  {#if urlKey && (row.connectionType === 'local' || row.connectionType === 'lan')}
+                    <button class="po-refresh-btn" title="Refresh model list" onclick={() => fetchModels(urlKey)}>↺</button>
                   {/if}
                   <!-- Pull success -->
                   {#if pullDone && !pullProgress[row.modelDraft]?.error}
@@ -816,11 +839,14 @@
   }
   .po-pull-btn:hover { background: #1e3a5f; }
 
-  .po-not-remote {
-    font-size: 9px; color: #f59e0b; flex-shrink: 0;
-    font-style: italic; letter-spacing: 0.02em;
+  .po-refresh-btn {
+    font-size: 11px; padding: 0.1rem 0.3rem; flex-shrink: 0;
+    background: none; border: 1px solid #1e293b; border-radius: 0.25rem;
+    color: #475569; cursor: pointer;
   }
-  .po-pull-ok {
+  .po-refresh-btn:hover { color: #94a3b8; border-color: #334155; }
+
+.po-pull-ok {
     font-size: 9px; color: #4ade80; flex-shrink: 0; font-weight: 600;
   }
 

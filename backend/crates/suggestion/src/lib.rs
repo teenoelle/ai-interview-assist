@@ -88,6 +88,7 @@ struct SuggestCtx<'a> {
     ollama_models: &'a [String],
     system_prompt: &'a str,
     user_prompt: &'a str,
+    cli_user_prompt: &'a str,
     mode: SuggestionMode,
     rate_limiter: &'a RateLimiter,
     event_tx: broadcast::Sender<WsEvent>,
@@ -186,7 +187,7 @@ async fn try_one(provider: SuggestionProvider, ctx: &SuggestCtx<'_>) -> Provider
         // Unique: classifies errors as transient (rate/overload) vs permanent (not installed).
         SuggestionProvider::ClaudeCli => {
             if claude_cli_cb().is_open() { return ProviderOutcome::Skip; }
-            match claude_cli_llm::stream_suggestions(ctx.system_prompt, ctx.user_prompt, ctx.mode, etx.clone()).await {
+            match claude_cli_llm::stream_suggestions(ctx.system_prompt, ctx.cli_user_prompt, ctx.mode, etx.clone()).await {
                 Ok(()) => { claude_cli_cb().record_success(); success() }
                 Err(e) => {
                     let msg = e.to_string();
@@ -477,6 +478,7 @@ pub async fn run_agent(
                         } else {
                             prompt::build_user_prompt(&question, &tr)
                         };
+                        let cli_user_prompt = prompt::build_user_prompt_slim(&question, &tr);
                         let mode = if secondary_type.is_some() {
                             SuggestionMode::Compound
                         } else {
@@ -499,6 +501,7 @@ pub async fn run_agent(
                             ollama_models: &omodels,
                             system_prompt: &sp,
                             user_prompt: &user_prompt,
+                            cli_user_prompt: &cli_user_prompt,
                             mode,
                             rate_limiter: &rl,
                             event_tx: etx.clone(),
@@ -593,6 +596,7 @@ pub async fn run_single(
         ollama_models,
         system_prompt,
         user_prompt: &user_prompt,
+        cli_user_prompt: &user_prompt,
         mode,
         rate_limiter,
         event_tx,

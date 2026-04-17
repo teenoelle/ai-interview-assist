@@ -8,12 +8,15 @@ A real-time interview coaching tool that listens to your interview audio, detect
 
 ## What it does
 
-- **Transcribes** your interview audio in real time (local Whisper or cloud fallback)
+- **Transcribes** your interview audio in real time (local Whisper, Deepgram, Groq, or Gemini fallback)
 - **Detects** the question type — behavioral, motivation, strengths, weaknesses, fit, closing, and more
 - **Generates** structured answer suggestions streamed to a teleprompter-style panel
 - **Speaks** the first suggestion section aloud so you can stay focused on the interviewer
 - **Tracks** sentiment from your webcam feed (optional)
 - **Stores** question history so you can navigate back during the interview
+- **Tracks keywords** from the job description with a zoomable chip bar and inline definitions
+- **Monitors energy** with filler word detection and speaking pace feedback
+- **Shows rate limit** status across all configured providers
 
 Answer frameworks vary by question type: STAR for behavioral, Motivation structure for "why this role", Fit structure (Acknowledge → Reframe → Gap → Choice → Bring) for level/channel mismatch questions, and so on.
 
@@ -25,8 +28,8 @@ Answer frameworks vary by question type: STAR for behavioral, Motivation structu
 |---|---|
 | Backend | Rust · axum 0.8 · tokio |
 | Frontend | Svelte 5 · Vite 6 · TypeScript |
-| Transcription | Local Whisper → Groq Whisper → Gemini |
-| Suggestions | Claude Haiku → Groq → Cerebras → OpenRouter → Qwen → Mistral → Ollama → Gemini |
+| Transcription | Local Whisper → Deepgram → Groq Whisper → Gemini |
+| Suggestions | Groq → Mistral → Claude CLI → Claude API → Ollama → OpenRouter → Qwen → Cerebras → DeepSeek → LAN Ollama → Gemma → Gemini (order configurable in UI) |
 | Sentiment | Claude Haiku → Ollama Vision (llava) → Gemini Vision |
 | Audio capture | Browser `getDisplayMedia` + AudioWorklet (no extension required) |
 
@@ -45,12 +48,17 @@ Edit `backend/.env` and fill in your keys. Only `GEMINI_API_KEY` is required —
 | Key | Purpose |
 |---|---|
 | `GEMINI_API_KEY` | Required — transcription fallback, sentiment, context |
-| `ANTHROPIC_API_KEY` | Recommended — Claude Haiku for suggestions (highest quality) |
+| `ANTHROPIC_API_KEY` | Recommended — Claude API for suggestions |
 | `GROQ_API_KEY` | Optional — fast cloud transcription + suggestion fallback |
+| `GROQ_API_KEY_2` | Optional — second Groq key to double throughput |
+| `DEEPGRAM_API_KEY` | Optional — Deepgram Nova-2 transcription |
+| `DEEPSEEK_API_KEY` | Optional — DeepSeek suggestion fallback |
 | `OPENROUTER_API_KEY` | Optional — suggestion fallback |
 | `CEREBRAS_API_KEY` | Optional — suggestion fallback |
 | `MISTRAL_API_KEY` | Optional — suggestion fallback |
 | `QWEN_API_KEY` | Optional — suggestion fallback |
+| `BONSAI_URL` | Optional — URL of a local/LAN Bonsai-compatible inference server |
+| `BONSAI_MODEL` | Optional — model to use with Bonsai (default: `gemma3:4b`) |
 
 ### 2. Build the backend
 
@@ -95,11 +103,24 @@ Or double-click `start_whisper.bat`.
 
 ### Ollama (offline suggestion fallback)
 
-Install [Ollama](https://ollama.com), then:
+Install [Ollama](https://ollama.com), then pull a model:
 
 ```bash
 ollama pull llama3.2
 ```
+
+A second Ollama instance on your LAN can be configured as **LAN Ollama** via the Providers panel in the UI — useful for offloading inference to a more powerful machine.
+
+### Claude CLI (suggestion via Anthropic Pro subscription)
+
+If you have Claude Pro, the Claude CLI provider uses your existing OAuth session instead of an API key:
+
+```bash
+npm install -g @anthropic-ai/claude-code
+claude  # log in once
+```
+
+No `ANTHROPIC_API_KEY` required for this path.
 
 ### Speaker diarization
 

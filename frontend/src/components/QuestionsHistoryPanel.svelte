@@ -112,10 +112,9 @@
     border-color: #1e2d45;
   }
   .qhist-item.active {
-    background: #0a1f12;
-    border-color: #166534;
-    border-left: 4px solid #4ade80;
-    box-shadow: 0 0 0 1px #14532d;
+    background: #120808;
+    border-color: #3f0f0f;
+    box-shadow: 0 0 0 1px #ef4444, 0 0 10px #ef444450;
   }
 
   .qhist-top {
@@ -176,7 +175,7 @@
     overflow-wrap: break-word;
     word-break: break-word;
   }
-  .qhist-item.active .qhist-q { color: #fca5a5; font-weight: 600; }
+  .qhist-item.active .qhist-q { font-weight: 600; }
 
   .qhist-redflag {
     font-size: var(--fs-xs);

@@ -45,13 +45,13 @@ pub fn build_system_prompt(
 
     if !payload.job_description.is_empty() {
         prompt.push_str("## Job Description\n");
-        prompt.push_str(&payload.job_description);
+        prompt.push_str(trunc(&payload.job_description, 5000));
         prompt.push_str("\n\n");
     }
 
     if !payload.cv_text.is_empty() {
         prompt.push_str("## Candidate CV / Resume\n");
-        prompt.push_str(&payload.cv_text);
+        prompt.push_str(trunc(&payload.cv_text, 7000));
         prompt.push_str("\n\n");
     }
 
@@ -128,6 +128,17 @@ pub fn build_system_prompt(
     prompt.push_str("Never invent experiences, metrics, company names, or outcomes not present in the provided context. ");
     prompt.push_str("Follow the output format specified in each user message exactly — do not add extra sections or change the structure.");
 
+    tracing::info!(
+        "System prompt built — JD: {} (raw {}), CV: {} (raw {}), LinkedIn: {} (raw {}), portfolio: {} (raw {}), extra: {} (raw, uncapped), company: {} (raw {}), total: {} chars",
+        payload.job_description.len().min(5000), payload.job_description.len(),
+        payload.cv_text.len().min(7000), payload.cv_text.len(),
+        payload.interviewee_linkedin.len().min(6000), payload.interviewee_linkedin.len(),
+        payload.portfolio_text.len().min(5000), payload.portfolio_text.len(),
+        payload.extra_experience.len(),
+        company_info.len().min(8000), company_info.len(),
+        prompt.len(),
+    );
+
     prompt
 }
 
@@ -197,8 +208,8 @@ mod tests {
         let mut payload = empty_payload();
         payload.cv_text = "z".repeat(25000);
         let p = build_system_prompt(&payload, "", &[]);
-        // The prompt should contain 20000 z's but not 25000
+        // The prompt should contain 7000 z's but not 25000
         let count = p.matches('z').count();
-        assert_eq!(count, 20000);
+        assert_eq!(count, 7000);
     }
 }

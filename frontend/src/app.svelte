@@ -487,7 +487,6 @@
 
   // New question notification
   let suggestionPinned = $state(true);
-  let unseenCount = $state(0);
   let scrollToLatestKey = $state(0);
   let prevSuggestionsLen = $state(0);
   let histViewIdx = $state(-1);
@@ -516,13 +515,12 @@
   $effect(() => {
     if (suggestions.length > prevSuggestionsLen && prevSuggestionsLen > 0) {
       if (suggestionPinned) scrollToLatestKey++;
-      else unseenCount++;
     }
     prevSuggestionsLen = suggestions.length;
   });
 
   $effect(() => {
-    if (suggestionPinned) { unseenCount = 0; histViewIdx = -1; }
+    if (suggestionPinned) { histViewIdx = -1; }
   });
 
   function adjustZoom(col: 'left' | 'hist' | 'center' | 'rightTop' | 'rightBottom' | 'kw' | 'all', delta: number) {
@@ -2117,7 +2115,7 @@
               ondragover={onColDragOver} ondrop={(e) => onColDrop('hist', e)}>
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div class="col-header col-drag-handle" draggable={true} ondragstart={(e) => onColDragStart('hist', e)}>
-                <span class="col-label">{collapsedCols.has('hist') ? '…' : 'Questions'}{#if unseenCount > 0}<span class="new-q-badge">{unseenCount}</span>{/if}</span>
+                <span class="col-label">{collapsedCols.has('hist') ? '…' : 'Questions'}</span>
                 {#if !collapsedCols.has('hist')}
                   <div class="zoom-btns">
                     <button class="zoom-btn" onclick={() => adjustZoom('hist', -10)} title="Decrease font size">A−</button>
@@ -2685,7 +2683,7 @@
             </div>
           </div>
           <div class="keywords-bar-content" style="zoom: {kwZoom/100}">
-            <KeywordTrackerPanel keywords={jdKeywords} mentionedSet={mentionedKeywords} flashSet={flashingKeywords} interviewerRaisedSet={interviewerRaisedKeywords} {keywordQuestionMap} horizontal={true} popupBottom={kwBarH + 8} onLoad={fetchKeywords} loading={loadingKeywords} />
+            <KeywordTrackerPanel keywords={jdKeywords} mentionedSet={mentionedKeywords} flashSet={flashingKeywords} interviewerRaisedSet={interviewerRaisedKeywords} {keywordQuestionMap} horizontal={true} popupBottom={kwBarH + 8} containerZoom={kwZoom} onLoad={fetchKeywords} loading={loadingKeywords} />
           </div>
         </div>
       {/if}
@@ -3519,22 +3517,6 @@
     display: flex;
     align-items: center;
     gap: 0.3rem;
-  }
-
-  .new-q-badge {
-    font-size: 0.6em;
-    font-weight: 800;
-    color: #fff;
-    background: #2563eb;
-    border-radius: 999px;
-    padding: 0.05em 0.45em;
-    letter-spacing: 0;
-    text-transform: none;
-    animation: badge-pulse 1.5s ease-in-out infinite;
-  }
-  @keyframes badge-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.55; }
   }
 
   .zoom-btns {

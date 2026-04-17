@@ -1835,6 +1835,7 @@
     font-family: inherit; font-size: inherit; line-height: inherit;
   }
   .tp-ask-toggle:hover { background: #050d1a; }
+  .tp-ask-toggle .cue-sublabel { flex: 1; min-width: 0; }
   .tp-ask-chevron { font-size: var(--fs-sm); color: #3b82f6; flex-shrink: 0; margin-left: auto; }
   .tp-ask-body {
     display: flex; flex-direction: column; gap: 0.2rem;

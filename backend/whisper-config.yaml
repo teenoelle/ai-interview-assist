@@ -1,0 +1,6 @@
+models:
+  - name: Systran/faster-whisper-medium.en
+    path: Systran/faster-whisper-medium.en
+    model_options:
+      device: cpu
+      compute_type: int8

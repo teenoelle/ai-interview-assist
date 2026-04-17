@@ -1,5 +1,5 @@
 <script lang="ts">
-  const { keywords, mentionedSet, flashSet = new Set(), interviewerRaisedSet = new Set(), keywordQuestionMap = {}, horizontal = false, popupBottom = 60, onLoad, loading = false } = $props<{
+  const { keywords, mentionedSet, flashSet = new Set(), interviewerRaisedSet = new Set(), keywordQuestionMap = {}, horizontal = false, popupBottom = 60, containerZoom = 100, onLoad, loading = false } = $props<{
     keywords: string[];
     mentionedSet: Set<string>;
     flashSet?: Set<string>;
@@ -7,6 +7,7 @@
     keywordQuestionMap?: Record<string, string>;
     horizontal?: boolean;
     popupBottom?: number;
+    containerZoom?: number;
     onLoad?: () => void;
     loading?: boolean;
   }>();
@@ -25,6 +26,21 @@
   function toggleChipStyle() {
     chipStyle = chipStyle === 'highlight' ? 'invert' : 'highlight';
     localStorage.setItem('kw-chip-style', chipStyle);
+  }
+
+  const KW_FONTS = [
+    { label: 'Roboto Condensed', value: "'Roboto Condensed', sans-serif" },
+    { label: 'DM Sans', value: "'DM Sans', sans-serif" },
+    { label: 'Figtree', value: "'Figtree', sans-serif" },
+    { label: 'Space Grotesk', value: "'Space Grotesk', sans-serif" },
+    { label: 'Plus Jakarta Sans', value: "'Plus Jakarta Sans', sans-serif" },
+    { label: 'Segoe UI', value: "'Segoe UI', sans-serif" },
+  ];
+  const _savedFont = localStorage.getItem('kw-chip-font') ?? '';
+  let kwFont = $state(KW_FONTS.some(f => f.value === _savedFont) ? _savedFont : KW_FONTS[0].value);
+  function setKwFont(val: string) {
+    kwFont = val;
+    localStorage.setItem('kw-chip-font', val);
   }
 
   async function fetchDefinition(kw: string) {
@@ -68,7 +84,7 @@
 
 {#if horizontal}
   <!-- Horizontal bottom-bar mode: chips wrap, definition shows as fixed popup -->
-  <div class="kw-hbar">
+  <div class="kw-hbar" style="--kw-font:{kwFont}">
     <div class="kw-hbar-row">
       <div class="kw-hbar-chips">
         {#if keywords.length === 0}
@@ -102,6 +118,9 @@
       <div class="kw-hbar-meta">
         {#if keywords.length > 0}
           <span class="kw-hbar-stats">{mentioned.length}/{keywords.length}</span>
+          <select class="kw-font-select" title="Keyword font" value={kwFont} onchange={(e) => setKwFont((e.target as HTMLSelectElement).value)}>
+            {#each KW_FONTS as f}<option value={f.value}>{f.label}</option>{/each}
+          </select>
           <button class="kw-style-toggle" onclick={toggleChipStyle} title="Toggle selected chip style">
             {chipStyle === 'highlight' ? '1' : '3'}
           </button>
@@ -111,7 +130,7 @@
   </div>
   {#if selectedKw && popupOpen}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="kw-popup-fixed" style="bottom:{popupBottom}px" onclick={(e) => e.stopPropagation()}>
+    <div class="kw-popup-fixed" style="bottom:{popupBottom}px; zoom:{100/containerZoom}" onclick={(e) => e.stopPropagation()}>
       <div class="kw-def-header">
         <span class="kw-def-word">{selectedKw}</span>
         <button class="kw-def-close" onclick={closePopup}>✕</button>
@@ -127,7 +146,7 @@
     </div>
   {/if}
 {:else}
-  <div class="kw-panel">
+  <div class="kw-panel" style="--kw-font:{kwFont}">
     {#if keywords.length === 0}
       {#if loading}
         <p class="kw-empty">Loading…</p>
@@ -137,9 +156,12 @@
         <p class="kw-empty">No keywords loaded. Add a job description in setup.</p>
       {/if}
     {:else}
-      <!-- Header row: count + hover-reveal style toggle -->
+      <!-- Header row: count + font picker + hover-reveal style toggle -->
       <div class="kw-header">
         <span class="kw-count">{mentioned.length}/{keywords.length}</span>
+        <select class="kw-font-select kw-font-select-inline" title="Keyword font" value={kwFont} onchange={(e) => setKwFont((e.target as HTMLSelectElement).value)}>
+          {#each KW_FONTS as f}<option value={f.value}>{f.label}</option>{/each}
+        </select>
         <button class="kw-style-toggle kw-style-toggle-inline" onclick={toggleChipStyle} title="Toggle selected chip style — style 1 (highlight) vs style 3 (invert)">{chipStyle === 'highlight' ? '1' : '3'}</button>
       </div>
       <!-- Chips-only row -->
@@ -229,7 +251,8 @@
     align-items: center;
     gap: 0.3rem;
   }
-  .kw-header:not(:hover) .kw-style-toggle-inline {
+  .kw-header:not(:hover) .kw-style-toggle-inline,
+  .kw-header:not(:hover) .kw-font-select-inline {
     opacity: 0;
     pointer-events: none;
   }
@@ -274,7 +297,17 @@
     border-radius: 0.3rem; border: 1px solid;
     white-space: nowrap; cursor: pointer;
     background: none; transition: opacity 0.15s;
+    font-family: var(--kw-font, 'Roboto Condensed', sans-serif);
+    font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase;
   }
+
+  .kw-font-select {
+    font-size: 9px; padding: 0.1rem 0.25rem;
+    background: #0f172a; border: 1px solid #1e293b; border-radius: 0.25rem;
+    color: #475569; cursor: pointer; max-width: 7rem;
+  }
+  .kw-font-select:hover { border-color: #334155; color: #64748b; }
+  .kw-font-select-inline { transition: opacity 0.15s, border-color 0.15s, color 0.15s; }
   .kw-chip:hover { opacity: 0.75; }
   .kw-done { color: #22c55e; background: #071a0f; border-color: #14532d; }
   .kw-flash { animation: kw-flash 0.6s ease-out 3; }
@@ -306,14 +339,14 @@
   }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
   .kw-def-header { display: flex; align-items: center; justify-content: space-between; }
-  .kw-def-word { font-size: var(--fs-sm); font-weight: 700; color: #60a5fa; }
+  .kw-def-word { font-size: 13px; font-weight: 700; color: #60a5fa; }
   .kw-def-close {
-    background: none; border: none; color: #334155; font-size: var(--fs-sm);
+    background: none; border: none; color: #334155; font-size: 13px;
     cursor: pointer; padding: 0; line-height: 1;
   }
   .kw-def-close:hover { color: #64748b; }
-  .kw-def-text { margin: 0; font-size: var(--fs-sm); color: #94a3b8; line-height: 1.5; }
-  .kw-def-tip { margin: 0; font-size: var(--fs-sm); color: #60a5fa; line-height: 1.5; border-top: 1px solid #1e293b; padding-top: 0.3rem; }
+  .kw-def-text { margin: 0; font-size: 13px; color: #94a3b8; line-height: 1.5; }
+  .kw-def-tip { margin: 0; font-size: 13px; color: #60a5fa; line-height: 1.5; border-top: 1px solid #1e293b; padding-top: 0.3rem; }
   .kw-def-loading { color: #334155; font-style: italic; }
   .kw-popup-fixed {
     position: fixed;

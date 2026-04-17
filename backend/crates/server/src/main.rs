@@ -198,7 +198,8 @@ async fn main() -> anyhow::Result<()> {
     let env_filter = EnvFilter::from_default_env()
         .add_directive("server=debug".parse()?)
         .add_directive("suggestion=info".parse()?)
-        .add_directive("transcription=debug".parse()?);
+        .add_directive("transcription=debug".parse()?)
+        .add_directive("context=info".parse()?);
     let file_layer = tracing_subscriber::fmt::layer()
         .with_ansi(false)
         .with_timer(timer.clone())

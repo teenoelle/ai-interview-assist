@@ -856,6 +856,7 @@ pub async fn handle_settings_get(
     let mut models = std::collections::HashMap::new();
     models.insert("ollama".into(),     model(&state.ollama_model, "ollama"));
     models.insert("openrouter".into(), model("", "openrouter"));
+    models.insert("lan_ollama".into(), model("", "lan_ollama"));
 
     Json(SettingsResponse { configured_keys, urls, models })
 }
@@ -880,6 +881,8 @@ pub async fn handle_settings(
     Json(req): Json<SettingsRequest>,
 ) -> StatusCode {
     if let Some(order) = req.suggestion_order {
+        let names: Vec<&str> = order.iter().map(|p| p.name()).collect();
+        tracing::info!("Suggestion order updated: {}", names.join(" → "));
         *state.suggestion_order.write().await = order;
     }
     if let Some(order) = req.transcription_order {
@@ -1313,6 +1316,7 @@ pub async fn handle_ollama_models(
 #[derive(serde::Deserialize)]
 pub struct OllamaPullRequest {
     pub model: String,
+    pub target: Option<String>,
 }
 
 pub async fn handle_ollama_pull(
@@ -1320,7 +1324,10 @@ pub async fn handle_ollama_pull(
     Json(req): Json<OllamaPullRequest>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let ru = state.runtime_urls.read().await;
-    let base_url = ru.get("ollama").cloned().unwrap_or_else(|| state.ollama_url.clone());
+    let base_url = match req.target.as_deref() {
+        Some("lan_ollama") => ru.get("lan_ollama").cloned().or_else(|| state.bonsai_url.clone()).unwrap_or_default(),
+        _ => ru.get("ollama").cloned().unwrap_or_else(|| state.ollama_url.clone()),
+    };
     drop(ru);
 
     let (tx, rx) = tokio::sync::mpsc::channel::<String>(64);

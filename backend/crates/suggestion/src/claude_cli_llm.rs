@@ -6,7 +6,7 @@ use std::process::Stdio;
 use serde_json::Value;
 use common::messages::{WsEvent, SuggestionMode};
 
-const CLAUDE_CLI_TIMEOUT_SECS: u64 = 90;
+const CLAUDE_CLI_TIMEOUT_SECS: u64 = 180;
 
 pub async fn stream_suggestions(
     system_prompt: &str,
@@ -14,6 +14,12 @@ pub async fn stream_suggestions(
     mode: SuggestionMode,
     event_tx: broadcast::Sender<WsEvent>,
 ) -> Result<()> {
+    let combined_len = system_prompt.len() + user_prompt.len();
+    tracing::info!(
+        "Claude CLI prompt sizes — system: {} chars, user: {} chars, total: {} chars (~{} tokens)",
+        system_prompt.len(), user_prompt.len(), combined_len, combined_len / 4
+    );
+
     let mut child = Command::new("claude")
         .args([
             "--print",
